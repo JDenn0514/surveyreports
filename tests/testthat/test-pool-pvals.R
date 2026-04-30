@@ -75,6 +75,7 @@ test_that("pool_pvals() column ordering: union, then id_col, new_col, within", {
 # ── 2. Per-upstream-function happy paths ─────────────────────────────────────
 
 test_that("pool_pvals() works with get_diffs() output", {
+  skip_if_not_installed("surveycore")
   df <- data.frame(
     y = c(1.2, 0.8, 2.1, 1.5, 0.9, 1.8),
     sex = c("M", "F", "M", "F", "M", "F"),
@@ -94,6 +95,7 @@ test_that("pool_pvals() works with get_diffs() output", {
 })
 
 test_that("pool_pvals() works with get_t_test() output", {
+  skip_if_not_installed("surveycore")
   df <- data.frame(
     y = c(1.2, 0.8, 2.1, 1.5, 0.9, 1.8),
     sex = c("M", "F", "M", "F", "M", "F"),
@@ -109,6 +111,7 @@ test_that("pool_pvals() works with get_t_test() output", {
 })
 
 test_that("pool_pvals() works with get_pairwise() output", {
+  skip_if_not_installed("surveycore")
   df <- data.frame(
     y = c(1.2, 0.8, 2.1, 1.5, 0.9, 1.8, 2.0, 1.3),
     grp = c("A", "B", "C", "A", "B", "C", "A", "B"),
@@ -122,6 +125,7 @@ test_that("pool_pvals() works with get_pairwise() output", {
 })
 
 test_that("pool_pvals() works with get_anova() output", {
+  skip_if_not_installed("surveycore")
   df <- data.frame(
     y = c(1.2, 0.8, 2.1, 1.5, 0.9, 1.8, 2.0, 1.3),
     grp = c("A", "B", "C", "A", "B", "C", "A", "B"),
