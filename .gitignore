@@ -53,3 +53,6 @@ rsconnect/
 
 # Quarto
 .quarto
+
+# Git worktrees
+.worktrees/
