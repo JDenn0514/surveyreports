@@ -15,12 +15,14 @@ Depends:
     R (>= 4.3.0)
 Imports:
     cli (>= 3.6.0),
+    dplyr (>= 1.0.0),
     rlang (>= 1.0.0),
-    surveycore (>= 0.8.2)
+    tibble (>= 3.0.0)
 Suggests:
     covr,
     knitr,
     rmarkdown,
+    surveycore (>= 0.8.2),
     testthat (>= 3.0.0),
     withr (>= 2.5.0)
 VignetteBuilder: knitr
