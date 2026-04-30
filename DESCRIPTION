@@ -1,0 +1,32 @@
+Package: surveyreports
+Title: Automate Survey Analysis and Helpers
+Version: 0.0.0.9000
+Authors@R:
+    person("Jacob", "Dennen", , "jdenn0514@gmail.com", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0003-3006-7364"))
+Description: Automate reporting analyses over multiple variables for Taylor
+    series, replicate weight, and two-phase survey designs. Some common
+    analyses covered by this package are frequencies/cross-tabs, descriptive
+    statistics, t-tests, and others.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.3.0)
+Imports:
+    cli (>= 3.6.0),
+    rlang (>= 1.0.0),
+    surveycore (>= 0.8.2)
+Suggests:
+    covr,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr (>= 2.5.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+URL: https://github.com/JDenn0514/surveyreports,
+    https://jdenn0514.github.io/surveyreports/
+BugReports: https://github.com/JDenn0514/surveyreports/issues
+X-schema.org-keywords: survey, statistics, reporting, tidyverse
+RoxygenNote: 7.3.3
