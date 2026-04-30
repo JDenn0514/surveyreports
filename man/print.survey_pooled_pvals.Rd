@@ -23,3 +23,17 @@ family size, and number of significant rows; delegates the body to
 tibble's print method via \code{NextMethod()}; and prints a one-line
 footer when any p-values were excluded as NA.
 }
+\examples{
+res <- list(
+  a = tibble::tibble(p_value = c(0.01, 0.04)),
+  b = tibble::tibble(p_value = 0.5)
+)
+out <- pool_pvals(res)
+print(out)
+
+}
+\seealso{
+Other multiplicity correction: 
+\code{\link{pool_pvals}()}
+}
+\concept{multiplicity correction}

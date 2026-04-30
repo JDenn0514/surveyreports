@@ -172,6 +172,13 @@
 #' based on a modified Bonferroni test. *Biometrika* 75(2), 383-386.
 #' \doi{10.1093/biomet/75.2.383}
 #'
+#' @seealso
+#'   [stats::p.adjust()] for the underlying adjustment engine,
+#'   [surveycore::get_diffs()] and [surveycore::get_t_test()] for
+#'   upstream functions that produce the `p_value` column
+#'
+#' @family multiplicity correction
+#'
 #' @examples
 #' df <- data.frame(
 #'   y1 = c(1.2, 0.8, 2.1, 1.5, 0.9, 1.8),
@@ -434,6 +441,16 @@ pool_pvals <- function(
 #'
 #' @return `invisible(x)`.
 #'
+#' @family multiplicity correction
+#'
+#' @examples
+#' res <- list(
+#'   a = tibble::tibble(p_value = c(0.01, 0.04)),
+#'   b = tibble::tibble(p_value = 0.5)
+#' )
+#' out <- pool_pvals(res)
+#' print(out)
+#'
 #' @export
 #' @method print survey_pooled_pvals
 print.survey_pooled_pvals <- function(x, n = 10, ...) {
@@ -458,7 +475,7 @@ print.survey_pooled_pvals <- function(x, n = 10, ...) {
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 .is_plain_list <- function(x) {
-  is.list(x) && !inherits(x, "data.frame")
+  is.list(x) && !is.data.frame(x)
 }
 
 
