@@ -15,12 +15,14 @@ Depends:
     R (>= 4.3.0)
 Imports:
     cli (>= 3.6.0),
+    dplyr (>= 1.0.0),
     rlang (>= 1.0.0),
-    surveycore (>= 0.8.2)
+    tibble (>= 3.0.0)
 Suggests:
     covr,
     knitr,
     rmarkdown,
+    surveycore (>= 0.8.2),
     testthat (>= 3.0.0),
     withr (>= 2.5.0)
 VignetteBuilder: knitr
@@ -30,3 +32,5 @@ URL: https://github.com/JDenn0514/surveyreports,
 BugReports: https://github.com/JDenn0514/surveyreports/issues
 X-schema.org-keywords: survey, statistics, reporting, tidyverse
 RoxygenNote: 7.3.3
+Remotes:
+    JDenn0514/surveycore
