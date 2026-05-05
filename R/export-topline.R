@@ -156,6 +156,8 @@ export_topline <- function(
 .render_topline_single <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
 ) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+
   question_text <- frame$question_text[[1L]]
 
   # Detect collection mode (wave columns present)
@@ -333,6 +335,8 @@ export_topline <- function(
 .render_topline_sata <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
 ) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+
   question_text <- frame$question_text[[1L]]
   sata_vars     <- unique(frame$variable)
 
@@ -420,6 +424,8 @@ export_topline <- function(
 .render_topline_battery <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
 ) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+
   question_text <- frame$question_text[[1L]]
   bat_vars      <- unique(frame$variable)
 

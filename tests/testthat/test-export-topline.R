@@ -219,6 +219,57 @@ test_that("export_topline() uses variable name as question text when label unset
   expect_true(any(grepl("^q1$", cells)), label = "var name used as question text")
 })
 
+# 9. Edge cases -------------------------------------------------------------------
+
+test_that("export_topline() handles all-NA variable without crashing", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # all_na_var is NA_character_ for every row
+  expect_no_error(
+    suppressWarnings(export_topline(d, vars = all_na_var, file_name = out))
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() handles a single-value variable", {
+  skip_if_not_installed("surveycore")
+  d         <- make_all_designs(seed = 42)$taylor
+  d@data$sv <- "constant"
+  out       <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(export_topline(d, vars = sv, file_name = out))
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() handles a minimal two-row design", {
+  skip_if_not_installed("surveycore")
+  # surveycore requires >= 2 rows; 2-row is the minimal viable design
+  df2 <- data.frame(q1 = c("Agree", "Disagree"), wt = c(1.0, 1.5))
+  d2  <- surveycore::as_survey(df2, weights = wt)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(export_topline(d2, vars = q1, file_name = out))
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() errors with empty_domain for a zero-row design", {
+  skip_if_not_installed("surveycore")
+  d_empty      <- make_all_designs(seed = 42)$taylor
+  d_empty@data <- d_empty@data[0L, ]
+  out          <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_topline(d_empty, vars = q1, file_name = out),
+    class = "surveyreports_error_empty_domain"
+  )
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
