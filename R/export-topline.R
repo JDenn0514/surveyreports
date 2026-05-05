@@ -82,8 +82,13 @@ export_topline <- function(
 
   .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
 
-  # Classify variables
-  classify_out <- surveycore::classify_question_type(design, vars_resolved)
+  # Classify variables (collection: use first wave's design)
+  design_for_classify <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
+    design@surveys[[1L]]
+  } else {
+    design
+  }
+  classify_out <- surveycore::classify_question_type(design_for_classify, vars_resolved)
 
   # Build frequency frame
   freq_result <- .build_freq_frame(

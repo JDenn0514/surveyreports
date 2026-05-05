@@ -44,6 +44,33 @@ test_that("export_topline() includes all variable names in the workbook for mult
               label = "q2 content in workbook")
 })
 
+# 3. survey_collection wave columns -----------------------------------------------
+
+test_that("export_topline() handles survey_collection with wave columns", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  coll <- surveycore::as_survey_collection(
+    wave1 = designs$taylor,
+    wave2 = designs$replicate
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(export_topline(coll, vars = q1, file_name = out))
+  expect_true(file.exists(out))
+
+  wb    <- openxlsx2::wb_load(out)
+  expect_true("Topline" %in% wb$sheet_names)
+
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_true(any(grepl("Total", cells)), label = "Total column present")
+  expect_true(any(grepl("wave1", cells)), label = "wave1 in headers")
+  expect_true(any(grepl("wave2", cells)), label = "wave2 in headers")
+  expect_true(any(grepl("n=", cells)), label = "(n=) in wave headers")
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
