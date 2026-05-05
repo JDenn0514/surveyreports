@@ -47,11 +47,12 @@
   # 3. All vars exist in data
   missing_vars <- vars_resolved[!vars_resolved %in% names(data_for_check)]
   if (length(missing_vars) > 0L) {
+    n_mv <- length(missing_vars)
     cli::cli_abort(
       c(
-        "x" = "Variable{?s} {.field {missing_vars}} not found in the design.",
+        "x" = "{n_mv} variable{?s} not found in the design: {.field {missing_vars}}.",
         "i" = "Check for typos or use {.fn names} on the design data.",
-        "v" = "Remove or rename the variable{?s} before calling this function."
+        "v" = "Remove or rename the missing variable before calling this function."
       ),
       class = "surveyreports_error_var_not_found"
     )
