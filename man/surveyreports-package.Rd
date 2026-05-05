@@ -10,6 +10,13 @@ Automate reporting analyses over multiple variables for Taylor series,
 replicate weight, and two-phase survey designs. Common analyses include
 frequencies/cross-tabs, descriptive statistics, t-tests, and others.
 }
+\section{Key Functions}{
+
+\itemize{
+\item \code{\link[=export_topline]{export_topline()}} — publication-quality topline frequency tables
+}
+}
+
 \seealso{
 Useful links:
 \itemize{

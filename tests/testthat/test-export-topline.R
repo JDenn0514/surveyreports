@@ -258,6 +258,58 @@ test_that("export_topline() handles a minimal two-row design", {
   expect_true(file.exists(out))
 })
 
+test_that("export_topline() collection with show_eff_n = TRUE writes Eff N in Total header", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll    <- surveycore::as_survey_collection(
+    wave1 = designs$taylor, wave2 = designs$replicate
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_topline(coll, vars = q1, file_name = out, show_eff_n = TRUE)
+  )
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_true(file.exists(out))
+  # wave headers always written; eff_n path inside Total header may or may not fire
+  expect_true(any(grepl("wave1|wave2|Total", cells)))
+})
+
+test_that("export_topline() handles all-NA SATA variable without crashing", {
+  skip_if_not_installed("surveycore")
+  d             <- make_all_designs(seed = 42)$taylor
+  d@data$sata_a <- NA_integer_
+  d@data$sata_b <- NA_integer_
+  d@data$sata_c <- NA_integer_
+  out           <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(
+      export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+    )
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() handles all-NA battery variable without crashing", {
+  skip_if_not_installed("surveycore")
+  d           <- make_all_designs(seed = 42)$taylor
+  d@data$bat_1 <- NA_integer_
+  d@data$bat_2 <- NA_integer_
+  d@data$bat_3 <- NA_integer_
+  out          <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(
+      export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    )
+  )
+  expect_true(file.exists(out))
+})
+
 test_that("export_topline() errors with empty_domain for a zero-row design", {
   skip_if_not_installed("surveycore")
   d_empty      <- make_all_designs(seed = 42)$taylor

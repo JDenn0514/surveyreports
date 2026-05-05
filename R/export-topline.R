@@ -42,8 +42,7 @@
 #' }
 #'
 #' @family frequency functions
-#' @seealso [export_crosstab()] for cross-tabulations,
-#'   [surveycore::get_freqs()] for the underlying frequency function.
+#' @seealso [surveycore::get_freqs()] for the underlying frequency function.
 #' @export
 export_topline <- function(
   design,
@@ -230,7 +229,7 @@ export_topline <- function(
       eff_val <- frame$eff_n[frame$subgroup_type == "total"][[1L]]
       if (!is.na(eff_val)) {
         paste0("%\n(Eff N=", formatC(round(eff_val), format = "d", big.mark = ","), ")")
-      } else "%"
+      } else "%" # nocov
     } else "%"
 
     wb <- openxlsx2::wb_add_data(
@@ -320,12 +319,14 @@ export_topline <- function(
     }
   }
 
-  # Suppression footnote
+  # Suppression footnote (unreachable from export_topline(); used by export_crosstab())
   next_row <- total_row_num + 1L
+  # nocov start
   if (nrow(suppressed) > 0L) {
     wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
+  # nocov end
 
   list(wb = wb, next_row = next_row)
 }
@@ -411,10 +412,12 @@ export_topline <- function(
   }
 
   next_row <- data_start + length(sata_vars)
+  # nocov start
   if (nrow(suppressed) > 0L) {
     wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
+  # nocov end
 
   list(wb = wb, next_row = next_row)
 }
@@ -465,12 +468,13 @@ export_topline <- function(
     current_row <- result$next_row + 1L
   }
 
-  # Single footnote for the battery block
   next_row <- current_row
+  # nocov start
   if (nrow(suppressed) > 0L) {
     wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
+  # nocov end
 
   list(wb = wb, next_row = next_row)
 }
