@@ -101,6 +101,124 @@ test_that("export_topline() handles battery variables for all design types", {
   }
 })
 
+# 5. Variance options -------------------------------------------------------------
+
+test_that("export_topline() variance = NULL produces no se/ci columns in frame", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(export_topline(d, vars = q1, file_name = out, variance = NULL))
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_false(any(grepl("(?i)\\bse\\b|std.*err", cells, perl = TRUE)),
+               label = "no se column when variance=NULL")
+  expect_false(any(grepl("(?i)ci_|conf.*int|lower|upper", cells, perl = TRUE)),
+               label = "no ci column when variance=NULL")
+})
+
+test_that("export_topline() variance = 'se' produces no error", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(export_topline(d, vars = q1, file_name = out, variance = "se"))
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() variance = 'ci' produces no error", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(export_topline(d, vars = q1, file_name = out, variance = "ci"))
+  )
+  expect_true(file.exists(out))
+})
+
+# 6. show_n and show_eff_n --------------------------------------------------------
+
+test_that("export_topline() show_n = FALSE omits N from workbook", {
+  skip_if_not_installed("surveycore")
+  d    <- make_all_designs(seed = 42)$taylor
+  out  <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(export_topline(d, vars = q1, file_name = out, show_n = FALSE))
+  wb   <- openxlsx2::wb_load(out)
+  df   <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+
+  # With show_n = FALSE the third column should be empty / absent
+  expect_true(ncol(df) <= 2L || all(is.na(df[[3]])))
+})
+
+test_that("export_topline() show_n = TRUE includes N column", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(export_topline(d, vars = q1, file_name = out, show_n = TRUE))
+  wb  <- openxlsx2::wb_load(out)
+  df  <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_true(any(grepl("^N$", cells)), label = "N header present")
+})
+
+test_that("export_topline() show_eff_n = TRUE adds eff N to % header", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+  )
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_true(any(grepl("Eff N", cells)), label = "Eff N in header")
+})
+
+# 7. Missing metadata warning -----------------------------------------------------
+
+test_that("export_topline() warns about missing variable_label when unset", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_topline(d, vars = q1, file_name = out),
+    class = "surveyreports_warning_missing_variable_label"
+  )
+})
+
+test_that("export_topline() does not warn when variable_label is set", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_warning(export_topline(d, vars = q1, file_name = out))
+})
+
+test_that("export_topline() uses variable name as question text when label unset", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(export_topline(d, vars = q1, file_name = out))
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  expect_true(any(grepl("^q1$", cells)), label = "var name used as question text")
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
