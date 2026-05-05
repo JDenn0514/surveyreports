@@ -8,6 +8,8 @@
 ^data-raw$
 ^plans$
 ^cran-comments\.md$
+^changelog$
+^\.superpowers$
 ^_pkgdown\.yml$
 ^docs$
 ^pkgdown$

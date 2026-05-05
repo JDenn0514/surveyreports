@@ -6,6 +6,14 @@ surveyreports automates reporting analyses over multiple variables for Taylor se
 
 ---
 
+## surveycore Dependency
+
+surveycore is **not on CRAN** — it is installed via `Remotes: JDenn0514/surveycore`
+in DESCRIPTION. It lives in `Imports`, not `Suggests`. Do **not** move it to
+`Suggests` and do **not** remove the `Remotes:` entry.
+
+---
+
 ## Key Implementation Rules
 
 - Every non-trivial change lives on a feature branch — never commit to `main` or
