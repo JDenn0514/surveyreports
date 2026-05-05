@@ -270,6 +270,78 @@ test_that("export_topline() errors with empty_domain for a zero-row design", {
   )
 })
 
+# 10. Numerical accuracy ----------------------------------------------------------
+
+test_that(".build_freq_frame() totals match surveycore::get_freqs() for q1 [numerical]", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    conf_level = 0.95,
+    show_eff_n = FALSE
+  )$frame
+  total_rows <- frame[frame$subgroup_type == "total", ]
+
+  ref <- suppressWarnings(surveycore::get_freqs(d, q1))
+
+  for (val in ref[[1L]]) {
+    rr_pct <- total_rows$pct[total_rows$value == as.character(val)]
+    sc_pct <- ref$pct[ref[[1L]] == val]
+    expect_equal(rr_pct, sc_pct, tolerance = 1e-10,
+                 label = paste0("pct match for value '", val, "'"))
+  }
+})
+
+test_that(".build_freq_frame() SE matches surveycore::get_freqs() with variance='se'", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    variance   = "se",
+    conf_level = 0.95
+  )$frame
+  total_rows <- frame[frame$subgroup_type == "total", ]
+
+  ref <- suppressWarnings(surveycore::get_freqs(d, q1, variance = "se"))
+
+  for (val in ref[[1L]]) {
+    rr_se <- total_rows$se[total_rows$value == as.character(val)]
+    sc_se <- ref$se[ref[[1L]] == val]
+    expect_equal(rr_se, sc_se, tolerance = 1e-8,
+                 label = paste0("se match for value '", val, "'"))
+  }
+})
+
+test_that(".build_freq_frame() CI bounds match surveycore::get_freqs() with variance='ci'", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    variance   = "ci",
+    conf_level = 0.95
+  )$frame
+  total_rows <- frame[frame$subgroup_type == "total", ]
+
+  ref <- suppressWarnings(surveycore::get_freqs(d, q1, variance = "ci", conf_level = 0.95))
+
+  for (val in ref[[1L]]) {
+    rr_low  <- total_rows$ci_low[total_rows$value  == as.character(val)]
+    rr_high <- total_rows$ci_high[total_rows$value == as.character(val)]
+    sc_low  <- ref$ci_low[ref[[1L]]  == val]
+    sc_high <- ref$ci_high[ref[[1L]] == val]
+    expect_equal(rr_low,  sc_low,  tolerance = 1e-6,
+                 label = paste0("ci_low match for value '", val, "'"))
+    expect_equal(rr_high, sc_high, tolerance = 1e-6,
+                 label = paste0("ci_high match for value '", val, "'"))
+  }
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
