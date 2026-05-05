@@ -71,6 +71,36 @@ test_that("export_topline() handles survey_collection with wave columns", {
   expect_true(any(grepl("n=", cells)), label = "(n=) in wave headers")
 })
 
+# 4. var_type dispatch: SATA and battery ------------------------------------------
+
+test_that("export_topline() handles SATA variables for all design types", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    expect_no_error(
+      export_topline(designs[[nm]], vars = c(sata_a, sata_b, sata_c), file_name = out)
+    )
+    expect_true(file.exists(out))
+  }
+})
+
+test_that("export_topline() handles battery variables for all design types", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    expect_no_error(
+      export_topline(designs[[nm]], vars = c(bat_1, bat_2, bat_3), file_name = out)
+    )
+    expect_true(file.exists(out))
+  }
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
