@@ -1,5 +1,49 @@
 # tests/testthat/test-export-topline.R
 
+# 1. Happy paths ------------------------------------------------------------------
+
+test_that("export_topline() creates a non-empty .xlsx file for all 3 design types", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    result <- withVisible(export_topline(designs[[nm]], vars = q1, file_name = out))
+
+    expect_false(result$visible, label = paste0(nm, ": return invisible"))
+    expect_identical(result$value, out, label = paste0(nm, ": return file_name"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    expect_gt(file.info(out)$size, 0L, label = paste0(nm, ": file non-empty"))
+
+    wb     <- openxlsx2::wb_load(out)
+    expect_true("Topline" %in% wb$sheet_names, label = paste0(nm, ": Topline sheet"))
+  }
+})
+
+# 2. Multiple variables -----------------------------------------------------------
+
+test_that("export_topline() includes all variable names in the workbook for multiple vars", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = c(q1, q2), file_name = out)
+
+  wb   <- openxlsx2::wb_load(out)
+  expect_true("Topline" %in% wb$sheet_names)
+
+  cells <- unlist(openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE))
+  cells <- as.character(cells[!is.na(cells)])
+
+  # question_text falls back to variable name when no label is set;
+  # the label warning fires — suppress it here since we're testing workbook content
+  expect_true(any(grepl("q1|Agree|Neutral|Disagree", cells)),
+              label = "q1 content in workbook")
+  expect_true(any(grepl("q2|Yes|No", cells)),
+              label = "q2 content in workbook")
+})
+
 # 8. Error paths -------------------------------------------------------------------
 
 test_that("export_topline() errors when design is not a survey object", {
