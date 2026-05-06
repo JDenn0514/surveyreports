@@ -583,3 +583,90 @@ test_that("export_crosstab() errors when interactions contains a var not in bann
                     interactions = list(c("group", "q2")))
   )
 })
+
+# 13. Edge cases ------------------------------------------------------------------
+
+test_that("export_crosstab() handles all-NA variable without crashing", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # all_na_var is NA_character_ throughout — suppressWarnings covers the
+  # missing-variable-label warning that fires for unlabelled variables
+  suppressWarnings(
+    export_crosstab(d, vars = all_na_var, banner = group, file_name = out)
+  )
+
+  expect_true(file.exists(out))
+  expect_gt(file.info(out)$size, 0L)
+})
+
+test_that("export_crosstab() handles single-value variable without crashing", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data$single_val <- "Only"
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = single_val, banner = group, file_name = out)
+  )
+
+  expect_true(file.exists(out))
+  expect_gt(file.info(out)$size, 0L)
+})
+
+test_that("export_crosstab() handles very small design (2 rows) without crashing", {
+  skip_if_not_installed("surveycore")
+  # surveycore requires >= 2 rows; use a minimal valid design
+  df_small <- make_survey_data(seed = 42)[1L:2L, ]
+  df_small$strata <- 1L
+  df_small$psu    <- 1L:2L
+  d_small <- surveycore::as_survey(
+    df_small, ids = psu, strata = strata, weights = wt, nest = TRUE
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d_small, vars = q1, banner = group, file_name = out)
+  )
+
+  expect_true(file.exists(out))
+})
+
+test_that("export_crosstab() errors with empty-domain design", {
+  skip_if_not_installed("surveycore")
+  # Build a valid design then zero out its @data (same approach as section 12)
+  d_empty      <- make_all_designs(seed = 42)$taylor
+  d_empty@data <- d_empty@data[0L, ]
+  out          <- withr::local_tempfile(fileext = ".xlsx")
+
+  # Snapshot already captured in section 12 — use only expect_error(class=)
+  # here to avoid a duplicate snapshot entry
+  expect_error(
+    export_crosstab(d_empty, vars = q1, banner = group, file_name = out),
+    class = "surveyreports_error_empty_domain"
+  )
+})
+
+test_that("export_crosstab() handles single-level banner without error", {
+  skip_if_not_installed("surveycore")
+  df_one_banner        <- make_survey_data(seed = 42)
+  df_one_banner$banner_one <- "X"
+  d_one_banner <- surveycore::as_survey(
+    df_one_banner, ids = psu, strata = strata, weights = wt, nest = TRUE
+  )
+  d_one_banner <- surveycore::set_var_label(
+    d_one_banner, variable = "q1", label = "Agreement question"
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    export_crosstab(
+      d_one_banner, vars = q1, banner = banner_one, file_name = out
+    )
+  )
+  expect_true(file.exists(out))
+
+  wb <- openxlsx2::wb_load(out)
+  expect_true("q1" %in% wb$sheet_names)
+})
