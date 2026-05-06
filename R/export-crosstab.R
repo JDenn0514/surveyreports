@@ -100,33 +100,29 @@ export_crosstab <- function(
     )
   }
 
-  # 4. NSE resolution
+  # 4. NSE resolution for vars only
   vars_resolved <- names(tidyselect::eval_select(rlang::enquo(vars), design@data))
 
+  # 5. Shared input validation (errors 3–8)
+  .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
+
+  # 6. Banner NSE resolution (AFTER validate, so banner_not_found is error #9)
   banner_quo      <- rlang::enquo(banner)
   banner_resolved <- tryCatch(
     names(tidyselect::eval_select(banner_quo, design@data)),
     error = function(e) {
-      # Extract the bare column name(s) that failed so we can report them
-      missing_nm <- tryCatch(
-        as.character(rlang::get_expr(banner_quo)),
-        error = function(e2) "unknown"
-      )
       cli::cli_abort(
         c(
-          "x" = "1 banner variable not found in the design: {.field {missing_nm}}.",
-          "i" = "Check for typos or use {.fn names} on the design data.",
-          "v" = "Remove or rename the missing banner variable before calling this function."
+          "x" = "Banner variable not found in the design.",
+          "i" = "The tidyselect expression for {.arg banner} failed: {conditionMessage(e)}",
+          "v" = "Use bare column names that exist in the design."
         ),
         class = "surveyreports_error_banner_not_found"
       )
     }
   )
 
-  # 5. Shared input validation (errors 3–8)
-  .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
-
-  # 6. Interactions validation
+  # 7. Interactions validation
   if (!is.null(interactions)) {
     if (!is.list(interactions)) {
       cli::cli_abort(

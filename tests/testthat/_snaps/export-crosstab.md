@@ -84,9 +84,9 @@
       export_crosstab(d, vars = q1, banner = nonexistent_banner, file_name = out)
     Condition
       Error in `value[[3L]]()`:
-      x 1 banner variable not found in the design: nonexistent_banner.
-      i Check for typos or use `names()` on the design data.
-      v Remove or rename the missing banner variable before calling this function.
+      x Banner variable not found in the design.
+      i The tidyselect expression for `banner` failed: Can't select columns that don't exist. x Column `nonexistent_banner` doesn't exist.
+      v Use bare column names that exist in the design.
 
 # export_crosstab() errors when interactions is not a list
 
