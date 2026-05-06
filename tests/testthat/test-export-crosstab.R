@@ -670,3 +670,90 @@ test_that("export_crosstab() handles single-level banner without error", {
   wb <- openxlsx2::wb_load(out)
   expect_true("q1" %in% wb$sheet_names)
 })
+
+# 14. Numerical accuracy ----------------------------------------------------------
+
+test_that(".build_freq_frame() pct matches surveycore::get_freqs() prop for banner subgroups", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- suppressWarnings(
+    surveyreports:::.build_freq_frame(
+      d, "q1", clf,
+      banner_resolved = "group",
+      variance        = "se",
+      conf_level      = 0.95
+    )
+  )$frame
+
+  banner_rows <- frame[frame$subgroup_type == "banner", ]
+
+  oracle <- suppressWarnings(
+    surveycore::get_freqs(
+      d,
+      !!rlang::sym("q1"),
+      group    = !!rlang::sym("group"),
+      variance = "se"
+    )
+  )
+  # oracle columns: group, q1, pct, se, n
+  # Align by (group level, response value)
+  for (grp in unique(oracle$group)) {
+    for (val in unique(oracle$q1)) {
+      oracle_pct <- oracle$pct[oracle$group == grp & oracle$q1 == val]
+      frame_pct  <- banner_rows$pct[
+        banner_rows$subgroup_value == grp & banner_rows$value == val
+      ]
+      if (length(oracle_pct) == 0L || length(frame_pct) == 0L) next
+      expect_equal(
+        frame_pct,
+        oracle_pct,
+        tolerance = 1e-10,
+        label = paste0("pct for group=", grp, ", value=", val)
+      )
+    }
+  }
+})
+
+test_that(".build_freq_frame() se matches surveycore::get_freqs() se for banner subgroups", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- suppressWarnings(
+    surveyreports:::.build_freq_frame(
+      d, "q1", clf,
+      banner_resolved = "group",
+      variance        = "se",
+      conf_level      = 0.95
+    )
+  )$frame
+
+  banner_rows <- frame[frame$subgroup_type == "banner", ]
+
+  oracle <- suppressWarnings(
+    surveycore::get_freqs(
+      d,
+      !!rlang::sym("q1"),
+      group    = !!rlang::sym("group"),
+      variance = "se"
+    )
+  )
+  # oracle columns: group, q1, pct, se, n
+  for (grp in unique(oracle$group)) {
+    for (val in unique(oracle$q1)) {
+      oracle_se <- oracle$se[oracle$group == grp & oracle$q1 == val]
+      frame_se  <- banner_rows$se[
+        banner_rows$subgroup_value == grp & banner_rows$value == val
+      ]
+      if (length(oracle_se) == 0L || length(frame_se) == 0L) next
+      expect_equal(
+        frame_se,
+        oracle_se,
+        tolerance = 1e-8,
+        label = paste0("se for group=", grp, ", value=", val)
+      )
+    }
+  }
+})
