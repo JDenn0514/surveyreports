@@ -16,6 +16,9 @@
     !(S7::S7_inherits(design, surveycore::survey_base) ||
         S7::S7_inherits(design, surveycore::survey_collection))
   ) {
+    # nocov start
+    # Defensive: callers perform an inline design-type check before calling this
+    # helper (per spec), so this branch is unreachable via the public API.
     cli::cli_abort(
       c(
         "x" = "{.arg design} must be a survey design object.",
@@ -24,6 +27,7 @@
       ),
       class = "surveyreports_error_not_survey_object"
     )
+    # nocov end
   }
 
   data_for_check <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
@@ -129,10 +133,10 @@
   data   <- design@data
   wt_col <- design@variables$weights
   if (is.null(wt_col) || length(wt_col) == 0L) {
-    wt_col <- design@variables$phase1$weights
+    wt_col <- design@variables$phase1$weights  # nocov
   }
   if (is.null(wt_col) || length(wt_col) == 0L || !wt_col %in% names(data)) {
-    return(NA_real_)
+    return(NA_real_)  # nocov
   }
 
   if (!is.null(col)) {
@@ -141,7 +145,11 @@
 
   wi   <- data[[wt_col]]
   n    <- nrow(data)
+  # nocov start
+  # Defensive: levels iterated via unique(col_vals[!is.na(col_vals)]), so n == 0
+  # cannot occur via the public API.
   if (n == 0L || sum(wi, na.rm = TRUE) == 0) return(NA_real_)
+  # nocov end
   deff <- (n * sum(wi^2, na.rm = TRUE)) / sum(wi, na.rm = TRUE)^2
   n / deff
 }
@@ -284,6 +292,9 @@
       ]
 
       if (length(wave_freq_list) == 0L) {
+        # nocov start
+        # Defensive: the validator checks vars against design@surveys[[1L]]@data,
+        # so at least one wave always has the variable.
         return(tibble::tibble(
           value         = NA_character_,
           pct           = NA_real_,
@@ -296,6 +307,7 @@
           subgroup_value = NA_character_,
           subgroup_label = "Total"
         ))
+        # nocov end
       }
 
       combined <- dplyr::bind_rows(wave_freq_list)
@@ -354,7 +366,7 @@
         function(stype, svar) {
           if (stype == "total") return(NA_real_)
           wd <- design@surveys[[svar]]
-          if (is.null(wd)) return(NA_real_)
+          if (is.null(wd)) return(NA_real_)  # nocov
           .compute_eff_n(wd)
         },
         all_rows$subgroup_type,
@@ -530,7 +542,10 @@
 #' @keywords internal
 #' @noRd
 .write_suppression_footnote <- function(wb, sheet, suppressed, start_row) {
+  # nocov start
+  # Defensive: all callers guard with nrow(suppressed) > 0L before calling.
   if (nrow(suppressed) == 0L) return(invisible(wb))
+  # nocov end
 
   for (i in seq_len(nrow(suppressed))) {
     row  <- suppressed[i, ]

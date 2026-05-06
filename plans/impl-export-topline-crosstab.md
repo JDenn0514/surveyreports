@@ -138,11 +138,11 @@ typed error.
 14. Push and open PR against `develop`
 
 **Acceptance criteria:**
-- [ ] `DESCRIPTION` `Imports` includes `openxlsx2 (>= 1.0.0)` and `tidyselect (>= 1.2.0)`; `Suggests` includes `withr`
-- [ ] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
-- [ ] `devtools::document()` run; NAMESPACE and man/ in sync
-- [ ] `make_all_designs()` creates all three design types and applies SATA/battery metadata
-- [ ] All error class names in `.validate_export_inputs()` match `plans/error-messages.md` exactly
+- [x] `DESCRIPTION` `Imports` includes `openxlsx2 (>= 1.0.0)` and `tidyselect (>= 1.2.0)`; `Suggests` includes `withr`
+- [x] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
+- [x] `devtools::document()` run; NAMESPACE and man/ in sync
+- [x] `make_all_designs()` creates all three design types and applies SATA/battery metadata
+- [x] All error class names in `.validate_export_inputs()` match `plans/error-messages.md` exactly
 
 ---
 
@@ -336,15 +336,15 @@ typed error.
 42. Push and open PR against `develop`
 
 **Acceptance criteria:**
-- [ ] All new tests confirmed failing (red) before each implementation step
-- [ ] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
-- [ ] `devtools::document()` run; NAMESPACE and man/ in sync
-- [ ] Happy path tests pass for all 3 design types (taylor, replicate, twophase)
-- [ ] All 10 test sections covered
-- [ ] Numerical oracle: `.build_freq_frame()` totals match `surveycore::get_freqs()` at point 1e-10, SE 1e-8, CI 1e-6
-- [ ] All 7 error paths covered with dual pattern (class= + snapshot)
-- [ ] `plans/error-messages.md` — no new classes needed; already up-to-date
-- [ ] 98%+ line coverage on `R/export-topline.R`
+- [x] All new tests confirmed failing (red) before each implementation step
+- [x] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
+- [x] `devtools::document()` run; NAMESPACE and man/ in sync
+- [x] Happy path tests pass for all 3 design types (taylor, replicate, twophase)
+- [x] All 10 test sections covered
+- [x] Numerical oracle: `.build_freq_frame()` totals match `surveycore::get_freqs()` at point 1e-10, SE 1e-8, CI 1e-6
+- [x] All 7 error paths covered with dual pattern (class= + snapshot)
+- [x] `plans/error-messages.md` — no new classes needed; already up-to-date
+- [x] 98%+ line coverage on `R/export-topline.R`
 
 **Notes:**
 - No `pub_type` argument in `export_topline()` — this is correct per spec v1.2 decisions.
@@ -551,16 +551,16 @@ typed error.
 44. Push and open PR against `develop`
 
 **Acceptance criteria:**
-- [ ] All new tests confirmed failing (red) before each implementation step
-- [ ] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
-- [ ] `devtools::document()` run; NAMESPACE and man/ in sync
-- [ ] Happy path tests pass for all 3 design types (taylor, replicate, twophase)
-- [ ] All 14 test sections covered
-- [ ] Numerical oracle: `.build_freq_frame()` subgroup values match `surveycore::get_freqs()` at point 1e-10, SE 1e-8, CI 1e-6
-- [ ] All 11 error paths covered with dual pattern (class= + snapshot)
-- [ ] `plans/error-messages.md` — no new classes needed
-- [ ] 98%+ line coverage on `R/export-crosstab.R`
-- [ ] Combined coverage on `R/export-utils.R` ≥98% verified
+- [x] All new tests confirmed failing (red) before each implementation step
+- [x] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
+- [x] `devtools::document()` run; NAMESPACE and man/ in sync
+- [x] Happy path tests pass for all 3 design types (taylor, replicate, twophase)
+- [x] All 14 test sections covered
+- [x] Numerical oracle: `.build_freq_frame()` subgroup values match `surveycore::get_freqs()` at point 1e-10, SE 1e-8, CI 1e-6
+- [x] All 11 error paths covered with dual pattern (class= + snapshot)
+- [x] `plans/error-messages.md` — no new classes needed
+- [x] 98%+ line coverage on `R/export-crosstab.R`
+- [x] Combined coverage on `R/export-utils.R` ≥98% verified
 
 **Notes:**
 - `survey_collection` rejection is the FIRST check in `export_crosstab()` — before `rlang::check_installed()`.

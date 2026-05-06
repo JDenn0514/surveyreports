@@ -71,6 +71,36 @@ test_that("export_crosstab() layout='stacked' creates single sheet named 'Crosst
   expect_equal(length(wb$sheet_names), 1L, label = "exactly 1 sheet")
 })
 
+test_that("export_crosstab() stacked layout renders SATA variables", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = c(sata_a, sata_b, sata_c), banner = q2,
+                    file_name = out, layout = "stacked")
+  )
+
+  expect_true(file.exists(out))
+  wb <- openxlsx2::wb_load(out)
+  expect_true("Crosstab" %in% wb$sheet_names)
+})
+
+test_that("export_crosstab() stacked layout renders battery variables", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = c(bat_1, bat_2, bat_3), banner = q2,
+                    file_name = out, layout = "stacked")
+  )
+
+  expect_true(file.exists(out))
+  wb <- openxlsx2::wb_load(out)
+  expect_true("Crosstab" %in% wb$sheet_names)
+})
+
 # 4. Banner columns ---------------------------------------------------------------
 
 test_that("export_crosstab() includes subgroup columns for each banner level", {
@@ -388,6 +418,86 @@ test_that("export_crosstab() pub_type='none' does not suppress any columns", {
   df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
   cells <- as.character(unlist(df)[!is.na(unlist(df))])
   expect_true(any(grepl("^A$", cells)), label = "A still present with pub_type='none'")
+})
+
+test_that("export_crosstab() pub_type='internal' suppresses below internal threshold", {
+  skip_if_not_installed("surveycore")
+  # N=2 per level ensures raw_n < 50 (internal threshold)
+  df_small <- data.frame(
+    psu    = 1L:6L,
+    strata = rep(1L:2L, 3L),
+    fpc    = rep(100L, 6L),
+    wt     = rep(1.0, 6L),
+    q1     = c("Agree", "Disagree", "Agree", "Neutral", "Disagree", "Agree"),
+    group  = c("A", "A", "B", "B", "C", "C")
+  )
+  d <- surveycore::as_survey(df_small, ids = psu, strata = strata,
+                              weights = wt, nest = TRUE)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    pub_type = "internal"),
+    class = "surveyreports_warning_subgroup_suppressed"
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_crosstab() SATA render writes suppression footnote with pub_type", {
+  skip_if_not_installed("surveycore")
+  # N=2 per group level triggers suppression for pub_type='external'
+  df_small <- data.frame(
+    psu    = 1L:6L,
+    strata = rep(1L:2L, 3L),
+    fpc    = rep(100L, 6L),
+    wt     = rep(1.0, 6L),
+    sata_a = c(0L, 1L, 0L, 1L, 0L, 1L),
+    sata_b = c(1L, 0L, 1L, 0L, 1L, 0L),
+    group  = c("A", "A", "B", "B", "C", "C")
+  )
+  d <- surveycore::as_survey(df_small, ids = psu, strata = strata,
+                              weights = wt, nest = TRUE)
+  d <- surveycore::set_sata(d, variable = c("sata_a", "sata_b"))
+  d <- surveycore::set_question_preface(
+    d, variable = c("sata_a", "sata_b"),
+    preface = rep("Which apply?", 2L)
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_crosstab(d, vars = c(sata_a, sata_b), banner = group,
+                    file_name = out, pub_type = "external"),
+    class = "surveyreports_warning_subgroup_suppressed"
+  )
+  expect_true(file.exists(out))
+})
+
+test_that("export_crosstab() battery render writes suppression footnote with pub_type", {
+  skip_if_not_installed("surveycore")
+  # N=2 per group level triggers suppression for pub_type='external'
+  df_small <- data.frame(
+    psu    = 1L:6L,
+    strata = rep(1L:2L, 3L),
+    fpc    = rep(100L, 6L),
+    wt     = rep(1.0, 6L),
+    bat_1  = c(1L, 2L, 3L, 4L, 5L, 1L),
+    bat_2  = c(2L, 3L, 4L, 5L, 1L, 2L),
+    group  = c("A", "A", "B", "B", "C", "C")
+  )
+  d <- surveycore::as_survey(df_small, ids = psu, strata = strata,
+                              weights = wt, nest = TRUE)
+  d <- surveycore::set_question_preface(
+    d, variable = c("bat_1", "bat_2"),
+    preface = rep("Rate these items:", 2L)
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_crosstab(d, vars = c(bat_1, bat_2), banner = group,
+                    file_name = out, pub_type = "external"),
+    class = "surveyreports_warning_subgroup_suppressed"
+  )
+  expect_true(file.exists(out))
 })
 
 # 11. Missing metadata warning ----------------------------------------------------

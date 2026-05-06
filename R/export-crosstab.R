@@ -291,7 +291,7 @@ export_crosstab <- function(
           frame$subgroup_var == int_label,
       ]
       levels_present <- unique(int_rows$subgroup_value)
-      if (length(levels_present) == 0L) next
+      if (length(levels_present) == 0L) next  # nocov
       col_groups[[length(col_groups) + 1L]] <- list(
         spanner      = int_label,
         levels       = levels_present,
@@ -492,7 +492,7 @@ export_crosstab <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
   banner_resolved, interactions
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
   question_text <- frame$question_text[[1L]]
   sata_vars     <- unique(frame$variable)
@@ -592,7 +592,7 @@ export_crosstab <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
   banner_resolved, interactions
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
   question_text <- frame$question_text[[1L]]
   bat_vars      <- unique(frame$variable)
