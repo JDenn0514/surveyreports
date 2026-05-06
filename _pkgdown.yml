@@ -6,6 +6,7 @@ reference:
   - title: Frequency functions
     contents:
       - export_topline
+      - export_crosstab
   - title: Multiplicity correction
     contents:
       - pool_pvals
