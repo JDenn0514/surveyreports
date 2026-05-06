@@ -2,3 +2,18 @@ url: https://jdenn0514.github.io/surveyreports/
 template:
   bootstrap: 5
 
+reference:
+  - title: Frequency functions
+    contents:
+      - export_topline
+  - title: Multiplicity correction
+    contents:
+      - pool_pvals
+      - print.survey_pooled_pvals
+  - title: Datasets
+    contents:
+      - anes_2024
+      - gss_2024
+      - ns_wave1
+      - pew_jewish_2020
+
