@@ -14,6 +14,7 @@ frequencies/cross-tabs, descriptive statistics, t-tests, and others.
 
 \itemize{
 \item \code{\link[=export_topline]{export_topline()}} — publication-quality topline frequency tables
+\item \code{\link[=export_crosstab]{export_crosstab()}} — publication-quality cross-tabulation tables
 }
 }
 
