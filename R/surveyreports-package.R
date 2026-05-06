@@ -7,6 +7,7 @@
 #'
 #' @section Key Functions:
 #' - [export_topline()] — publication-quality topline frequency tables
+#' - [export_crosstab()] — publication-quality cross-tabulation tables
 #'
 #' @keywords internal
 "_PACKAGE"

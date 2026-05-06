@@ -128,6 +128,12 @@
 .compute_eff_n <- function(design, col = NULL, level = NULL) {
   data   <- design@data
   wt_col <- design@variables$weights
+  if (is.null(wt_col) || length(wt_col) == 0L) {
+    wt_col <- design@variables$phase1$weights
+  }
+  if (is.null(wt_col) || length(wt_col) == 0L || !wt_col %in% names(data)) {
+    return(NA_real_)
+  }
 
   if (!is.null(col)) {
     data <- data[data[[col]] == level, , drop = FALSE]
@@ -135,7 +141,8 @@
 
   wi   <- data[[wt_col]]
   n    <- nrow(data)
-  deff <- (n * sum(wi^2)) / sum(wi)^2
+  if (n == 0L || sum(wi, na.rm = TRUE) == 0) return(NA_real_)
+  deff <- (n * sum(wi^2, na.rm = TRUE)) / sum(wi, na.rm = TRUE)^2
   n / deff
 }
 
@@ -163,7 +170,10 @@
 #' @keywords internal
 #' @noRd
 .compute_total_freq <- function(design, var, ...) {
-  result <- surveycore::get_freqs(design, !!rlang::sym(var), ...)
+  result <- withCallingHandlers(
+    surveycore::get_freqs(design, !!rlang::sym(var), ...),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+  )
   lm     <- .extract_var_meta(surveycore::meta(result), var)
 
   # First column is the response value column (named after `var`)
@@ -184,8 +194,11 @@
 #' @keywords internal
 #' @noRd
 .compute_subgroup_freq <- function(design, var, banner_var, ...) {
-  result <- surveycore::get_freqs(
-    design, !!rlang::sym(var), group = !!rlang::sym(banner_var), ...
+  result <- withCallingHandlers(
+    surveycore::get_freqs(
+      design, !!rlang::sym(var), group = !!rlang::sym(banner_var), ...
+    ),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -214,8 +227,11 @@
     c(design@data[banner_vars], list(sep = " \u00d7 "))
   )
 
-  result <- surveycore::get_freqs(
-    design, !!rlang::sym(var), group = !!rlang::sym(interact_col), ...
+  result <- withCallingHandlers(
+    surveycore::get_freqs(
+      design, !!rlang::sym(var), group = !!rlang::sym(interact_col), ...
+    ),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 

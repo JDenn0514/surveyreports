@@ -23,7 +23,7 @@ typed error.
 
 - [x] PR 1: `feature/export-utils` — Shared utilities, test data helper, DESCRIPTION updates
 - [x] PR 2: `feature/export-topline` — `export_topline()`, render helpers, and full test suite
-- [ ] PR 3: `feature/export-crosstab` — `export_crosstab()`, render helpers, and full test suite
+- [x] PR 3: `feature/export-crosstab` — `export_crosstab()`, render helpers, and full test suite
 
 ---
 
