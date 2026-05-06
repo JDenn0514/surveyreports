@@ -26,11 +26,11 @@
 #' @param interactions Optional list of character vectors. Each element
 #'   names two or more variables from `banner` whose levels will be crossed
 #'   (interacted) to form additional crosstab columns. Default `NULL`.
-#' @param pub_type One of `"external"` (default), `"internal"`, or
-#'   `"none"`. Controls suppression thresholds for small subgroups.
-#'   `"external"` suppresses subgroups with effective or raw N < 100;
-#'   `"internal"` uses a threshold of 50 effective N or 100 raw N;
-#'   `"none"` disables suppression.
+#' @param pub_type One of `"none"` (default), `"external"`, or
+#'   `"internal"`. Controls suppression thresholds for small subgroups.
+#'   `"none"` disables suppression; `"external"` suppresses subgroups with
+#'   effective or raw N < 100; `"internal"` uses a threshold of 50 effective
+#'   N or 100 raw N.
 #' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
 #'   standard errors or confidence intervals are shown. Default `NULL`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
@@ -42,7 +42,7 @@
 #' @param decimals Positive integer. Number of decimal places for displayed
 #'   percentages. Default `1L`.
 #'
-#' @return `invisible(file_name)` — the path supplied in `file_name`.
+#' @return `invisible(file_name)` -- the path supplied in `file_name`.
 #'
 #' @examples
 #' \dontrun{
@@ -66,7 +66,7 @@ export_crosstab <- function(
   file_name,
   layout       = c("per_question", "stacked"),
   interactions = NULL,
-  pub_type     = c("external", "internal", "none"),
+  pub_type     = c("none", "external", "internal"),
   variance     = NULL,
   conf_level   = 0.95,
   show_n       = TRUE,
@@ -103,7 +103,7 @@ export_crosstab <- function(
   # 4. NSE resolution for vars only
   vars_resolved <- names(tidyselect::eval_select(rlang::enquo(vars), design@data))
 
-  # 5. Shared input validation (errors 3–8)
+  # 5. Shared input validation (errors 3-8)
   .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
 
   # 6. Banner NSE resolution (AFTER validate, so banner_not_found is error #9)
@@ -271,9 +271,56 @@ export_crosstab <- function(
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
 
   question_text <- frame$question_text[[1L]]
-  n_cols        <- 1L + length(banner_resolved) + as.integer(show_n)
 
-  # Row 1: question text merged (bold)
+  # Get value order from total rows
+  total_rows <- frame[frame$subgroup_type == "total", ]
+  values     <- unique(total_rows$value)
+
+  # Build column groups: each group has a spanner label, level labels, and
+  # metadata for looking up data rows.
+  col_groups <- list()
+
+  # Banner column groups
+  for (bv in banner_resolved) {
+    bv_rows <- frame[
+      frame$subgroup_type == "banner" & frame$subgroup_var == bv,
+    ]
+    levels_present <- unique(bv_rows$subgroup_value)
+    if (length(levels_present) == 0L) next
+    col_groups[[length(col_groups) + 1L]] <- list(
+      spanner     = bv,
+      levels      = levels_present,
+      type        = "banner",
+      subgroup_var = bv
+    )
+  }
+
+  # Interaction column groups
+  if (!is.null(interactions)) {
+    for (int_vars in interactions) {
+      int_label <- paste(int_vars, collapse = " \u00d7 ")
+      int_rows  <- frame[
+        frame$subgroup_type == "interaction" &
+          frame$subgroup_var == int_label,
+      ]
+      levels_present <- unique(int_rows$subgroup_value)
+      if (length(levels_present) == 0L) next
+      col_groups[[length(col_groups) + 1L]] <- list(
+        spanner     = int_label,
+        levels      = levels_present,
+        type        = "interaction",
+        subgroup_var = int_label
+      )
+    }
+  }
+
+  # Total column count: 1 (response label) + sum of all level counts
+  n_data_cols <- sum(
+    vapply(col_groups, function(cg) length(cg$levels), integer(1L))
+  )
+  n_cols <- 1L + n_data_cols
+
+  # Row 1: question text merged across all columns (bold)
   wb <- openxlsx2::wb_add_data(
     wb, sheet = sheet, x = question_text,
     start_row = start_row, start_col = 1L
@@ -290,8 +337,103 @@ export_crosstab <- function(
     bold = TRUE
   )
 
-  # Placeholder: advance 3 rows (header + 1 data row + total)
-  list(wb = wb, next_row = start_row + 3L)
+  spanner_row <- start_row + 1L
+  header_row  <- start_row + 2L
+
+  # Row 3: "Response" header in column 1
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = "Response",
+    start_row = header_row, start_col = 1L
+  )
+
+  # Row 2 (spanner) + Row 3 (column headers) for each column group
+  current_col <- 2L
+  for (cg in col_groups) {
+    span_start <- current_col
+    span_end   <- span_start + length(cg$levels) - 1L
+
+    # Spanner label in row 2
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = cg$spanner,
+      start_row = spanner_row, start_col = span_start
+    )
+    if (span_end > span_start) {
+      wb <- openxlsx2::wb_merge_cells(
+        wb, sheet = sheet,
+        dims = openxlsx2::wb_dims(rows = spanner_row, cols = span_start:span_end)
+      )
+    }
+
+    # Level headers in row 3
+    for (k in seq_along(cg$levels)) {
+      wb <- openxlsx2::wb_add_data(
+        wb, sheet = sheet, x = cg$levels[[k]],
+        start_row = header_row, start_col = current_col
+      )
+      current_col <- current_col + 1L
+    }
+  }
+
+  # Data rows: one per response value
+  data_start <- header_row + 1L
+  for (j in seq_along(values)) {
+    val     <- values[[j]]
+    row_num <- data_start + j - 1L
+
+    # Row label
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = val,
+      start_row = row_num, start_col = 1L
+    )
+
+    current_col <- 2L
+    for (cg in col_groups) {
+      for (level in cg$levels) {
+        pct_rows <- frame[
+          frame$subgroup_type == cg$type &
+            frame$subgroup_var == cg$subgroup_var &
+            frame$subgroup_value == level &
+            frame$value == val,
+        ]
+        pct_val <- if (nrow(pct_rows) > 0L) {
+          round(pct_rows$pct[[1L]] * 100, decimals)
+        } else {
+          NA_real_
+        }
+        wb <- openxlsx2::wb_add_data(
+          wb, sheet = sheet, x = pct_val,
+          start_row = row_num, start_col = current_col
+        )
+        current_col <- current_col + 1L
+      }
+    }
+  }
+
+  # Total row
+  total_row_num <- data_start + length(values)
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = "Total",
+    start_row = total_row_num, start_col = 1L
+  )
+  current_col <- 2L
+  for (cg in col_groups) {
+    for (level in cg$levels) {
+      wb <- openxlsx2::wb_add_data(
+        wb, sheet = sheet, x = "100%",
+        start_row = total_row_num, start_col = current_col
+      )
+      current_col <- current_col + 1L
+    }
+  }
+
+  # Suppression footnote
+  next_row <- total_row_num + 1L
+  if (nrow(suppressed) > 0L) {
+    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    next_row <- next_row + nrow(suppressed)
+  }
+
+  list(wb = wb, next_row = next_row)
 }
 
 #' @keywords internal

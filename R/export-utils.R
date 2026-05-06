@@ -170,7 +170,10 @@
 #' @keywords internal
 #' @noRd
 .compute_total_freq <- function(design, var, ...) {
-  result <- surveycore::get_freqs(design, !!rlang::sym(var), ...)
+  result <- withCallingHandlers(
+    surveycore::get_freqs(design, !!rlang::sym(var), ...),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+  )
   lm     <- .extract_var_meta(surveycore::meta(result), var)
 
   # First column is the response value column (named after `var`)
@@ -191,8 +194,11 @@
 #' @keywords internal
 #' @noRd
 .compute_subgroup_freq <- function(design, var, banner_var, ...) {
-  result <- surveycore::get_freqs(
-    design, !!rlang::sym(var), group = !!rlang::sym(banner_var), ...
+  result <- withCallingHandlers(
+    surveycore::get_freqs(
+      design, !!rlang::sym(var), group = !!rlang::sym(banner_var), ...
+    ),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -221,8 +227,11 @@
     c(design@data[banner_vars], list(sep = " \u00d7 "))
   )
 
-  result <- surveycore::get_freqs(
-    design, !!rlang::sym(var), group = !!rlang::sym(interact_col), ...
+  result <- withCallingHandlers(
+    surveycore::get_freqs(
+      design, !!rlang::sym(var), group = !!rlang::sym(interact_col), ...
+    ),
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -491,18 +500,18 @@
   )
 }
 
-# Emit missing-variable-label warning for vars that fell back to the var name
+# Emit missing-variable-label message for vars that fell back to the var name
 .emit_missing_label_warning <- function(frame) {
   vars_fallback <- unique(
     frame$variable[!is.na(frame$variable) & frame$question_text == frame$variable]
   )
   if (length(vars_fallback) > 0L) {
-    cli::cli_warn(
+    cli::cli_inform(
       c(
-        "!" = "Variable{?s} {.field {vars_fallback}} {?has/have} no {.field variable_label}.",
+        "i" = "Variable{?s} {.field {vars_fallback}} {?has/have} no {.field variable_label}.",
         "i" = "Variable name used as question text."
       ),
-      class = "surveyreports_warning_missing_variable_label"
+      class = "surveyreports_message_missing_variable_label"
     )
   }
   invisible(NULL)

@@ -71,6 +71,102 @@ test_that("export_crosstab() layout='stacked' creates single sheet named 'Crosst
   expect_equal(length(wb$sheet_names), 1L, label = "exactly 1 sheet")
 })
 
+# 4. Banner columns ---------------------------------------------------------------
+
+test_that("export_crosstab() includes subgroup columns for each banner level", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+  )
+
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  # Banner levels A, B, C from the 'group' variable should appear as column headers
+  expect_true(any(grepl("^A$", cells)), label = "banner level A present")
+  expect_true(any(grepl("^B$", cells)), label = "banner level B present")
+  expect_true(any(grepl("^C$", cells)), label = "banner level C present")
+  # The banner variable name 'group' should appear as a spanner header
+  expect_true(any(grepl("^group$", cells)), label = "banner spanner 'group' present")
+})
+
+test_that("export_crosstab() produces correct number of banner level column sets", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+  )
+
+  wb <- openxlsx2::wb_load(out)
+  df <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+
+  # With banner = group (3 levels: A/B/C), the table has at minimum 4 columns:
+  # Response | A | B | C (plus optional N columns)
+  expect_gte(ncol(df), 4L)
+})
+
+# 5. Interactions -----------------------------------------------------------------
+
+test_that("export_crosstab() renders interaction spanner groups in workbook", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(
+      d, vars = q1, banner = c(group, q2), file_name = out,
+      interactions = list(c("group", "q2"))
+    )
+  )
+
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  # The interaction label should appear: "group × q2" or "group x q2"
+  expect_true(
+    any(grepl("group", cells) & grepl("q2", cells)) ||
+      any(grepl("group.*q2|q2.*group", cells)),
+    label = "interaction group × q2 present in workbook"
+  )
+})
+
+# 6. Self-banner ------------------------------------------------------------------
+
+test_that("export_crosstab() silently drops self-banner without error or warning", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # q1 is in both vars and banner: the q1×q1 subgroup should be silently dropped
+  expect_no_warning(
+    export_crosstab(d, vars = c(q1, group), banner = c(group), file_name = out)
+  )
+  expect_true(file.exists(out))
+
+  wb    <- openxlsx2::wb_load(out)
+  # q1 sheet should have banner 'group' columns
+  df_q1 <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells_q1 <- as.character(unlist(df_q1)[!is.na(unlist(df_q1))])
+  expect_true(any(grepl("^group$|^A$|^B$|^C$", cells_q1)),
+              label = "q1 sheet has group banner columns")
+
+  # group sheet should NOT have a self-banner 'group' column set
+  df_group <- openxlsx2::wb_to_df(wb, sheet = "group", col_names = FALSE)
+  cells_group <- as.character(unlist(df_group)[!is.na(unlist(df_group))])
+  # The 'group' spanner should be absent from the group variable's own sheet
+  # (self-banner dropped); there should be no repeated 'group' spanner header
+  # We check there is only one occurrence of 'group' (the question text itself)
+  group_occurrences <- sum(grepl("^group$", cells_group))
+  expect_lte(group_occurrences, 1L, label = "group spanner absent from self-sheet")
+})
+
 # 12. Error paths -----------------------------------------------------------------
 
 test_that("export_crosstab() errors for survey_collection design", {

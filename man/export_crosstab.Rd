@@ -11,7 +11,7 @@ export_crosstab(
   file_name,
   layout = c("per_question", "stacked"),
   interactions = NULL,
-  pub_type = c("external", "internal", "none"),
+  pub_type = c("none", "external", "internal"),
   variance = NULL,
   conf_level = 0.95,
   show_n = TRUE,
@@ -45,11 +45,11 @@ are stacked on a single sheet.}
 names two or more variables from \code{banner} whose levels will be crossed
 (interacted) to form additional crosstab columns. Default \code{NULL}.}
 
-\item{pub_type}{One of \code{"external"} (default), \code{"internal"}, or
-\code{"none"}. Controls suppression thresholds for small subgroups.
-\code{"external"} suppresses subgroups with effective or raw N < 100;
-\code{"internal"} uses a threshold of 50 effective N or 100 raw N;
-\code{"none"} disables suppression.}
+\item{pub_type}{One of \code{"none"} (default), \code{"external"}, or
+\code{"internal"}. Controls suppression thresholds for small subgroups.
+\code{"none"} disables suppression; \code{"external"} suppresses subgroups with
+effective or raw N < 100; \code{"internal"} uses a threshold of 50 effective
+N or 100 raw N.}
 
 \item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
 standard errors or confidence intervals are shown. Default \code{NULL}.}
@@ -67,7 +67,7 @@ headers. Default \code{FALSE}.}
 percentages. Default \code{1L}.}
 }
 \value{
-\code{invisible(file_name)} — the path supplied in \code{file_name}.
+\code{invisible(file_name)} -- the path supplied in \code{file_name}.
 }
 \description{
 Produces a publication-quality crosstab frequency table for one or more
