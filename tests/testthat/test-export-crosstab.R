@@ -225,6 +225,192 @@ test_that("export_crosstab() renders battery variables without error, with banne
   }
 })
 
+# 8. Variance options -------------------------------------------------------------
+
+test_that("export_crosstab() variance=NULL produces no se/ci columns in output frame", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    banner_resolved = "group",
+    variance        = NULL,
+    conf_level      = 0.95
+  )$frame
+
+  expect_false("se"     %in% names(frame), label = "no se col when variance=NULL")
+  expect_false("ci_low" %in% names(frame), label = "no ci_low col when variance=NULL")
+})
+
+test_that("export_crosstab() variance='se' produces se column in output frame", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    banner_resolved = "group",
+    variance        = "se",
+    conf_level      = 0.95
+  )$frame
+
+  expect_true("se" %in% names(frame), label = "se col present when variance='se'")
+})
+
+test_that("export_crosstab() variance='ci' produces ci_low/ci_high columns in frame", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
+
+  frame <- surveyreports:::.build_freq_frame(
+    d, "q1", clf,
+    banner_resolved = "group",
+    variance        = "ci",
+    conf_level      = 0.95
+  )$frame
+
+  expect_true("ci_low"  %in% names(frame), label = "ci_low present when variance='ci'")
+  expect_true("ci_high" %in% names(frame), label = "ci_high present when variance='ci'")
+})
+
+test_that("export_crosstab() produces a valid file with variance='se'", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(
+      export_crosstab(d, vars = q1, banner = group, file_name = out, variance = "se")
+    )
+  )
+  expect_true(file.exists(out))
+})
+
+# 9. show_n and show_eff_n --------------------------------------------------------
+
+test_that("export_crosstab() show_n=FALSE produces no N row-level data in workbook", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = q1, banner = group, file_name = out, show_n = FALSE)
+  )
+
+  wb  <- openxlsx2::wb_load(out)
+  df  <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  # With show_n=FALSE the workbook should not contain standalone "N" column
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+  expect_false(any(grepl("^N$", cells)), label = "no N header when show_n=FALSE")
+})
+
+test_that("export_crosstab() show_n=TRUE includes N column in workbook", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = q1, banner = group, file_name = out, show_n = TRUE)
+  )
+
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+  expect_true(any(grepl("^N$", cells)), label = "N header present when show_n=TRUE")
+})
+
+test_that("export_crosstab() show_eff_n=TRUE produces file without error", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(
+      export_crosstab(d, vars = q1, banner = group, file_name = out, show_eff_n = TRUE)
+    )
+  )
+  expect_true(file.exists(out))
+})
+
+# 10. pub_type suppression --------------------------------------------------------
+
+test_that("export_crosstab() pub_type='external' suppresses small-N banner columns", {
+  skip_if_not_installed("surveycore")
+  # Create a design with a banner variable where one level has very small N
+  df_small <- make_survey_data(n = 50L, seed = 99L)
+  # Make 'group' very unbalanced: mostly A, tiny C
+  df_small$group <- c(
+    rep("A", 45L), rep("B", 3L), rep("C", 2L)
+  )
+  d_small <- surveycore::as_survey(df_small, ids = psu, strata = strata,
+                                    weights = wt, nest = TRUE)
+
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_crosstab(
+      d_small, vars = q1, banner = group, file_name = out,
+      pub_type = "external"
+    ),
+    class = "surveyreports_warning_subgroup_suppressed"
+  )
+  expect_true(file.exists(out))
+
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+  # Suppression footnote should be written (contains "suppressed")
+  expect_true(any(grepl("suppressed", cells, ignore.case = TRUE)),
+              label = "suppression footnote present in workbook")
+})
+
+test_that("export_crosstab() pub_type='none' does not suppress any columns", {
+  skip_if_not_installed("surveycore")
+  df_small <- make_survey_data(n = 50L, seed = 99L)
+  df_small$group <- c(rep("A", 45L), rep("B", 3L), rep("C", 2L))
+  d_small <- surveycore::as_survey(df_small, ids = psu, strata = strata,
+                                    weights = wt, nest = TRUE)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_warning(
+    suppressWarnings(  # suppress only missing-label warnings
+      export_crosstab(
+        d_small, vars = q1, banner = group, file_name = out,
+        pub_type = "none"
+      )
+    )
+  )
+  # All 3 banner levels should be present
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+  expect_true(any(grepl("^A$", cells)), label = "A still present with pub_type='none'")
+})
+
+# 11. Missing metadata warning ----------------------------------------------------
+
+test_that("export_crosstab() warns about missing variable_label when unset", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_warning(
+    export_crosstab(d, vars = q1, banner = group, file_name = out),
+    class = "surveyreports_warning_missing_variable_label"
+  )
+})
+
+test_that("export_crosstab() does not warn when variable_label is set", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_warning(export_crosstab(d, vars = q1, banner = group, file_name = out))
+})
+
 # 12. Error paths -----------------------------------------------------------------
 
 test_that("export_crosstab() errors for survey_collection design", {

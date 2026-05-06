@@ -387,7 +387,9 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  n_cols <- .count_render_cols(col_groups)
+  # n_cols includes an extra column when show_n = TRUE
+  n_pct_cols <- .count_render_cols(col_groups)
+  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
 
   # Row 1: question text merged across all columns (bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
@@ -399,6 +401,15 @@ export_crosstab <- function(
   wb <- .write_crosstab_headers(
     wb, sheet, spanner_row, header_row, col_groups, "Response"
   )
+
+  # Write "N" column header when show_n = TRUE
+  n_col <- n_pct_cols + 1L
+  if (show_n) {
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = "N",
+      start_row = header_row, start_col = n_col
+    )
+  }
 
   # Data rows: one per response value
   data_start <- header_row + 1L
@@ -432,6 +443,19 @@ export_crosstab <- function(
         )
         current_col <- current_col + 1L
       }
+    }
+
+    # Write total n for this row when show_n = TRUE
+    if (show_n) {
+      n_val <- if (nrow(total_rows[total_rows$value == val, ]) > 0L) {
+        total_rows$n[total_rows$value == val][[1L]]
+      } else {
+        NA_integer_
+      }
+      wb <- openxlsx2::wb_add_data(
+        wb, sheet = sheet, x = n_val,
+        start_row = row_num, start_col = n_col
+      )
     }
   }
 
@@ -475,7 +499,8 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  n_cols <- .count_render_cols(col_groups)
+  n_pct_cols <- .count_render_cols(col_groups)
+  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
 
   # Row 1: question preface (merged, bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
@@ -487,6 +512,15 @@ export_crosstab <- function(
   wb <- .write_crosstab_headers(
     wb, sheet, spanner_row, header_row, col_groups, "Item"
   )
+
+  # Write "N" column header when show_n = TRUE
+  n_col <- n_pct_cols + 1L
+  if (show_n) {
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = "N",
+      start_row = header_row, start_col = n_col
+    )
+  }
 
   # Data rows: one row per SATA item; pct where value == "1"
   data_start <- header_row + 1L
@@ -523,6 +557,24 @@ export_crosstab <- function(
         current_col <- current_col + 1L
       }
     }
+
+    # Write total n for this item when show_n = TRUE
+    if (show_n) {
+      total_var_rows <- frame[
+        frame$variable == var &
+          frame$subgroup_type == "total" &
+          frame$value == "1",
+      ]
+      n_val <- if (nrow(total_var_rows) > 0L) {
+        total_var_rows$n[[1L]]
+      } else {
+        NA_integer_
+      }
+      wb <- openxlsx2::wb_add_data(
+        wb, sheet = sheet, x = n_val,
+        start_row = row_num, start_col = n_col
+      )
+    }
   }
 
   next_row <- data_start + length(sata_vars)
@@ -547,7 +599,8 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  n_cols <- .count_render_cols(col_groups)
+  n_pct_cols <- .count_render_cols(col_groups)
+  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
 
   # Row 1: battery preface (merged, bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
@@ -559,6 +612,15 @@ export_crosstab <- function(
   wb <- .write_crosstab_headers(
     wb, sheet, spanner_row, header_row, col_groups, "Item"
   )
+
+  # Write "N" column header when show_n = TRUE
+  n_col <- n_pct_cols + 1L
+  if (show_n) {
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = "N",
+      start_row = header_row, start_col = n_col
+    )
+  }
 
   # Data rows: one row per battery sub-item \u00d7 scale value
   data_start  <- header_row + 1L
@@ -601,6 +663,17 @@ export_crosstab <- function(
           current_col <- current_col + 1L
         }
       }
+
+      # Write total n for this row when show_n = TRUE
+      if (show_n) {
+        n_rows <- total_sub[total_sub$value == val, ]
+        n_val  <- if (nrow(n_rows) > 0L) n_rows$n[[1L]] else NA_integer_
+        wb <- openxlsx2::wb_add_data(
+          wb, sheet = sheet, x = n_val,
+          start_row = current_row, start_col = n_col
+        )
+      }
+
       current_row <- current_row + 1L
     }
   }
