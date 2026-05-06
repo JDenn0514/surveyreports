@@ -150,6 +150,168 @@ export_crosstab <- function(
     }
   }
 
-  # 8. Stub body
+  layout   <- match.arg(layout)
+  pub_type <- match.arg(pub_type)
+
+  classify_out <- surveycore::classify_question_type(design, vars_resolved)
+
+  freq_result <- .build_freq_frame(
+    design,
+    vars_resolved,
+    classify_out,
+    banner_resolved = banner_resolved,
+    interactions    = interactions,
+    variance        = variance,
+    conf_level      = conf_level,
+    show_eff_n      = show_eff_n,
+    pub_type        = pub_type
+  )
+
+  wb <- .build_workbook()
+
+  if (layout == "per_question") {
+    groups_done <- character(0)
+    for (var in vars_resolved) {
+      row_info <- classify_out[classify_out$variable == var, ]
+      vtype    <- row_info$type
+      group_id <- row_info$group
+
+      if (vtype != "single" && as.character(group_id) %in% groups_done) next
+
+      if (vtype == "single") {
+        sheet_name <- substr(var, 1L, 31L)
+        var_frame  <- freq_result$frame[freq_result$frame$variable == var, ]
+        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
+        result <- .render_crosstab_single(
+          wb, sheet_name, var_frame, 1L,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      } else if (vtype == "sata") {
+        group_vars <- classify_out$variable[classify_out$group == group_id]
+        sheet_name <- substr(group_vars[[1L]], 1L, 31L)
+        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        groups_done <- c(groups_done, as.character(group_id))
+        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
+        result <- .render_crosstab_sata(
+          wb, sheet_name, var_frame, 1L,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      } else {
+        group_vars <- classify_out$variable[classify_out$group == group_id]
+        sheet_name <- substr(group_vars[[1L]], 1L, 31L)
+        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        groups_done <- c(groups_done, as.character(group_id))
+        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
+        result <- .render_crosstab_battery(
+          wb, sheet_name, var_frame, 1L,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      }
+
+      wb <- result$wb
+    }
+  } else {
+    # stacked
+    wb <- openxlsx2::wb_add_worksheet(wb, "Crosstab")
+    current_row <- 1L
+    groups_done <- character(0)
+
+    for (var in vars_resolved) {
+      row_info <- classify_out[classify_out$variable == var, ]
+      vtype    <- row_info$type
+      group_id <- row_info$group
+
+      if (vtype != "single" && as.character(group_id) %in% groups_done) next
+
+      if (vtype == "single") {
+        var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
+        result <- .render_crosstab_single(
+          wb, "Crosstab", var_frame, current_row,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      } else if (vtype == "sata") {
+        group_vars <- classify_out$variable[classify_out$group == group_id]
+        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        groups_done <- c(groups_done, as.character(group_id))
+        result <- .render_crosstab_sata(
+          wb, "Crosstab", var_frame, current_row,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      } else {
+        group_vars <- classify_out$variable[classify_out$group == group_id]
+        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        groups_done <- c(groups_done, as.character(group_id))
+        result <- .render_crosstab_battery(
+          wb, "Crosstab", var_frame, current_row,
+          show_n, show_eff_n, decimals, freq_result$suppressed,
+          banner_resolved, interactions
+        )
+      }
+
+      wb          <- result$wb
+      current_row <- result$next_row + 1L
+    }
+  }
+
+  openxlsx2::wb_save(wb, file_name)
   invisible(file_name)
+}
+
+#' @keywords internal
+#' @noRd
+.render_crosstab_single <- function(
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  banner_resolved, interactions
+) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+
+  question_text <- frame$question_text[[1L]]
+  n_cols        <- 1L + length(banner_resolved) + as.integer(show_n)
+
+  # Row 1: question text merged (bold)
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = question_text,
+    start_row = start_row, start_col = 1L
+  )
+  if (n_cols > 1L) {
+    wb <- openxlsx2::wb_merge_cells(
+      wb, sheet = sheet,
+      dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
+    )
+  }
+  wb <- openxlsx2::wb_add_font(
+    wb, sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
+    bold = TRUE
+  )
+
+  # Placeholder: advance 3 rows (header + 1 data row + total)
+  list(wb = wb, next_row = start_row + 3L)
+}
+
+#' @keywords internal
+#' @noRd
+.render_crosstab_sata <- function(
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  banner_resolved, interactions
+) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  .render_crosstab_single(wb, sheet, frame, start_row, show_n, show_eff_n,
+                           decimals, suppressed, banner_resolved, interactions)
+}
+
+#' @keywords internal
+#' @noRd
+.render_crosstab_battery <- function(
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  banner_resolved, interactions
+) {
+  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  .render_crosstab_single(wb, sheet, frame, start_row, show_n, show_eff_n,
+                           decimals, suppressed, banner_resolved, interactions)
 }

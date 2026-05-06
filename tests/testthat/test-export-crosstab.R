@@ -1,5 +1,76 @@
 # tests/testthat/test-export-crosstab.R
 
+# 1. Happy paths ------------------------------------------------------------------
+
+test_that("export_crosstab() creates a non-empty .xlsx file for all 3 design types", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    result <- withVisible(export_crosstab(designs[[nm]], vars = q1, banner = group, file_name = out))
+
+    expect_false(result$visible, label = paste0(nm, ": return invisible"))
+    expect_identical(result$value, out, label = paste0(nm, ": return file_name"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    expect_gt(file.info(out)$size, 0L, label = paste0(nm, ": file non-empty"))
+
+    wb <- openxlsx2::wb_load(out)
+    # per_question is default: one sheet named "q1" (variable name)
+    expect_true("q1" %in% wb$sheet_names, label = paste0(nm, ": q1 sheet present"))
+  }
+})
+
+# 2. Multiple variables -----------------------------------------------------------
+
+test_that("export_crosstab() includes all variable names in workbook for multiple vars", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out))
+
+  wb <- openxlsx2::wb_load(out)
+  # per_question: one sheet per var
+  expect_true("q1" %in% wb$sheet_names, label = "q1 sheet present")
+  expect_true("q2" %in% wb$sheet_names, label = "q2 sheet present")
+  expect_equal(length(wb$sheet_names), 2L, label = "exactly 2 sheets")
+})
+
+# 3. Layout -----------------------------------------------------------------------
+
+test_that("export_crosstab() layout='per_question' creates one sheet per variable", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out,
+                    layout = "per_question")
+  )
+
+  wb <- openxlsx2::wb_load(out)
+  expect_true("q1" %in% wb$sheet_names)
+  expect_true("q2" %in% wb$sheet_names)
+  expect_equal(length(wb$sheet_names), 2L)
+})
+
+test_that("export_crosstab() layout='stacked' creates single sheet named 'Crosstab'", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  suppressWarnings(
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out,
+                    layout = "stacked")
+  )
+
+  wb <- openxlsx2::wb_load(out)
+  expect_true("Crosstab" %in% wb$sheet_names, label = "Crosstab sheet present")
+  expect_equal(length(wb$sheet_names), 1L, label = "exactly 1 sheet")
+})
+
 # 12. Error paths -----------------------------------------------------------------
 
 test_that("export_crosstab() errors for survey_collection design", {
