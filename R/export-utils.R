@@ -500,18 +500,18 @@
   )
 }
 
-# Emit missing-variable-label message for vars that fell back to the var name
+# Emit missing-variable-label warning for vars that fell back to the var name
 .emit_missing_label_warning <- function(frame) {
   vars_fallback <- unique(
     frame$variable[!is.na(frame$variable) & frame$question_text == frame$variable]
   )
   if (length(vars_fallback) > 0L) {
-    cli::cli_inform(
+    cli::cli_warn(
       c(
-        "i" = "Variable{?s} {.field {vars_fallback}} {?has/have} no {.field variable_label}.",
+        "!" = "Variable{?s} {.field {vars_fallback}} {?has/have} no {.field variable_label}.",
         "i" = "Variable name used as question text."
       ),
-      class = "surveyreports_message_missing_variable_label"
+      class = "surveyreports_warning_missing_variable_label"
     )
   }
   invisible(NULL)

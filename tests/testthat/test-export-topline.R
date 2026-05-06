@@ -186,14 +186,14 @@ test_that("export_topline() show_eff_n = TRUE adds eff N to % header", {
 
 # 7. Missing metadata warning -----------------------------------------------------
 
-test_that("export_topline() messages about missing variable_label when unset", {
+test_that("export_topline() warns about missing variable_label when unset", {
   skip_if_not_installed("surveycore")
   d   <- make_all_designs(seed = 42)$taylor
   out <- withr::local_tempfile(fileext = ".xlsx")
 
-  expect_message(
+  expect_warning(
     export_topline(d, vars = q1, file_name = out),
-    class = "surveyreports_message_missing_variable_label"
+    class = "surveyreports_warning_missing_variable_label"
   )
 })
 

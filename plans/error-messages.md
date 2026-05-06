@@ -33,4 +33,4 @@ All `cli_abort()` and `cli_warn()` calls must use a class from this table.
 | `surveyreports_warning_pool_pvals_input_pre_adjusted` | `pool_pvals()` | One or more elements already contain a `new_col` column |
 | `surveyreports_warning_pool_pvals_no_pvalues_available` | `pool_pvals()` | All pooled p-values are `NA` |
 | `surveyreports_warning_subgroup_suppressed` | `export_crosstab()` | One or more subgroups dropped under `pub_type = "external"` or `"internal"`; single warning listing all suppressed subgroups and their eff_n |
-| `surveyreports_message_missing_variable_label` | `export_topline()`, `export_crosstab()` | `variable_label` is `NULL` for one or more vars; informational message listing all affected variables (downgraded from warning — not user-actionable at call time) |
+| `surveyreports_warning_missing_variable_label` | `export_topline()`, `export_crosstab()` | `variable_label` is `NULL` for one or more vars; single warning listing all affected variables |

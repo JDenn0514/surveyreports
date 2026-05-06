@@ -142,6 +142,10 @@ test_that("export_crosstab() renders interaction spanner groups in workbook", {
 test_that("export_crosstab() silently drops self-banner without error or warning", {
   skip_if_not_installed("surveycore")
   d   <- make_all_designs(seed = 42)$taylor
+  # Set labels so the missing-variable-label warning does not fire,
+  # letting expect_no_warning() verify only self-banner behavior
+  d   <- surveycore::set_var_label(d, variable = "q1",    label = "Agreement question")
+  d   <- surveycore::set_var_label(d, variable = "group", label = "Group")
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   # q1 is in both vars and banner: the q1×q1 subgroup should be silently dropped
