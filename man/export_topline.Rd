@@ -69,5 +69,8 @@ export_topline(d, vars = q1, file_name = "topline.xlsx")
 }
 \seealso{
 \code{\link[surveycore:get_freqs]{surveycore::get_freqs()}} for the underlying frequency function.
+
+Other frequency functions: 
+\code{\link{export_crosstab}()}
 }
 \concept{frequency functions}
