@@ -171,6 +171,60 @@ test_that("export_crosstab() silently drops self-banner without error or warning
   expect_lte(group_occurrences, 1L, label = "group spanner absent from self-sheet")
 })
 
+# 7. var_type dispatch: SATA and battery ------------------------------------------
+
+test_that("export_crosstab() renders SATA variables without error, with banner columns", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    expect_no_error(
+      suppressWarnings(
+        export_crosstab(designs[[nm]], vars = c(sata_a, sata_b, sata_c),
+                        banner = group, file_name = out)
+      )
+    )
+    expect_true(file.exists(out))
+
+    wb    <- openxlsx2::wb_load(out)
+    df    <- openxlsx2::wb_to_df(wb, sheet = wb$sheet_names[[1L]], col_names = FALSE)
+    cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+    # Spanner for banner variable should be present
+    expect_true(any(grepl("^group$", cells)), label = paste0(nm, ": group spanner present"))
+    # Banner levels should be present
+    expect_true(any(grepl("^A$|^B$|^C$", cells)), label = paste0(nm, ": banner levels present"))
+  }
+})
+
+test_that("export_crosstab() renders battery variables without error, with banner columns", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    expect_no_error(
+      suppressWarnings(
+        export_crosstab(designs[[nm]], vars = c(bat_1, bat_2, bat_3),
+                        banner = group, file_name = out)
+      )
+    )
+    expect_true(file.exists(out))
+
+    wb    <- openxlsx2::wb_load(out)
+    df    <- openxlsx2::wb_to_df(wb, sheet = wb$sheet_names[[1L]], col_names = FALSE)
+    cells <- as.character(unlist(df)[!is.na(unlist(df))])
+
+    # Spanner for banner variable should be present
+    expect_true(any(grepl("^group$", cells)), label = paste0(nm, ": group spanner present"))
+    # Banner levels should be present
+    expect_true(any(grepl("^A$|^B$|^C$", cells)), label = paste0(nm, ": banner levels present"))
+  }
+})
+
 # 12. Error paths -----------------------------------------------------------------
 
 test_that("export_crosstab() errors for survey_collection design", {
