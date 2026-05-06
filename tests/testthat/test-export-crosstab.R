@@ -372,14 +372,15 @@ test_that("export_crosstab() pub_type='none' does not suppress any columns", {
   df_small$group <- c(rep("A", 45L), rep("B", 3L), rep("C", 2L))
   d_small <- surveycore::as_survey(df_small, ids = psu, strata = strata,
                                     weights = wt, nest = TRUE)
+  # Set label so missing-variable-label warning does not fire, allowing
+  # expect_no_warning() to reliably detect any suppression warning
+  d_small <- surveycore::set_var_label(d_small, variable = "q1", label = "Q1")
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_no_warning(
-    suppressWarnings(  # suppress only missing-label warnings
-      export_crosstab(
-        d_small, vars = q1, banner = group, file_name = out,
-        pub_type = "none"
-      )
+    export_crosstab(
+      d_small, vars = q1, banner = group, file_name = out,
+      pub_type = "none"
     )
   )
   # All 3 banner levels should be present
