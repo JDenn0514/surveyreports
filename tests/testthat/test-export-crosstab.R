@@ -90,6 +90,7 @@ test_that("export_crosstab() errors for survey_collection design", {
 })
 
 test_that("export_crosstab() errors when design is not a survey object", {
+  skip_if_not_installed("surveycore")
   out <- withr::local_tempfile(fileext = ".xlsx")
   df  <- data.frame(q1 = 1:5, wt = rep(1, 5))
 
