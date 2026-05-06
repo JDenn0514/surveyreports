@@ -306,6 +306,33 @@ export_crosstab <- function(
 
 #' @keywords internal
 #' @noRd
+.count_render_cols <- function(col_groups) {
+  1L + sum(vapply(col_groups, function(cg) length(cg$levels), integer(1L)))
+}
+
+#' @keywords internal
+#' @noRd
+.write_question_title <- function(wb, sheet, question_text, start_row, n_cols) {
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = question_text,
+    start_row = start_row, start_col = 1L
+  )
+  if (n_cols > 1L) {
+    wb <- openxlsx2::wb_merge_cells(
+      wb, sheet = sheet,
+      dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
+    )
+  }
+  wb <- openxlsx2::wb_add_font(
+    wb, sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
+    bold = TRUE
+  )
+  wb
+}
+
+#' @keywords internal
+#' @noRd
 .write_crosstab_headers <- function(
   wb, sheet, spanner_row, header_row, col_groups, label_col1
 ) {
@@ -360,28 +387,10 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  # Total column count: 1 (response label) + sum of all level counts
-  n_data_cols <- sum(
-    vapply(col_groups, function(cg) length(cg$levels), integer(1L))
-  )
-  n_cols <- 1L + n_data_cols
+  n_cols <- .count_render_cols(col_groups)
 
   # Row 1: question text merged across all columns (bold)
-  wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
-  )
-  if (n_cols > 1L) {
-    wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
-      dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
-    )
-  }
-  wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
-    dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
-    bold = TRUE
-  )
+  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   spanner_row <- start_row + 1L
   header_row  <- start_row + 2L
@@ -466,27 +475,10 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  n_data_cols <- sum(
-    vapply(col_groups, function(cg) length(cg$levels), integer(1L))
-  )
-  n_cols <- 1L + n_data_cols
+  n_cols <- .count_render_cols(col_groups)
 
   # Row 1: question preface (merged, bold)
-  wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
-  )
-  if (n_cols > 1L) {
-    wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
-      dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
-    )
-  }
-  wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
-    dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
-    bold = TRUE
-  )
+  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   spanner_row <- start_row + 1L
   header_row  <- start_row + 2L
@@ -555,27 +547,10 @@ export_crosstab <- function(
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
 
-  n_data_cols <- sum(
-    vapply(col_groups, function(cg) length(cg$levels), integer(1L))
-  )
-  n_cols <- 1L + n_data_cols
+  n_cols <- .count_render_cols(col_groups)
 
   # Row 1: battery preface (merged, bold)
-  wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
-  )
-  if (n_cols > 1L) {
-    wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
-      dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
-    )
-  }
-  wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
-    dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
-    bold = TRUE
-  )
+  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   spanner_row <- start_row + 1L
   header_row  <- start_row + 2L
