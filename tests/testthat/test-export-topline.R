@@ -322,6 +322,33 @@ test_that("export_topline() errors with empty_domain for a zero-row design", {
   )
 })
 
+test_that("export_topline() handles survey_collection where one wave is missing the variable", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  # wave2 design without q1 — validation passes (uses wave1), wave2 gets (n/a) placeholder
+  df_no_q1 <- make_survey_data(seed = 42)
+  df_no_q1 <- df_no_q1[, !names(df_no_q1) %in% "q1"]
+  wave2_no_q1 <- surveycore::as_survey(
+    df_no_q1, ids = psu, strata = strata, weights = wt, nest = TRUE
+  )
+  coll <- surveycore::as_survey_collection(
+    wave1 = designs$taylor,
+    wave2 = wave2_no_q1
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_error(
+    suppressWarnings(export_topline(coll, vars = q1, file_name = out))
+  )
+  expect_true(file.exists(out))
+  wb    <- openxlsx2::wb_load(out)
+  df    <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+  cells <- as.character(unlist(df)[!is.na(unlist(df))])
+  expect_true(any(grepl("wave1", cells)))
+  expect_true(any(grepl("wave2", cells)))
+})
+
 # 10. Numerical accuracy ----------------------------------------------------------
 
 test_that(".build_freq_frame() totals match surveycore::get_freqs() for q1 [numerical]", {
