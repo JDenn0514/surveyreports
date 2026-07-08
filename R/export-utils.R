@@ -377,7 +377,7 @@
 
     all_rows <- dplyr::left_join(
       all_rows,
-      classify_out[, c("variable", "type", "group")],
+      classify_out[, c("variable", "type", "group", "question_preface")],
       by = "variable"
     )
     names(all_rows)[names(all_rows) == "type"]  <- "var_type"
@@ -490,7 +490,7 @@
 
   all_rows <- dplyr::left_join(
     all_rows,
-    classify_out[, c("variable", "type", "group")],
+    classify_out[, c("variable", "type", "group", "question_preface")],
     by = "variable"
   )
   names(all_rows)[names(all_rows) == "type"]  <- "var_type"
@@ -510,6 +510,17 @@
     threshold      = integer(0L),
     pub_type       = character(0L)
   )
+}
+
+# Row-1 header for a sata/battery block: the group's shared question_preface,
+# falling back to the first member's question_text when no preface exists.
+.group_header_text <- function(frame) {
+  preface <- frame$question_preface[[1L]]
+  if (!is.na(preface) && nchar(preface) > 0L) {
+    preface
+  } else {
+    frame$question_text[[1L]]
+  }
 }
 
 # Emit missing-variable-label warning for vars that fell back to the var name
