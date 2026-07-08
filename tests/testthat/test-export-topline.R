@@ -101,6 +101,100 @@ test_that("export_topline() handles battery variables for all design types", {
   }
 })
 
+test_that("export_topline() heads a SATA block with the shared question preface", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    # Labelled items: variable_label holds the item text, preface the question
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      variable = c("sata_a", "sata_b", "sata_c"),
+      label    = c("Option A", "Option B", "Option C")
+    )
+    file.remove(out)
+    export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+    wb <- openxlsx2::wb_load(out)
+    df <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+
+    expect_identical(
+      as.character(df[1L, 1L]),
+      "Which of the following apply to you?",
+      label = paste0(nm, ": SATA header cell is the question preface")
+    )
+    expect_true(
+      all(c("Option A", "Option B", "Option C") %in% as.character(df[[1L]])),
+      label = paste0(nm, ": item labels remain the row labels")
+    )
+  }
+})
+
+test_that("export_topline() heads a battery block with the shared question preface", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      variable = c("bat_1", "bat_2", "bat_3"),
+      label    = c("Item one", "Item two", "Item three")
+    )
+    file.remove(out)
+    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+
+    wb <- openxlsx2::wb_load(out)
+    df <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+
+    expect_identical(
+      as.character(df[1L, 1L]),
+      "Please rate the following items:",
+      label = paste0(nm, ": battery header cell is the question preface")
+    )
+    expect_true(
+      all(c("Item one", "Item two", "Item three") %in% as.character(df[[1L]])),
+      label = paste0(nm, ": item labels remain the sub-item headers")
+    )
+  }
+})
+
+test_that("export_topline() heads a single block with variable_label even when a preface is set", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  d <- surveycore::set_question_preface(d, variable = "q1", preface = "Intro text")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = q1, file_name = out)
+
+  wb <- openxlsx2::wb_load(out)
+  df <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
+
+  expect_identical(as.character(df[1L, 1L]), "Agreement question")
+})
+
+test_that(".group_header_text() falls back to question_text when no preface exists", {
+  frame_na <- tibble::tibble(
+    question_text    = "First item label",
+    question_preface = NA_character_
+  )
+  frame_empty <- tibble::tibble(
+    question_text    = "First item label",
+    question_preface = ""
+  )
+
+  expect_identical(
+    surveyreports:::.group_header_text(frame_na),
+    "First item label"
+  )
+  expect_identical(
+    surveyreports:::.group_header_text(frame_empty),
+    "First item label"
+  )
+})
+
 # 5. Variance options -------------------------------------------------------------
 
 test_that("export_topline() variance = NULL produces no se/ci columns in frame", {

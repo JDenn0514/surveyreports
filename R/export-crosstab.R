@@ -494,7 +494,7 @@ export_crosstab <- function(
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
-  question_text <- frame$question_text[[1L]]
+  question_text <- .group_header_text(frame)
   sata_vars     <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
@@ -594,7 +594,7 @@ export_crosstab <- function(
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
-  question_text <- frame$question_text[[1L]]
+  question_text <- .group_header_text(frame)
   bat_vars      <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)

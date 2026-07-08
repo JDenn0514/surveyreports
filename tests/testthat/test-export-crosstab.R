@@ -255,6 +255,82 @@ test_that("export_crosstab() renders battery variables without error, with banne
   }
 })
 
+test_that("export_crosstab() heads a SATA block with the shared question preface", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    # Labelled items: variable_label holds the item text, preface the question
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      variable = c("sata_a", "sata_b", "sata_c"),
+      label    = c("Option A", "Option B", "Option C")
+    )
+    file.remove(out)
+    suppressWarnings(
+      export_crosstab(d, vars = c(sata_a, sata_b, sata_c),
+                      banner = group, file_name = out)
+    )
+
+    wb <- openxlsx2::wb_load(out)
+    df <- openxlsx2::wb_to_df(wb, sheet = "sata_a", col_names = FALSE)
+
+    expect_identical(
+      as.character(df[1L, 1L]),
+      "Which of the following apply to you?",
+      label = paste0(nm, ": SATA header cell is the question preface")
+    )
+    expect_true(
+      all(c("Option A", "Option B", "Option C") %in% as.character(df[[1L]])),
+      label = paste0(nm, ": item labels remain the row labels")
+    )
+  }
+})
+
+test_that("export_crosstab() heads a battery block with the shared question preface", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out     <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      variable = c("bat_1", "bat_2", "bat_3"),
+      label    = c("Item one", "Item two", "Item three")
+    )
+    file.remove(out)
+    suppressWarnings(
+      export_crosstab(d, vars = c(bat_1, bat_2, bat_3),
+                      banner = group, file_name = out)
+    )
+
+    wb <- openxlsx2::wb_load(out)
+    df <- openxlsx2::wb_to_df(wb, sheet = "bat_1", col_names = FALSE)
+
+    expect_identical(
+      as.character(df[1L, 1L]),
+      "Please rate the following items:",
+      label = paste0(nm, ": battery header cell is the question preface")
+    )
+  }
+})
+
+test_that("export_crosstab() heads a single block with variable_label even when a preface is set", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  d <- surveycore::set_question_preface(d, variable = "q1", preface = "Intro text")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+  wb <- openxlsx2::wb_load(out)
+  df <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
+
+  expect_identical(as.character(df[1L, 1L]), "Agreement question")
+})
+
 # 8. Variance options -------------------------------------------------------------
 
 test_that("export_crosstab() variance=NULL produces no se/ci columns in output frame", {
