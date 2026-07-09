@@ -109,3 +109,25 @@
       i All variables in each interactions element must also appear in `banner`.
       v Add the missing variable to `banner`, or remove them from `interactions`.
 
+# export_crosstab() errors when base_notes is not fully named
+
+    Code
+      export_crosstab(d, vars = q1, banner = group, file_name = out, base_notes = c(
+        "unnamed note"))
+    Condition
+      Error in `.validate_base_notes()`:
+      x `base_notes` must be a fully named character vector or "NULL".
+      i Got <character> of length 1.
+      v Name every element after the variable whose table it annotates.
+
+# export_crosstab() errors when base_notes is not a character vector
+
+    Code
+      export_crosstab(d, vars = q1, banner = group, file_name = out, base_notes = list(
+        q1 = "a list, not a character vector"))
+    Condition
+      Error in `.validate_base_notes()`:
+      x `base_notes` must be a fully named character vector or "NULL".
+      i Got <list> of length 1.
+      v Name every element after the variable whose table it annotates.
+

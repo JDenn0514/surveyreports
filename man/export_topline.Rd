@@ -12,7 +12,8 @@ export_topline(
   decimals = 1L,
   variance = NULL,
   show_n = TRUE,
-  show_eff_n = FALSE
+  show_eff_n = FALSE,
+  base_notes = NULL
 )
 }
 \arguments{
@@ -43,6 +44,14 @@ Default \code{TRUE}.}
 
 \item{show_eff_n}{Logical. Whether to display the effective N in the
 percentage column header. Default \code{FALSE}.}
+
+\item{base_notes}{Optional named character vector mapping variable names
+to base descriptions (e.g.
+\code{c(q5 = "Base: adults who donated (n=425)")}). When a rendered table's
+first variable has an entry, its text is written as an italic row
+directly under the question title. For sata/battery groups the lookup
+key is the group's first member; battery sub-items are keyed by their
+own variable names. Default \code{NULL} (no base rows).}
 }
 \value{
 \code{invisible(file_name)} — the path supplied in \code{file_name}.

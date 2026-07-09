@@ -16,7 +16,9 @@ export_crosstab(
   conf_level = 0.95,
   show_n = TRUE,
   show_eff_n = FALSE,
-  decimals = 1L
+  decimals = 1L,
+  show_total = TRUE,
+  base_notes = NULL
 )
 }
 \arguments{
@@ -65,6 +67,17 @@ headers. Default \code{FALSE}.}
 
 \item{decimals}{Positive integer. Number of decimal places for displayed
 percentages. Default \code{1L}.}
+
+\item{show_total}{Logical. Whether to render a \code{Total} column (the
+full-sample distribution) before the banner columns in every table.
+Default \code{TRUE}.}
+
+\item{base_notes}{Optional named character vector mapping variable names
+to base descriptions (e.g.
+\code{c(q5 = "Base: adults who donated (n=425)")}). When a rendered table's
+first variable has an entry, its text is written as an italic row
+directly under the question title. For sata/battery groups the lookup
+key is the group's first member. Default \code{NULL} (no base rows).}
 }
 \value{
 \code{invisible(file_name)} -- the path supplied in \code{file_name}.

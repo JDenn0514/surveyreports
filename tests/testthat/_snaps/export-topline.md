@@ -68,3 +68,23 @@
       i Got 0.
       v Use a whole number such as "1" or "2".
 
+# export_topline() errors when base_notes is not fully named
+
+    Code
+      export_topline(d, vars = q1, file_name = out, base_notes = c("unnamed note"))
+    Condition
+      Error in `.validate_base_notes()`:
+      x `base_notes` must be a fully named character vector or "NULL".
+      i Got <character> of length 1.
+      v Name every element after the variable whose table it annotates.
+
+# export_topline() errors when base_notes is not a character vector
+
+    Code
+      export_topline(d, vars = q1, file_name = out, base_notes = 1L:3L)
+    Condition
+      Error in `.validate_base_notes()`:
+      x `base_notes` must be a fully named character vector or "NULL".
+      i Got <integer> of length 3.
+      v Name every element after the variable whose table it annotates.
+
