@@ -73,16 +73,16 @@ export_crosstab <- function(
   vars,
   banner,
   file_name,
-  layout       = c("per_question", "stacked"),
+  layout = c("per_question", "stacked"),
   interactions = NULL,
-  pub_type     = c("none", "external", "internal"),
-  variance     = NULL,
-  conf_level   = 0.95,
-  show_n       = TRUE,
-  show_eff_n   = FALSE,
-  decimals     = 1L,
-  show_total   = TRUE,
-  base_notes   = NULL
+  pub_type = c("none", "external", "internal"),
+  variance = NULL,
+  conf_level = 0.95,
+  show_n = TRUE,
+  show_eff_n = FALSE,
+  decimals = 1L,
+  show_total = TRUE,
+  base_notes = NULL
 ) {
   # 1. survey_collection rejection FIRST
   if (S7::S7_inherits(design, surveycore::survey_collection)) {
@@ -112,13 +112,22 @@ export_crosstab <- function(
   }
 
   # 4. NSE resolution for vars only
-  vars_resolved <- names(tidyselect::eval_select(rlang::enquo(vars), design@data))
+  vars_resolved <- names(tidyselect::eval_select(
+    rlang::enquo(vars),
+    design@data
+  ))
 
   # 5. Shared input validation (errors 3-8)
-  .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
+  .validate_export_inputs(
+    design,
+    vars_resolved,
+    file_name,
+    conf_level,
+    decimals
+  )
 
   # 6. Banner NSE resolution (AFTER validate, so banner_not_found is error #9)
-  banner_quo      <- rlang::enquo(banner)
+  banner_quo <- rlang::enquo(banner)
   banner_resolved <- tryCatch(
     names(tidyselect::eval_select(banner_quo, design@data)),
     error = function(e) {
@@ -164,7 +173,7 @@ export_crosstab <- function(
   # 8. base_notes validation
   .validate_base_notes(base_notes)
 
-  layout   <- match.arg(layout)
+  layout <- match.arg(layout)
   pub_type <- match.arg(pub_type)
 
   classify_out <- surveycore::classify_question_type(design, vars_resolved)
@@ -174,11 +183,11 @@ export_crosstab <- function(
     vars_resolved,
     classify_out,
     banner_resolved = banner_resolved,
-    interactions    = interactions,
-    variance        = variance,
-    conf_level      = conf_level,
-    show_eff_n      = show_eff_n,
-    pub_type        = pub_type
+    interactions = interactions,
+    variance = variance,
+    conf_level = conf_level,
+    show_eff_n = show_eff_n,
+    pub_type = pub_type
   )
 
   wb <- .build_workbook()
@@ -187,41 +196,74 @@ export_crosstab <- function(
     groups_done <- character(0)
     for (var in vars_resolved) {
       row_info <- classify_out[classify_out$variable == var, ]
-      vtype    <- row_info$type
+      vtype <- row_info$type
       group_id <- row_info$group
 
-      if (vtype != "single" && as.character(group_id) %in% groups_done) next
+      if (vtype != "single" && as.character(group_id) %in% groups_done) {
+        next
+      }
 
       if (vtype == "single") {
         sheet_name <- substr(var, 1L, 31L)
-        var_frame  <- freq_result$frame[freq_result$frame$variable == var, ]
+        var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
         wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
         result <- .render_crosstab_single(
-          wb, sheet_name, var_frame, 1L,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          sheet_name,
+          var_frame,
+          1L,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
         sheet_name <- substr(group_vars[[1L]], 1L, 31L)
-        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        var_frame <- freq_result$frame[
+          freq_result$frame$variable %in% group_vars,
+        ]
         groups_done <- c(groups_done, as.character(group_id))
         wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
         result <- .render_crosstab_sata(
-          wb, sheet_name, var_frame, 1L,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          sheet_name,
+          var_frame,
+          1L,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
         sheet_name <- substr(group_vars[[1L]], 1L, 31L)
-        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        var_frame <- freq_result$frame[
+          freq_result$frame$variable %in% group_vars,
+        ]
         groups_done <- c(groups_done, as.character(group_id))
         wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
         result <- .render_crosstab_battery(
-          wb, sheet_name, var_frame, 1L,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          sheet_name,
+          var_frame,
+          1L,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       }
 
@@ -235,39 +277,72 @@ export_crosstab <- function(
 
     for (var in vars_resolved) {
       row_info <- classify_out[classify_out$variable == var, ]
-      vtype    <- row_info$type
+      vtype <- row_info$type
       group_id <- row_info$group
 
-      if (vtype != "single" && as.character(group_id) %in% groups_done) next
+      if (vtype != "single" && as.character(group_id) %in% groups_done) {
+        next
+      }
 
       if (vtype == "single") {
         var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
         result <- .render_crosstab_single(
-          wb, "Crosstab", var_frame, current_row,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          "Crosstab",
+          var_frame,
+          current_row,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
-        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        var_frame <- freq_result$frame[
+          freq_result$frame$variable %in% group_vars,
+        ]
         groups_done <- c(groups_done, as.character(group_id))
         result <- .render_crosstab_sata(
-          wb, "Crosstab", var_frame, current_row,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          "Crosstab",
+          var_frame,
+          current_row,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
-        var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
+        var_frame <- freq_result$frame[
+          freq_result$frame$variable %in% group_vars,
+        ]
         groups_done <- c(groups_done, as.character(group_id))
         result <- .render_crosstab_battery(
-          wb, "Crosstab", var_frame, current_row,
-          show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions, show_total, base_notes
+          wb,
+          "Crosstab",
+          var_frame,
+          current_row,
+          show_n,
+          show_eff_n,
+          decimals,
+          freq_result$suppressed,
+          banner_resolved,
+          interactions,
+          show_total,
+          base_notes
         )
       }
 
-      wb          <- result$wb
+      wb <- result$wb
       current_row <- result$next_row + 1L
     }
   }
@@ -288,11 +363,13 @@ export_crosstab <- function(
       frame$subgroup_type == "banner" & frame$subgroup_var == bv,
     ]
     levels_present <- unique(bv_rows$subgroup_value)
-    if (length(levels_present) == 0L) next
+    if (length(levels_present) == 0L) {
+      next
+    }
     col_groups[[length(col_groups) + 1L]] <- list(
-      spanner      = bv,
-      levels       = levels_present,
-      type         = "banner",
+      spanner = bv,
+      levels = levels_present,
+      type = "banner",
       subgroup_var = bv
     )
   }
@@ -300,16 +377,18 @@ export_crosstab <- function(
   if (!is.null(interactions)) {
     for (int_vars in interactions) {
       int_label <- paste(int_vars, collapse = " \u00d7 ")
-      int_rows  <- frame[
+      int_rows <- frame[
         frame$subgroup_type == "interaction" &
           frame$subgroup_var == int_label,
       ]
       levels_present <- unique(int_rows$subgroup_value)
-      if (length(levels_present) == 0L) next  # nocov
+      if (length(levels_present) == 0L) {
+        next
+      } # nocov
       col_groups[[length(col_groups) + 1L]] <- list(
-        spanner      = int_label,
-        levels       = levels_present,
-        type         = "interaction",
+        spanner = int_label,
+        levels = levels_present,
+        type = "interaction",
         subgroup_var = int_label
       )
     }
@@ -328,17 +407,22 @@ export_crosstab <- function(
 #' @noRd
 .write_question_title <- function(wb, sheet, question_text, start_row, n_cols) {
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = question_text,
+    start_row = start_row,
+    start_col = 1L
   )
   if (n_cols > 1L) {
     wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
+      wb,
+      sheet = sheet,
       dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
     )
   }
   wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
+    wb,
+    sheet = sheet,
     dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
     bold = TRUE
   )
@@ -348,33 +432,51 @@ export_crosstab <- function(
 #' @keywords internal
 #' @noRd
 .write_crosstab_headers <- function(
-  wb, sheet, spanner_row, header_row, col_groups, label_col1
+  wb,
+  sheet,
+  spanner_row,
+  header_row,
+  col_groups,
+  label_col1
 ) {
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = label_col1,
-    start_row = header_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = label_col1,
+    start_row = header_row,
+    start_col = 1L
   )
 
   current_col <- 2L
   for (cg in col_groups) {
     span_start <- current_col
-    span_end   <- span_start + length(cg$levels) - 1L
+    span_end <- span_start + length(cg$levels) - 1L
 
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = cg$spanner,
-      start_row = spanner_row, start_col = span_start
+      wb,
+      sheet = sheet,
+      x = cg$spanner,
+      start_row = spanner_row,
+      start_col = span_start
     )
     if (span_end > span_start) {
       wb <- openxlsx2::wb_merge_cells(
-        wb, sheet = sheet,
-        dims = openxlsx2::wb_dims(rows = spanner_row, cols = span_start:span_end)
+        wb,
+        sheet = sheet,
+        dims = openxlsx2::wb_dims(
+          rows = spanner_row,
+          cols = span_start:span_end
+        )
       )
     }
 
     for (k in seq_along(cg$levels)) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = cg$levels[[k]],
-        start_row = header_row, start_col = current_col
+        wb,
+        sheet = sheet,
+        x = cg$levels[[k]],
+        start_row = header_row,
+        start_col = current_col
       )
       current_col <- current_col + 1L
     }
@@ -388,16 +490,28 @@ export_crosstab <- function(
 #' @keywords internal
 #' @noRd
 .render_crosstab_single <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
+  banner_resolved,
+  interactions,
+  show_total = TRUE,
+  base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  }
 
   question_text <- frame$question_text[[1L]]
 
   # Get value order from total rows
   total_rows <- frame[frame$subgroup_type == "total", ]
-  values     <- unique(total_rows$value)
+  values <- unique(total_rows$value)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
   if (show_total) {
@@ -406,45 +520,56 @@ export_crosstab <- function(
 
   # n_cols includes an extra column when show_n = TRUE
   n_pct_cols <- .count_render_cols(col_groups)
-  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
+  n_cols <- n_pct_cols + if (show_n) 1L else 0L
 
   # Row 1: question text merged across all columns (bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   # Optional italic base-note row directly under the title
-  base_note  <- .base_note_for(frame, base_notes)
+  base_note <- .base_note_for(frame, base_notes)
   note_shift <- if (is.null(base_note)) 0L else 1L
   if (note_shift == 1L) {
     wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
   }
 
   spanner_row <- start_row + note_shift + 1L
-  header_row  <- start_row + note_shift + 2L
+  header_row <- start_row + note_shift + 2L
 
   # Spanner row + column headers
   wb <- .write_crosstab_headers(
-    wb, sheet, spanner_row, header_row, col_groups, "Response"
+    wb,
+    sheet,
+    spanner_row,
+    header_row,
+    col_groups,
+    "Response"
   )
 
   # Write "N" column header when show_n = TRUE
   n_col <- n_pct_cols + 1L
   if (show_n) {
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = "N",
-      start_row = header_row, start_col = n_col
+      wb,
+      sheet = sheet,
+      x = "N",
+      start_row = header_row,
+      start_col = n_col
     )
   }
 
   # Data rows: one per response value
   data_start <- header_row + 1L
   for (j in seq_along(values)) {
-    val     <- values[[j]]
+    val <- values[[j]]
     row_num <- data_start + j - 1L
 
     # Row label
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = val,
-      start_row = row_num, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = val,
+      start_row = row_num,
+      start_col = 1L
     )
 
     current_col <- 2L
@@ -457,8 +582,11 @@ export_crosstab <- function(
           NA_real_
         }
         wb <- openxlsx2::wb_add_data(
-          wb, sheet = sheet, x = pct_val,
-          start_row = row_num, start_col = current_col
+          wb,
+          sheet = sheet,
+          x = pct_val,
+          start_row = row_num,
+          start_col = current_col
         )
         current_col <- current_col + 1L
       }
@@ -472,8 +600,11 @@ export_crosstab <- function(
         NA_integer_
       }
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = n_val,
-        start_row = row_num, start_col = n_col
+        wb,
+        sheet = sheet,
+        x = n_val,
+        start_row = row_num,
+        start_col = n_col
       )
     }
   }
@@ -481,15 +612,21 @@ export_crosstab <- function(
   # Total row
   total_row_num <- data_start + length(values)
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Total",
-    start_row = total_row_num, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = "Total",
+    start_row = total_row_num,
+    start_col = 1L
   )
   current_col <- 2L
   for (cg in col_groups) {
     for (level in cg$levels) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = "100%",
-        start_row = total_row_num, start_col = current_col
+        wb,
+        sheet = sheet,
+        x = "100%",
+        start_row = total_row_num,
+        start_col = current_col
       )
       current_col <- current_col + 1L
     }
@@ -498,7 +635,7 @@ export_crosstab <- function(
   # Suppression footnote
   next_row <- total_row_num + 1L
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
 
@@ -508,13 +645,25 @@ export_crosstab <- function(
 #' @keywords internal
 #' @noRd
 .render_crosstab_sata <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
+  banner_resolved,
+  interactions,
+  show_total = TRUE,
+  base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  } # nocov
 
   question_text <- .group_header_text(frame)
-  sata_vars     <- unique(frame$variable)
+  sata_vars <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
   if (show_total) {
@@ -522,32 +671,40 @@ export_crosstab <- function(
   }
 
   n_pct_cols <- .count_render_cols(col_groups)
-  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
+  n_cols <- n_pct_cols + if (show_n) 1L else 0L
 
   # Row 1: question preface (merged, bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   # Optional italic base-note row directly under the title
-  base_note  <- .base_note_for(frame, base_notes)
+  base_note <- .base_note_for(frame, base_notes)
   note_shift <- if (is.null(base_note)) 0L else 1L
   if (note_shift == 1L) {
     wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
   }
 
   spanner_row <- start_row + note_shift + 1L
-  header_row  <- start_row + note_shift + 2L
+  header_row <- start_row + note_shift + 2L
 
   # Spanner row + column headers — "Item" in col 1
   wb <- .write_crosstab_headers(
-    wb, sheet, spanner_row, header_row, col_groups, "Item"
+    wb,
+    sheet,
+    spanner_row,
+    header_row,
+    col_groups,
+    "Item"
   )
 
   # Write "N" column header when show_n = TRUE
   n_col <- n_pct_cols + 1L
   if (show_n) {
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = "N",
-      start_row = header_row, start_col = n_col
+      wb,
+      sheet = sheet,
+      x = "N",
+      start_row = header_row,
+      start_col = n_col
     )
   }
 
@@ -555,14 +712,17 @@ export_crosstab <- function(
   # true-zero handling (see .sata_pct_cell())
   data_start <- header_row + 1L
   for (j in seq_along(sata_vars)) {
-    var     <- sata_vars[[j]]
+    var <- sata_vars[[j]]
     row_num <- data_start + j - 1L
 
     item_label <- frame$var_label[frame$variable == var][[1L]]
 
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = item_label,
-      start_row = row_num, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = item_label,
+      start_row = row_num,
+      start_col = 1L
     )
 
     current_col <- 2L
@@ -570,8 +730,11 @@ export_crosstab <- function(
       for (level in cg$levels) {
         pct_val <- .sata_pct_cell(frame, var, cg, level, decimals)
         wb <- openxlsx2::wb_add_data(
-          wb, sheet = sheet, x = pct_val,
-          start_row = row_num, start_col = current_col
+          wb,
+          sheet = sheet,
+          x = pct_val,
+          start_row = row_num,
+          start_col = current_col
         )
         current_col <- current_col + 1L
       }
@@ -581,15 +744,18 @@ export_crosstab <- function(
     if (show_n) {
       n_val <- .sata_n_cell(frame, var)
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = n_val,
-        start_row = row_num, start_col = n_col
+        wb,
+        sheet = sheet,
+        x = n_val,
+        start_row = row_num,
+        start_col = n_col
       )
     }
   }
 
   next_row <- data_start + length(sata_vars)
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
 
@@ -599,13 +765,25 @@ export_crosstab <- function(
 #' @keywords internal
 #' @noRd
 .render_crosstab_battery <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
+  banner_resolved,
+  interactions,
+  show_total = TRUE,
+  base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  } # nocov
 
   question_text <- .group_header_text(frame)
-  bat_vars      <- unique(frame$variable)
+  bat_vars <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
   if (show_total) {
@@ -622,43 +800,59 @@ export_crosstab <- function(
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
   # Optional italic base-note row directly under the title
-  base_note  <- .base_note_for(frame, base_notes)
+  base_note <- .base_note_for(frame, base_notes)
   note_shift <- if (is.null(base_note)) 0L else 1L
   if (note_shift == 1L) {
     wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
   }
 
   spanner_row <- start_row + note_shift + 1L
-  header_row  <- start_row + note_shift + 2L
+  header_row <- start_row + note_shift + 2L
 
   # Two label columns; banner spanners start at column 3
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Item",
-    start_row = header_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = "Item",
+    start_row = header_row,
+    start_col = 1L
   )
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Response",
-    start_row = header_row, start_col = 2L
+    wb,
+    sheet = sheet,
+    x = "Response",
+    start_row = header_row,
+    start_col = 2L
   )
 
   current_col <- 3L
   for (cg in col_groups) {
     span_start <- current_col
-    span_end   <- span_start + length(cg$levels) - 1L
+    span_end <- span_start + length(cg$levels) - 1L
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = cg$spanner,
-      start_row = spanner_row, start_col = span_start
+      wb,
+      sheet = sheet,
+      x = cg$spanner,
+      start_row = spanner_row,
+      start_col = span_start
     )
     if (span_end > span_start) {
       wb <- openxlsx2::wb_merge_cells(
-        wb, sheet = sheet,
-        dims = openxlsx2::wb_dims(rows = spanner_row, cols = span_start:span_end)
+        wb,
+        sheet = sheet,
+        dims = openxlsx2::wb_dims(
+          rows = spanner_row,
+          cols = span_start:span_end
+        )
       )
     }
     for (k in seq_along(cg$levels)) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = cg$levels[[k]],
-        start_row = header_row, start_col = current_col
+        wb,
+        sheet = sheet,
+        x = cg$levels[[k]],
+        start_row = header_row,
+        start_col = current_col
       )
       current_col <- current_col + 1L
     }
@@ -667,31 +861,40 @@ export_crosstab <- function(
   n_col <- current_col
   if (show_n) {
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = "N",
-      start_row = header_row, start_col = n_col
+      wb,
+      sheet = sheet,
+      x = "N",
+      start_row = header_row,
+      start_col = n_col
     )
   }
 
   # Data rows: one row per battery sub-item × scale value
   current_row <- header_row + 1L
   for (var in bat_vars) {
-    var_frame  <- frame[frame$variable == var, ]
+    var_frame <- frame[frame$variable == var, ]
     item_label <- var_frame$var_label[[1L]]
 
     # Scale values from total rows for this sub-item
     total_sub <- var_frame[var_frame$subgroup_type == "total", ]
-    values    <- unique(total_sub$value)
+    values <- unique(total_sub$value)
 
     # Item label once, on its first value row
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = item_label,
-      start_row = current_row, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = item_label,
+      start_row = current_row,
+      start_col = 1L
     )
 
     for (val in values) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = val,
-        start_row = current_row, start_col = 2L
+        wb,
+        sheet = sheet,
+        x = val,
+        start_row = current_row,
+        start_col = 2L
       )
 
       current_col <- 3L
@@ -704,8 +907,11 @@ export_crosstab <- function(
             NA_real_
           }
           wb <- openxlsx2::wb_add_data(
-            wb, sheet = sheet, x = pct_val,
-            start_row = current_row, start_col = current_col
+            wb,
+            sheet = sheet,
+            x = pct_val,
+            start_row = current_row,
+            start_col = current_col
           )
           current_col <- current_col + 1L
         }
@@ -714,10 +920,13 @@ export_crosstab <- function(
       # Write total n for this row when show_n = TRUE
       if (show_n) {
         n_rows <- total_sub[total_sub$value == val, ]
-        n_val  <- if (nrow(n_rows) > 0L) n_rows$n[[1L]] else NA_integer_
+        n_val <- if (nrow(n_rows) > 0L) n_rows$n[[1L]] else NA_integer_
         wb <- openxlsx2::wb_add_data(
-          wb, sheet = sheet, x = n_val,
-          start_row = current_row, start_col = n_col
+          wb,
+          sheet = sheet,
+          x = n_val,
+          start_row = current_row,
+          start_col = n_col
         )
       }
 
@@ -727,7 +936,7 @@ export_crosstab <- function(
 
   next_row <- current_row
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
 

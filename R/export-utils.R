@@ -14,7 +14,7 @@
   # 1. Design type
   if (
     !(S7::S7_inherits(design, surveycore::survey_base) ||
-        S7::S7_inherits(design, surveycore::survey_collection))
+      S7::S7_inherits(design, surveycore::survey_collection))
   ) {
     # nocov start
     # Defensive: callers perform an inline design-type check before calling this
@@ -30,7 +30,9 @@
     # nocov end
   }
 
-  data_for_check <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
+  data_for_check <- if (
+    S7::S7_inherits(design, surveycore::survey_collection)
+  ) {
     design@surveys[[1L]]@data
   } else {
     design@data
@@ -130,25 +132,27 @@
 #' @keywords internal
 #' @noRd
 .compute_eff_n <- function(design, col = NULL, level = NULL) {
-  data   <- design@data
+  data <- design@data
   wt_col <- design@variables$weights
   if (is.null(wt_col) || length(wt_col) == 0L) {
-    wt_col <- design@variables$phase1$weights  # nocov
+    wt_col <- design@variables$phase1$weights # nocov
   }
   if (is.null(wt_col) || length(wt_col) == 0L || !wt_col %in% names(data)) {
-    return(NA_real_)  # nocov
+    return(NA_real_) # nocov
   }
 
   if (!is.null(col)) {
     data <- data[data[[col]] == level, , drop = FALSE]
   }
 
-  wi   <- data[[wt_col]]
-  n    <- nrow(data)
+  wi <- data[[wt_col]]
+  n <- nrow(data)
   # nocov start
   # Defensive: levels iterated via unique(col_vals[!is.na(col_vals)]), so n == 0
   # cannot occur via the public API.
-  if (n == 0L || sum(wi, na.rm = TRUE) == 0) return(NA_real_)
+  if (n == 0L || sum(wi, na.rm = TRUE) == 0) {
+    return(NA_real_)
+  }
   # nocov end
   deff <- (n * sum(wi^2, na.rm = TRUE)) / sum(wi, na.rm = TRUE)^2
   n / deff
@@ -158,8 +162,8 @@
 
 # Extract question_text and var_label from get_freqs meta.
 .extract_var_meta <- function(m, var) {
-  vm      <- m$x[[var]]
-  vlabel  <- vm$variable_label
+  vm <- m$x[[var]]
+  vlabel <- vm$variable_label
   preface <- vm$question_preface
 
   question_text <- if (!is.null(vlabel) && nchar(vlabel) > 0L) {
@@ -182,17 +186,17 @@
     surveycore::get_freqs(design, !!rlang::sym(var), ...),
     surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
-  lm     <- .extract_var_meta(surveycore::meta(result), var)
+  lm <- .extract_var_meta(surveycore::meta(result), var)
 
   # First column is the response value column (named after `var`)
   names(result)[1L] <- "value"
-  result$value      <- as.character(result$value)
+  result$value <- as.character(result$value)
 
-  result$variable      <- var
+  result$variable <- var
   result$question_text <- lm$question_text
-  result$var_label     <- lm$var_label
-  result$subgroup_type  <- "total"
-  result$subgroup_var   <- NA_character_
+  result$var_label <- lm$var_label
+  result$subgroup_type <- "total"
+  result$subgroup_var <- NA_character_
   result$subgroup_value <- NA_character_
   result$subgroup_label <- "Total"
 
@@ -204,7 +208,10 @@
 .compute_subgroup_freq <- function(design, var, banner_var, ...) {
   result <- withCallingHandlers(
     surveycore::get_freqs(
-      design, !!rlang::sym(var), group = !!rlang::sym(banner_var), ...
+      design,
+      !!rlang::sym(var),
+      group = !!rlang::sym(banner_var),
+      ...
     ),
     surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
@@ -214,13 +221,13 @@
   names(result)[1L] <- "subgroup_value"
   names(result)[2L] <- "value"
   result$subgroup_value <- as.character(result$subgroup_value)
-  result$value          <- as.character(result$value)
+  result$value <- as.character(result$value)
 
-  result$variable      <- var
+  result$variable <- var
   result$question_text <- lm$question_text
-  result$var_label     <- lm$var_label
-  result$subgroup_type  <- "banner"
-  result$subgroup_var   <- banner_var
+  result$var_label <- lm$var_label
+  result$subgroup_type <- "banner"
+  result$subgroup_var <- banner_var
   result$subgroup_label <- banner_var
 
   result
@@ -237,7 +244,10 @@
 
   result <- withCallingHandlers(
     surveycore::get_freqs(
-      design, !!rlang::sym(var), group = !!rlang::sym(interact_col), ...
+      design,
+      !!rlang::sym(var),
+      group = !!rlang::sym(interact_col),
+      ...
     ),
     surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
   )
@@ -246,14 +256,14 @@
   names(result)[1L] <- "subgroup_value"
   names(result)[2L] <- "value"
   result$subgroup_value <- as.character(result$subgroup_value)
-  result$value          <- as.character(result$value)
+  result$value <- as.character(result$value)
 
   interact_label <- paste(banner_vars, collapse = " \u00d7 ")
-  result$variable      <- var
+  result$variable <- var
   result$question_text <- lm$question_text
-  result$var_label     <- lm$var_label
-  result$subgroup_type  <- "interaction"
-  result$subgroup_var   <- interact_label
+  result$var_label <- lm$var_label
+  result$subgroup_type <- "interaction"
+  result$subgroup_var <- interact_label
   result$subgroup_label <- interact_label
 
   result
@@ -268,11 +278,11 @@
   vars_resolved,
   classify_out,
   banner_resolved = NULL,
-  interactions    = NULL,
-  variance        = NULL,
-  conf_level      = 0.95,
-  show_eff_n      = FALSE,
-  pub_type        = "none"
+  interactions = NULL,
+  variance = NULL,
+  conf_level = 0.95,
+  show_eff_n = FALSE,
+  pub_type = "none"
 ) {
   freq_args <- list(variance = variance, conf_level = conf_level)
 
@@ -284,7 +294,9 @@
     total_rows <- lapply(vars_resolved, function(var) {
       wave_freq_list <- lapply(wave_names, function(wn) {
         wd <- design@surveys[[wn]]
-        if (!var %in% names(wd@data)) return(NULL)
+        if (!var %in% names(wd@data)) {
+          return(NULL)
+        }
         do.call(.compute_total_freq, c(list(design = wd, var = var), freq_args))
       })
       wave_freq_list <- wave_freq_list[
@@ -296,14 +308,14 @@
         # Defensive: the validator checks vars against design@surveys[[1L]]@data,
         # so at least one wave always has the variable.
         return(tibble::tibble(
-          value         = NA_character_,
-          pct           = NA_real_,
-          n             = NA_integer_,
-          variable      = var,
+          value = NA_character_,
+          pct = NA_real_,
+          n = NA_integer_,
+          variable = var,
           question_text = var,
-          var_label     = var,
-          subgroup_type  = "total",
-          subgroup_var   = NA_character_,
+          var_label = var,
+          subgroup_type = "total",
+          subgroup_var = NA_character_,
           subgroup_value = NA_character_,
           subgroup_label = "Total"
         ))
@@ -311,20 +323,20 @@
       }
 
       combined <- dplyr::bind_rows(wave_freq_list)
-      first    <- wave_freq_list[[1L]]
+      first <- wave_freq_list[[1L]]
 
       pooled <- combined |>
         dplyr::group_by(value) |>
         dplyr::summarise(
           pct = sum(pct * n, na.rm = TRUE) / sum(n, na.rm = TRUE),
-          n   = sum(n, na.rm = TRUE),
+          n = sum(n, na.rm = TRUE),
           .groups = "drop"
         )
-      pooled$variable      <- var
+      pooled$variable <- var
       pooled$question_text <- first$question_text[[1L]]
-      pooled$var_label     <- first$var_label[[1L]]
-      pooled$subgroup_type  <- "total"
-      pooled$subgroup_var   <- NA_character_
+      pooled$var_label <- first$var_label[[1L]]
+      pooled$subgroup_type <- "total"
+      pooled$subgroup_var <- NA_character_
       pooled$subgroup_value <- NA_character_
       pooled$subgroup_label <- "Total"
       pooled
@@ -336,25 +348,30 @@
       lapply(vars_resolved, function(var) {
         if (!var %in% names(wd@data)) {
           return(tibble::tibble(
-            value         = NA_character_,
-            pct           = NA_real_,
-            n             = NA_integer_,
-            variable      = var,
+            value = NA_character_,
+            pct = NA_real_,
+            n = NA_integer_,
+            variable = var,
             question_text = var,
-            var_label     = var,
-            subgroup_type  = "wave",
-            subgroup_var   = wn,
+            var_label = var,
+            subgroup_type = "wave",
+            subgroup_var = wn,
             subgroup_value = NA_character_,
             subgroup_label = paste0(wn, " (n/a)")
           ))
         }
-        r <- do.call(.compute_total_freq, c(list(design = wd, var = var), freq_args))
-        r$subgroup_type  <- "wave"
-        r$subgroup_var   <- wn
+        r <- do.call(
+          .compute_total_freq,
+          c(list(design = wd, var = var), freq_args)
+        )
+        r$subgroup_type <- "wave"
+        r$subgroup_var <- wn
         r$subgroup_label <- wn
         r
-      }) |> dplyr::bind_rows()
-    }) |> dplyr::bind_rows()
+      }) |>
+        dplyr::bind_rows()
+    }) |>
+      dplyr::bind_rows()
 
     all_rows <- dplyr::bind_rows(
       dplyr::bind_rows(total_rows),
@@ -364,9 +381,13 @@
     if (show_eff_n) {
       all_rows$eff_n <- mapply(
         function(stype, svar) {
-          if (stype == "total") return(NA_real_)
+          if (stype == "total") {
+            return(NA_real_)
+          }
           wd <- design@surveys[[svar]]
-          if (is.null(wd)) return(NA_real_)  # nocov
+          if (is.null(wd)) {
+            return(NA_real_)
+          } # nocov
           .compute_eff_n(wd)
         },
         all_rows$subgroup_type,
@@ -380,7 +401,7 @@
       classify_out[, c("variable", "type", "group", "question_preface")],
       by = "variable"
     )
-    names(all_rows)[names(all_rows) == "type"]  <- "var_type"
+    names(all_rows)[names(all_rows) == "type"] <- "var_type"
     names(all_rows)[names(all_rows) == "group"] <- "group_id"
 
     .emit_missing_label_warning(all_rows)
@@ -394,7 +415,7 @@
   if (pub_type != "none" && !is.null(banner_resolved)) {
     for (banner_var in banner_resolved) {
       col_vals <- design@data[[banner_var]]
-      levels   <- unique(col_vals[!is.na(col_vals)])
+      levels <- unique(col_vals[!is.na(col_vals)])
       for (level in levels) {
         level_chr <- as.character(level)
         eff_n_val <- .compute_eff_n(design, col = banner_var, level = level_chr)
@@ -408,14 +429,17 @@
         }
 
         if (suppress) {
-          suppressed <- dplyr::bind_rows(suppressed, tibble::tibble(
-            subgroup_var   = banner_var,
-            subgroup_value = level_chr,
-            eff_n          = eff_n_val,
-            raw_n          = raw_n_val,
-            threshold      = threshold,
-            pub_type       = pub_type
-          ))
+          suppressed <- dplyr::bind_rows(
+            suppressed,
+            tibble::tibble(
+              subgroup_var = banner_var,
+              subgroup_value = level_chr,
+              eff_n = eff_n_val,
+              raw_n = raw_n_val,
+              threshold = threshold,
+              pub_type = pub_type
+            )
+          )
         }
       }
     }
@@ -424,7 +448,8 @@
       dropped <- paste(
         suppressed$subgroup_var,
         suppressed$subgroup_value,
-        sep = "=", collapse = ", "
+        sep = "=",
+        collapse = ", "
       )
       cli::cli_warn(
         c(
@@ -439,17 +464,27 @@
   # Frame building
   all_rows <- lapply(vars_resolved, function(var) {
     rows <- list(
-      do.call(.compute_total_freq, c(list(design = design, var = var), freq_args))
+      do.call(
+        .compute_total_freq,
+        c(list(design = design, var = var), freq_args)
+      )
     )
 
     if (!is.null(banner_resolved)) {
       for (banner_var in banner_resolved) {
-        if (var == banner_var) next  # self-banner drop
+        if (var == banner_var) {
+          next
+        } # self-banner drop
 
-        sup_vals <- suppressed$subgroup_value[suppressed$subgroup_var == banner_var]
+        sup_vals <- suppressed$subgroup_value[
+          suppressed$subgroup_var == banner_var
+        ]
         r <- do.call(
           .compute_subgroup_freq,
-          c(list(design = design, var = var, banner_var = banner_var), freq_args)
+          c(
+            list(design = design, var = var, banner_var = banner_var),
+            freq_args
+          )
         )
         if (length(sup_vals) > 0L) {
           r <- r[!r$subgroup_value %in% sup_vals, , drop = FALSE]
@@ -462,13 +497,17 @@
       for (banner_vars in interactions) {
         rows[[length(rows) + 1L]] <- do.call(
           .compute_interaction_freq,
-          c(list(design = design, var = var, banner_vars = banner_vars), freq_args)
+          c(
+            list(design = design, var = var, banner_vars = banner_vars),
+            freq_args
+          )
         )
       }
     }
 
     dplyr::bind_rows(rows)
-  }) |> dplyr::bind_rows()
+  }) |>
+    dplyr::bind_rows()
 
   if (show_eff_n) {
     all_rows$eff_n <- mapply(
@@ -493,7 +532,7 @@
     classify_out[, c("variable", "type", "group", "question_preface")],
     by = "variable"
   )
-  names(all_rows)[names(all_rows) == "type"]  <- "var_type"
+  names(all_rows)[names(all_rows) == "type"] <- "var_type"
   names(all_rows)[names(all_rows) == "group"] <- "group_id"
 
   .emit_missing_label_warning(all_rows)
@@ -503,12 +542,12 @@
 # Empty suppressed tibble with correct schema
 .empty_suppressed <- function() {
   tibble::tibble(
-    subgroup_var   = character(0L),
+    subgroup_var = character(0L),
     subgroup_value = character(0L),
-    eff_n          = numeric(0L),
-    raw_n          = integer(0L),
-    threshold      = integer(0L),
-    pub_type       = character(0L)
+    eff_n = numeric(0L),
+    raw_n = integer(0L),
+    threshold = integer(0L),
+    pub_type = character(0L)
   )
 }
 
@@ -526,7 +565,9 @@
 # Emit missing-variable-label warning for vars that fell back to the var name
 .emit_missing_label_warning <- function(frame) {
   vars_fallback <- unique(
-    frame$variable[!is.na(frame$variable) & frame$question_text == frame$variable]
+    frame$variable[
+      !is.na(frame$variable) & frame$question_text == frame$variable
+    ]
   )
   if (length(vars_fallback) > 0L) {
     cli::cli_warn(
@@ -555,18 +596,26 @@
 .write_suppression_footnote <- function(wb, sheet, suppressed, start_row) {
   # nocov start
   # Defensive: all callers guard with nrow(suppressed) > 0L before calling.
-  if (nrow(suppressed) == 0L) return(invisible(wb))
+  if (nrow(suppressed) == 0L) {
+    return(invisible(wb))
+  }
   # nocov end
 
   for (i in seq_len(nrow(suppressed))) {
-    row  <- suppressed[i, ]
+    row <- suppressed[i, ]
     text <- sprintf(
       "* %s: %s suppressed (n=%d, threshold=%d)",
-      row$subgroup_var, row$subgroup_value, row$raw_n, row$threshold
+      row$subgroup_var,
+      row$subgroup_value,
+      row$raw_n,
+      row$threshold
     )
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = text,
-      start_row = start_row + i - 1L, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = text,
+      start_row = start_row + i - 1L,
+      start_col = 1L
     )
   }
 
@@ -621,17 +670,22 @@
 #' @noRd
 .write_base_note <- function(wb, sheet, text, row, n_cols) {
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = text,
-    start_row = row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = text,
+    start_row = row,
+    start_col = 1L
   )
   if (n_cols > 1L) {
     wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
+      wb,
+      sheet = sheet,
       dims = openxlsx2::wb_dims(rows = row, cols = 1L:n_cols)
     )
   }
   openxlsx2::wb_add_font(
-    wb, sheet = sheet,
+    wb,
+    sheet = sheet,
     dims = openxlsx2::wb_dims(rows = row, cols = 1L),
     italic = TRUE
   )
@@ -646,9 +700,9 @@
 #' @noRd
 .total_col_group <- function() {
   list(
-    spanner      = "Total",
-    levels       = "Total",
-    type         = "total_col",
+    spanner = "Total",
+    levels = "Total",
+    type = "total_col",
     subgroup_var = NA_character_
   )
 }
@@ -702,7 +756,11 @@
 #' @noRd
 .sata_n_cell <- function(frame, var) {
   total_one <- .cell_rows(
-    frame, .total_col_group(), "Total", val = "1", var = var
+    frame,
+    .total_col_group(),
+    "Total",
+    val = "1",
+    var = var
   )
   if (nrow(total_one) > 0L && !is.na(total_one$n[[1L]])) {
     return(total_one$n[[1L]])

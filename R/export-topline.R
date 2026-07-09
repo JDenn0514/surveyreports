@@ -56,9 +56,9 @@ export_topline <- function(
   vars,
   file_name,
   conf_level = 0.95,
-  decimals   = 1L,
-  variance   = NULL,
-  show_n     = TRUE,
+  decimals = 1L,
+  variance = NULL,
+  show_n = TRUE,
   show_eff_n = FALSE,
   base_notes = NULL
 ) {
@@ -67,7 +67,7 @@ export_topline <- function(
   # Inline design-type check BEFORE NSE resolution
   if (
     !(S7::S7_inherits(design, surveycore::survey_base) ||
-        S7::S7_inherits(design, surveycore::survey_collection))
+      S7::S7_inherits(design, surveycore::survey_collection))
   ) {
     cli::cli_abort(
       c(
@@ -80,30 +80,46 @@ export_topline <- function(
   }
 
   # NSE resolution
-  data_for_select <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
+  data_for_select <- if (
+    S7::S7_inherits(design, surveycore::survey_collection)
+  ) {
     design@surveys[[1L]]@data
   } else {
     design@data
   }
-  vars_resolved <- names(tidyselect::eval_select(rlang::enquo(vars), data_for_select))
+  vars_resolved <- names(tidyselect::eval_select(
+    rlang::enquo(vars),
+    data_for_select
+  ))
 
-  .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
+  .validate_export_inputs(
+    design,
+    vars_resolved,
+    file_name,
+    conf_level,
+    decimals
+  )
   .validate_base_notes(base_notes)
 
   # Classify variables (collection: use first wave's design)
-  design_for_classify <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
+  design_for_classify <- if (
+    S7::S7_inherits(design, surveycore::survey_collection)
+  ) {
     design@surveys[[1L]]
   } else {
     design
   }
-  classify_out <- surveycore::classify_question_type(design_for_classify, vars_resolved)
+  classify_out <- surveycore::classify_question_type(
+    design_for_classify,
+    vars_resolved
+  )
 
   # Build frequency frame
   freq_result <- .build_freq_frame(
     design,
     vars_resolved,
     classify_out,
-    variance   = variance,
+    variance = variance,
     conf_level = conf_level,
     show_eff_n = show_eff_n
   )
@@ -118,41 +134,65 @@ export_topline <- function(
 
   for (var in vars_resolved) {
     row_info <- classify_out[classify_out$variable == var, ]
-    vtype    <- row_info$type
+    vtype <- row_info$type
     group_id <- row_info$group
 
     # Skip if this group was already rendered (sata/battery only)
-    if (vtype != "single" && as.character(group_id) %in% groups_done) next
+    if (vtype != "single" && as.character(group_id) %in% groups_done) {
+      next
+    }
 
     if (vtype == "single") {
       var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
-      result    <- .render_topline_single(
-        wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed,
+      result <- .render_topline_single(
+        wb,
+        "Topline",
+        var_frame,
+        current_row,
+        show_n,
+        show_eff_n,
+        decimals,
+        freq_result$suppressed,
         base_notes
       )
     } else if (vtype == "sata") {
       group_vars <- classify_out$variable[classify_out$group == group_id]
-      var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
-      result     <- .render_topline_sata(
-        wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed,
+      var_frame <- freq_result$frame[
+        freq_result$frame$variable %in% group_vars,
+      ]
+      result <- .render_topline_sata(
+        wb,
+        "Topline",
+        var_frame,
+        current_row,
+        show_n,
+        show_eff_n,
+        decimals,
+        freq_result$suppressed,
         base_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     } else {
       # battery
       group_vars <- classify_out$variable[classify_out$group == group_id]
-      var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
-      result     <- .render_topline_battery(
-        wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed,
+      var_frame <- freq_result$frame[
+        freq_result$frame$variable %in% group_vars,
+      ]
+      result <- .render_topline_battery(
+        wb,
+        "Topline",
+        var_frame,
+        current_row,
+        show_n,
+        show_eff_n,
+        decimals,
+        freq_result$suppressed,
         base_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     }
 
-    wb          <- result$wb
+    wb <- result$wb
     current_row <- result$next_row + 1L
   }
 
@@ -165,10 +205,19 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_single <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  }
 
   question_text <- frame$question_text[[1L]]
 
@@ -176,13 +225,13 @@ export_topline <- function(
   has_waves <- any(frame$subgroup_type == "wave")
 
   # Ordered subgroup labels
-  all_labels    <- unique(frame$subgroup_label)
-  non_total     <- all_labels[all_labels != "Total"]
-  sub_labels    <- c("Total", non_total)
+  all_labels <- unique(frame$subgroup_label)
+  non_total <- all_labels[all_labels != "Total"]
+  sub_labels <- c("Total", non_total)
 
   # Response values (from total rows, in order)
   total_rows <- frame[frame$subgroup_type == "total", ]
-  values     <- unique(total_rows$value)
+  values <- unique(total_rows$value)
 
   # Column count
   if (has_waves) {
@@ -193,23 +242,28 @@ export_topline <- function(
 
   # Row 1: question text (merged, bold)
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = question_text,
+    start_row = start_row,
+    start_col = 1L
   )
   if (n_cols > 1L) {
     wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
+      wb,
+      sheet = sheet,
       dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
     )
   }
   wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
+    wb,
+    sheet = sheet,
     dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
     bold = TRUE
   )
 
   # Optional italic base-note row directly under the title
-  base_note  <- .base_note_for(frame, base_notes)
+  base_note <- .base_note_for(frame, base_notes)
   note_shift <- if (is.null(base_note)) 0L else 1L
   if (note_shift == 1L) {
     wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
@@ -218,48 +272,81 @@ export_topline <- function(
   # Column headers
   header_row <- start_row + note_shift + 1L
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Response",
-    start_row = header_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = "Response",
+    start_row = header_row,
+    start_col = 1L
   )
 
   if (has_waves) {
     for (i in seq_along(sub_labels)) {
-      label    <- sub_labels[[i]]
+      label <- sub_labels[[i]]
       data_col <- 1L + i
 
       if (label == "Total") {
         header_txt <- if (show_eff_n && "eff_n" %in% names(frame)) {
           eff_val <- frame$eff_n[frame$subgroup_type == "total"][[1L]]
           if (!is.na(eff_val)) {
-            paste0("Total\n(Eff N=", formatC(round(eff_val), format = "d", big.mark = ","), ")")
-          } else "Total"
-        } else "Total"
+            paste0(
+              "Total\n(Eff N=",
+              formatC(round(eff_val), format = "d", big.mark = ","),
+              ")"
+            )
+          } else {
+            "Total"
+          }
+        } else {
+          "Total"
+        }
       } else {
         wave_n <- sum(frame$n[frame$subgroup_label == label], na.rm = TRUE)
-        header_txt <- paste0(label, "\n(n=", formatC(wave_n, format = "d", big.mark = ","), ")")
+        header_txt <- paste0(
+          label,
+          "\n(n=",
+          formatC(wave_n, format = "d", big.mark = ","),
+          ")"
+        )
       }
 
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = header_txt,
-        start_row = header_row, start_col = data_col
+        wb,
+        sheet = sheet,
+        x = header_txt,
+        start_row = header_row,
+        start_col = data_col
       )
     }
   } else {
     pct_header <- if (show_eff_n && "eff_n" %in% names(frame)) {
       eff_val <- frame$eff_n[frame$subgroup_type == "total"][[1L]]
       if (!is.na(eff_val)) {
-        paste0("%\n(Eff N=", formatC(round(eff_val), format = "d", big.mark = ","), ")")
-      } else "%" # nocov
-    } else "%"
+        paste0(
+          "%\n(Eff N=",
+          formatC(round(eff_val), format = "d", big.mark = ","),
+          ")"
+        )
+      } else {
+        "%"
+      } # nocov
+    } else {
+      "%"
+    }
 
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = pct_header,
-      start_row = header_row, start_col = 2L
+      wb,
+      sheet = sheet,
+      x = pct_header,
+      start_row = header_row,
+      start_col = 2L
     )
     if (show_n) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = "N",
-        start_row = header_row, start_col = 3L
+        wb,
+        sheet = sheet,
+        x = "N",
+        start_row = header_row,
+        start_col = 3L
       )
     }
   }
@@ -268,17 +355,20 @@ export_topline <- function(
   data_start <- header_row + 1L
 
   for (j in seq_along(values)) {
-    val     <- values[[j]]
+    val <- values[[j]]
     row_num <- data_start + j - 1L
 
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = val,
-      start_row = row_num, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = val,
+      start_row = row_num,
+      start_col = 1L
     )
 
     if (has_waves) {
       for (i in seq_along(sub_labels)) {
-        label    <- sub_labels[[i]]
+        label <- sub_labels[[i]]
         data_col <- 1L + i
         if (label == "Total") {
           pct_row <- total_rows[total_rows$value == val, ]
@@ -287,26 +377,39 @@ export_topline <- function(
         }
         pct_val <- if (nrow(pct_row) > 0L) {
           round(pct_row$pct[[1L]] * 100, decimals)
-        } else NA_real_
+        } else {
+          NA_real_
+        }
         wb <- openxlsx2::wb_add_data(
-          wb, sheet = sheet, x = pct_val,
-          start_row = row_num, start_col = data_col
+          wb,
+          sheet = sheet,
+          x = pct_val,
+          start_row = row_num,
+          start_col = data_col
         )
       }
     } else {
       pct_row <- total_rows[total_rows$value == val, ]
       pct_val <- if (nrow(pct_row) > 0L) {
         round(pct_row$pct[[1L]] * 100, decimals)
-      } else NA_real_
+      } else {
+        NA_real_
+      }
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = pct_val,
-        start_row = row_num, start_col = 2L
+        wb,
+        sheet = sheet,
+        x = pct_val,
+        start_row = row_num,
+        start_col = 2L
       )
       if (show_n) {
         n_val <- if (nrow(pct_row) > 0L) pct_row$n[[1L]] else NA_integer_
         wb <- openxlsx2::wb_add_data(
-          wb, sheet = sheet, x = n_val,
-          start_row = row_num, start_col = 3L
+          wb,
+          sheet = sheet,
+          x = n_val,
+          start_row = row_num,
+          start_col = 3L
         )
       }
     }
@@ -315,26 +418,38 @@ export_topline <- function(
   # Total row
   total_row_num <- data_start + length(values)
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Total",
-    start_row = total_row_num, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = "Total",
+    start_row = total_row_num,
+    start_col = 1L
   )
   if (has_waves) {
     for (i in seq_along(sub_labels)) {
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = "100%",
-        start_row = total_row_num, start_col = 1L + i
+        wb,
+        sheet = sheet,
+        x = "100%",
+        start_row = total_row_num,
+        start_col = 1L + i
       )
     }
   } else {
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = "100%",
-      start_row = total_row_num, start_col = 2L
+      wb,
+      sheet = sheet,
+      x = "100%",
+      start_row = total_row_num,
+      start_col = 2L
     )
     if (show_n) {
       total_n <- sum(total_rows$n[!duplicated(total_rows$value)], na.rm = TRUE)
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = total_n,
-        start_row = total_row_num, start_col = 3L
+        wb,
+        sheet = sheet,
+        x = total_n,
+        start_row = total_row_num,
+        start_col = 3L
       )
     }
   }
@@ -343,7 +458,7 @@ export_topline <- function(
   next_row <- total_row_num + 1L
   # nocov start
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
   # nocov end
@@ -354,35 +469,49 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_sata <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  }
 
   question_text <- .group_header_text(frame)
-  sata_vars     <- unique(frame$variable)
+  sata_vars <- unique(frame$variable)
 
   n_cols <- 1L + 1L + as.integer(show_n)
 
   # Row 1: question preface (merged, bold)
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = question_text,
+    start_row = start_row,
+    start_col = 1L
   )
   if (n_cols > 1L) {
     wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
+      wb,
+      sheet = sheet,
       dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
     )
   }
   wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
+    wb,
+    sheet = sheet,
     dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
     bold = TRUE
   )
 
   # Optional italic base-note row directly under the title
-  base_note  <- .base_note_for(frame, base_notes)
+  base_note <- .base_note_for(frame, base_notes)
   note_shift <- if (is.null(base_note)) 0L else 1L
   if (note_shift == 1L) {
     wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
@@ -391,17 +520,26 @@ export_topline <- function(
   # Column headers
   header_row <- start_row + note_shift + 1L
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "Item",
-    start_row = header_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = "Item",
+    start_row = header_row,
+    start_col = 1L
   )
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = "%",
-    start_row = header_row, start_col = 2L
+    wb,
+    sheet = sheet,
+    x = "%",
+    start_row = header_row,
+    start_col = 2L
   )
   if (show_n) {
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = "N",
-      start_row = header_row, start_col = 3L
+      wb,
+      sheet = sheet,
+      x = "N",
+      start_row = header_row,
+      start_col = 3L
     )
   }
 
@@ -409,27 +547,40 @@ export_topline <- function(
   # true-zero handling (see .sata_pct_cell())
   data_start <- header_row + 1L
   for (j in seq_along(sata_vars)) {
-    var     <- sata_vars[[j]]
+    var <- sata_vars[[j]]
     row_num <- data_start + j - 1L
 
     item_label <- frame$var_label[frame$variable == var][[1L]]
     pct_val <- .sata_pct_cell(
-      frame, var, .total_col_group(), "Total", decimals
+      frame,
+      var,
+      .total_col_group(),
+      "Total",
+      decimals
     )
 
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = item_label,
-      start_row = row_num, start_col = 1L
+      wb,
+      sheet = sheet,
+      x = item_label,
+      start_row = row_num,
+      start_col = 1L
     )
     wb <- openxlsx2::wb_add_data(
-      wb, sheet = sheet, x = pct_val,
-      start_row = row_num, start_col = 2L
+      wb,
+      sheet = sheet,
+      x = pct_val,
+      start_row = row_num,
+      start_col = 2L
     )
     if (show_n) {
       n_val <- .sata_n_cell(frame, var)
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = n_val,
-        start_row = row_num, start_col = 3L
+        wb,
+        sheet = sheet,
+        x = n_val,
+        start_row = row_num,
+        start_col = 3L
       )
     }
   }
@@ -437,7 +588,7 @@ export_topline <- function(
   next_row <- data_start + length(sata_vars)
   # nocov start
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
   # nocov end
@@ -448,28 +599,42 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_battery <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  wb,
+  sheet,
+  frame,
+  start_row,
+  show_n,
+  show_eff_n,
+  decimals,
+  suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
+  if (nrow(frame) == 0L) {
+    return(list(wb = wb, next_row = start_row))
+  }
 
   question_text <- .group_header_text(frame)
-  bat_vars      <- unique(frame$variable)
+  bat_vars <- unique(frame$variable)
 
   # Row 1: battery preface (merged, bold)
   n_cols <- 1L + 1L + as.integer(show_n)
   wb <- openxlsx2::wb_add_data(
-    wb, sheet = sheet, x = question_text,
-    start_row = start_row, start_col = 1L
+    wb,
+    sheet = sheet,
+    x = question_text,
+    start_row = start_row,
+    start_col = 1L
   )
   if (n_cols > 1L) {
     wb <- openxlsx2::wb_merge_cells(
-      wb, sheet = sheet,
+      wb,
+      sheet = sheet,
       dims = openxlsx2::wb_dims(rows = start_row, cols = 1L:n_cols)
     )
   }
   wb <- openxlsx2::wb_add_font(
-    wb, sheet = sheet,
+    wb,
+    sheet = sheet,
     dims = openxlsx2::wb_dims(rows = start_row, cols = 1L),
     bold = TRUE
   )
@@ -480,25 +645,30 @@ export_topline <- function(
     var_frame <- frame[frame$variable == var, ]
 
     # Use var_label as the question_text for each sub-item
-    var_label_val              <- var_frame$var_label[[1L]]
-    var_frame$question_text    <- var_label_val
+    var_label_val <- var_frame$var_label[[1L]]
+    var_frame$question_text <- var_label_val
 
     # base_notes passes through: each sub-item is keyed by its own
     # variable name
     result <- .render_topline_single(
-      wb, sheet, var_frame, current_row,
-      show_n, show_eff_n, decimals,
-      suppressed[integer(0), ],  # no per-item footnote
+      wb,
+      sheet,
+      var_frame,
+      current_row,
+      show_n,
+      show_eff_n,
+      decimals,
+      suppressed[integer(0), ], # no per-item footnote
       base_notes
     )
-    wb          <- result$wb
+    wb <- result$wb
     current_row <- result$next_row + 1L
   }
 
   next_row <- current_row
   # nocov start
   if (nrow(suppressed) > 0L) {
-    wb       <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
+    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
     next_row <- next_row + nrow(suppressed)
   }
   # nocov end
