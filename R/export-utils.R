@@ -572,3 +572,142 @@
 
   invisible(wb)
 }
+
+# -- Base-note support (export_topline() / export_crosstab()) -------------------
+
+#' @keywords internal
+#' @noRd
+.validate_base_notes <- function(base_notes) {
+  if (is.null(base_notes)) {
+    return(invisible(TRUE))
+  }
+  nms <- names(base_notes)
+  valid <- is.character(base_notes) &&
+    !is.null(nms) &&
+    all(!is.na(nms)) &&
+    all(nzchar(nms))
+  if (!valid) {
+    cli::cli_abort(
+      c(
+        "x" = "{.arg base_notes} must be a fully named character vector or {.val NULL}.",
+        "i" = "Got {.cls {class(base_notes)}} of length {length(base_notes)}.",
+        "v" = "Name every element after the variable whose table it annotates."
+      ),
+      class = "surveyreports_error_base_notes_invalid"
+    )
+  }
+  invisible(TRUE)
+}
+
+# Base-note text for a rendered table, keyed by the frame's first variable
+# (the sole variable of a single-choice table; the first member of a
+# sata/battery group). NULL when no note is configured for it.
+#' @keywords internal
+#' @noRd
+.base_note_for <- function(frame, base_notes) {
+  if (is.null(base_notes)) {
+    return(NULL)
+  }
+  var <- frame$variable[[1L]]
+  if (!var %in% names(base_notes)) {
+    return(NULL)
+  }
+  base_notes[[var]]
+}
+
+# Italic base-note row directly under a table title, merged across the
+# table's columns.
+#' @keywords internal
+#' @noRd
+.write_base_note <- function(wb, sheet, text, row, n_cols) {
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = text,
+    start_row = row, start_col = 1L
+  )
+  if (n_cols > 1L) {
+    wb <- openxlsx2::wb_merge_cells(
+      wb, sheet = sheet,
+      dims = openxlsx2::wb_dims(rows = row, cols = 1L:n_cols)
+    )
+  }
+  openxlsx2::wb_add_font(
+    wb, sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = row, cols = 1L),
+    italic = TRUE
+  )
+}
+
+# -- Total column + true-zero SATA cells -----------------------------------------
+
+# Synthetic column group for the crosstab Total column: rendered from the
+# frequency frame's already-computed subgroup_type == "total" rows instead
+# of a real banner/interaction subgroup.
+#' @keywords internal
+#' @noRd
+.total_col_group <- function() {
+  list(
+    spanner      = "Total",
+    levels       = "Total",
+    type         = "total_col",
+    subgroup_var = NA_character_
+  )
+}
+
+# Frequency-frame rows for one rendered cell: a column group + level,
+# optionally narrowed to one variable (sata/battery tables) and/or one
+# response value. The synthetic Total group maps to the frame's
+# subgroup_type == "total" rows.
+#' @keywords internal
+#' @noRd
+.cell_rows <- function(frame, cg, level, val = NULL, var = NULL) {
+  keep <- if (identical(cg$type, "total_col")) {
+    frame$subgroup_type == "total"
+  } else {
+    frame$subgroup_type == cg$type &
+      frame$subgroup_var == cg$subgroup_var &
+      frame$subgroup_value == level
+  }
+  if (!is.null(var)) {
+    keep <- keep & frame$variable == var
+  }
+  if (!is.null(val)) {
+    keep <- keep & frame$value == val
+  }
+  frame[keep, ]
+}
+
+# SATA "true zero" percentage cell: an item whose value == "1" row is
+# missing but whose base exists (a row for this var + column with a
+# genuinely positive n) prints 0 instead of blank -- blank stays reserved
+# for "not asked". get_freqs() emits a placeholder row (n = 0, pct = NA)
+# for a subgroup with zero non-NA observations even when the item was
+# never asked there at all, so "a row exists" alone is not sufficient:
+# the row's own n must be > 0.
+#' @keywords internal
+#' @noRd
+.sata_pct_cell <- function(frame, var, cg, level, decimals) {
+  one_rows <- .cell_rows(frame, cg, level, val = "1", var = var)
+  if (nrow(one_rows) > 0L && !is.na(one_rows$pct[[1L]])) {
+    return(round(one_rows$pct[[1L]] * 100, decimals))
+  }
+  any_rows <- .cell_rows(frame, cg, level, var = var)
+  has_base <- nrow(any_rows) > 0L && any(any_rows$n > 0L, na.rm = TRUE)
+  if (has_base) 0 else NA_real_
+}
+
+# SATA N cell: the overall total N for the item (never per-banner),
+# matching the single "N" column layout; same true-zero rule as
+# .sata_pct_cell().
+#' @keywords internal
+#' @noRd
+.sata_n_cell <- function(frame, var) {
+  total_one <- .cell_rows(
+    frame, .total_col_group(), "Total", val = "1", var = var
+  )
+  if (nrow(total_one) > 0L && !is.na(total_one$n[[1L]])) {
+    return(total_one$n[[1L]])
+  }
+  total_any <- .cell_rows(frame, .total_col_group(), "Total", var = var)
+  has_base <- nrow(total_any) > 0L && any(total_any$n > 0L, na.rm = TRUE)
+  if (has_base) 0L else NA_integer_
+}

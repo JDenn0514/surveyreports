@@ -943,3 +943,335 @@ test_that(".build_freq_frame() se matches surveycore::get_freqs() se for banner 
     }
   }
 })
+
+# 15. show_total ------------------------------------------------------------------
+
+test_that("export_crosstab() renders a Total column before the banner columns by default", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+  df <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  # Layout: row 1 title, row 2 spanner, row 3 header
+  header <- as.character(unlist(df[3L, ]))
+  expect_identical(header[[1L]], "Response")
+  expect_identical(header[[2L]], "Total", label = "Total header before banner levels")
+  expect_identical(header[3L:5L], c("A", "B", "C"))
+  # Spanner row carries the synthetic Total group label too
+  expect_identical(as.character(df[2L, 2L]), "Total")
+})
+
+test_that("export_crosstab() Total column values match the full-sample distribution", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+  df  <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  ref <- suppressWarnings(surveycore::get_freqs(d, q1))
+
+  for (i in seq_len(nrow(ref))) {
+    val     <- as.character(ref[[1L]][[i]])
+    row_idx <- which(as.character(df[[1L]]) == val)
+    row_idx <- row_idx[row_idx > 3L][[1L]]
+    expect_equal(
+      as.numeric(df[row_idx, 2L]),
+      round(ref$pct[[i]] * 100, 1L),
+      tolerance = 1e-10,
+      label = paste0("Total column for value '", val, "'")
+    )
+  }
+})
+
+test_that("export_crosstab() show_total=FALSE restores the banner-only layout", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out, show_total = FALSE)
+
+  df     <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  header <- as.character(unlist(df[3L, ]))
+  expect_identical(header[[1L]], "Response")
+  expect_identical(header[[2L]], "A", label = "first banner level directly after label col")
+  expect_false("Total" %in% header, label = "no Total header when show_total=FALSE")
+})
+
+test_that("export_crosstab() show_total shifts the N column one position right", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out_with    <- withr::local_tempfile(fileext = ".xlsx")
+  out_without <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out_with)
+  export_crosstab(d, vars = q1, banner = group, file_name = out_without,
+                  show_total = FALSE)
+
+  hdr_with    <- as.character(unlist(
+    openxlsx2::wb_to_df(out_with, sheet = "q1", col_names = FALSE)[3L, ]
+  ))
+  hdr_without <- as.character(unlist(
+    openxlsx2::wb_to_df(out_without, sheet = "q1", col_names = FALSE)[3L, ]
+  ))
+
+  # 1 label + Total + 3 banner levels -> N at column 6; without Total -> 5
+  expect_identical(which(hdr_with == "N"), 6L)
+  expect_identical(which(hdr_without == "N"), 5L)
+})
+
+test_that("export_crosstab() SATA tables gain the Total column by default", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = c(sata_a, sata_b, sata_c), banner = group,
+                  file_name = out)
+
+  df     <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
+  header <- as.character(unlist(df[3L, ]))
+  expect_identical(header[1L:2L], c("Item", "Total"))
+
+  # Total value for sata_a equals its full-sample share of value 1
+  ref     <- suppressWarnings(surveycore::get_freqs(d, sata_a))
+  ref_pct <- ref$pct[as.character(ref[[1L]]) == "1"]
+  row_a   <- which(as.character(df[[1L]]) == "Option A")[[1L]]
+  expect_equal(as.numeric(df[row_a, 2L]), round(ref_pct * 100, 1L),
+               tolerance = 1e-10)
+})
+
+# 16. base_notes ------------------------------------------------------------------
+
+test_that("export_crosstab() writes an italic base row under the title and shifts the table", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(
+    d, vars = q1, banner = group, file_name = out,
+    base_notes = c(q1 = "Base: All respondents (n=200)")
+  )
+
+  df <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  expect_identical(as.character(df[2L, 1L]), "Base: All respondents (n=200)")
+  # Table shifted down one row: header now at row 4
+  expect_identical(as.character(df[4L, 1L]), "Response")
+})
+
+test_that("export_crosstab() writes no base row when base_notes is NULL", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+  df <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  expect_identical(as.character(df[3L, 1L]), "Response")
+  expect_false(any(grepl("^Base:", as.character(df[[1L]])), na.rm = TRUE))
+})
+
+test_that("export_crosstab() writes base rows only for variables with an entry", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d, variable = c("q1", "q2"), label = c("Agreement question", "Yes/no question")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(
+    d, vars = c(q1, q2), banner = group, file_name = out,
+    base_notes = c(q1 = "Base: only q1 has a note")
+  )
+
+  df_q1 <- openxlsx2::wb_to_df(out, sheet = "q1", col_names = FALSE)
+  df_q2 <- openxlsx2::wb_to_df(out, sheet = "q2", col_names = FALSE)
+  expect_identical(as.character(df_q1[2L, 1L]), "Base: only q1 has a note")
+  expect_false(any(grepl("^Base:", as.character(df_q2[[1L]])), na.rm = TRUE))
+})
+
+test_that("export_crosstab() keys sata and battery base notes by the group's first member", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c", "bat_1", "bat_2", "bat_3"),
+    label    = c("Option A", "Option B", "Option C", "Item 1", "Item 2", "Item 3")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(
+    d, vars = c(sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+    banner = group, file_name = out,
+    base_notes = c(sata_a = "Base: sata group", bat_1 = "Base: battery group")
+  )
+
+  df_sata <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
+  df_bat  <- openxlsx2::wb_to_df(out, sheet = "bat_1", col_names = FALSE)
+  expect_identical(as.character(df_sata[2L, 1L]), "Base: sata group")
+  expect_identical(as.character(df_bat[2L, 1L]), "Base: battery group")
+})
+
+test_that("export_crosstab() errors when base_notes is not fully named", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    base_notes = c("unnamed note")),
+    class = "surveyreports_error_base_notes_invalid"
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    base_notes = c("unnamed note"))
+  )
+})
+
+test_that("export_crosstab() errors when base_notes is not a character vector", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    base_notes = list(q1 = "a list, not a character vector")),
+    class = "surveyreports_error_base_notes_invalid"
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    base_notes = list(q1 = "a list, not a character vector"))
+  )
+})
+
+test_that("export_crosstab() errors when base_notes is partially named", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_crosstab(d, vars = q1, banner = group, file_name = out,
+                    base_notes = c(q1 = "named", "unnamed")),
+    class = "surveyreports_error_base_notes_invalid"
+  )
+})
+
+# 17. Two-column battery layout ---------------------------------------------------
+
+test_that("export_crosstab() battery tables use Item and Response label columns", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("bat_1", "bat_2", "bat_3"),
+    label    = c("Item one", "Item two", "Item three")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = c(bat_1, bat_2, bat_3), banner = group,
+                  file_name = out)
+
+  df     <- openxlsx2::wb_to_df(out, sheet = "bat_1", col_names = FALSE)
+  header <- as.character(unlist(df[3L, ]))
+  expect_identical(header[1L:3L], c("Item", "Response", "Total"))
+
+  # Item label written once per item block, not repeated per scale value
+  expect_identical(
+    sum(as.character(df[[1L]]) == "Item one", na.rm = TRUE), 1L
+  )
+  # Scale values live in the Response column
+  expect_true(all(c("1", "2", "3", "4", "5") %in% as.character(df[[2L]])))
+  # No flattened "item (value)" labels remain
+  expect_false(
+    any(grepl("^Item one \\(", as.character(df[[1L]])), na.rm = TRUE)
+  )
+})
+
+test_that("export_crosstab() battery N column follows the banner columns", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("bat_1", "bat_2", "bat_3"),
+    label    = c("Item one", "Item two", "Item three")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = c(bat_1, bat_2, bat_3), banner = group,
+                  file_name = out)
+
+  df     <- openxlsx2::wb_to_df(out, sheet = "bat_1", col_names = FALSE)
+  header <- as.character(unlist(df[3L, ]))
+  # Item | Response | Total | A | B | C | N
+  expect_identical(which(header == "N"), 7L)
+})
+
+# 18. True-zero SATA cells --------------------------------------------------------
+
+test_that("export_crosstab() prints 0 for an asked-but-never-selected SATA option", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  # sata_b: asked of everyone, selected by no one
+  d@data$sata_b <- 0L
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = c(sata_a, sata_b, sata_c), banner = group,
+                  file_name = out)
+
+  df    <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
+  row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
+  # Total, A, B, C cells all print 0; N prints 0
+  expect_identical(as.numeric(df[row_b, 2L]), 0)
+  expect_identical(as.numeric(df[row_b, 3L]), 0)
+  expect_identical(as.numeric(df[row_b, 6L]), 0)
+})
+
+test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA tables", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  # Gate the whole block away from group C: never asked there
+  asked          <- d@data$group != "C"
+  d@data$sata_a  <- ifelse(asked, d@data$sata_a, NA_integer_)
+  d@data$sata_b  <- ifelse(asked, 0L, NA_integer_)  # asked, never selected
+  d@data$sata_c  <- ifelse(asked, d@data$sata_c, NA_integer_)
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = c(sata_a, sata_b, sata_c), banner = group,
+                  file_name = out)
+
+  df <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
+  # Header: Item | Total | A | B | C | N
+  row_a <- which(as.character(df[[1L]]) == "Option A")[[1L]]
+  row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
+
+  # Asked subgroups have values; the never-asked C column stays blank
+  expect_false(is.na(df[row_a, 3L]), label = "asked subgroup A has a value")
+  expect_true(is.na(df[row_a, 5L]), label = "never-asked subgroup C is blank")
+  # True zero prints 0 in asked subgroups but stays blank in C
+  expect_identical(as.numeric(df[row_b, 3L]), 0)
+  expect_true(is.na(df[row_b, 5L]), label = "zero row stays blank where never asked")
+})

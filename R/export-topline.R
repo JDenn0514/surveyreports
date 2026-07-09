@@ -26,6 +26,13 @@
 #'   Default `TRUE`.
 #' @param show_eff_n Logical. Whether to display the effective N in the
 #'   percentage column header. Default `FALSE`.
+#' @param base_notes Optional named character vector mapping variable names
+#'   to base descriptions (e.g.
+#'   `c(q5 = "Base: adults who donated (n=425)")`). When a rendered table's
+#'   first variable has an entry, its text is written as an italic row
+#'   directly under the question title. For sata/battery groups the lookup
+#'   key is the group's first member; battery sub-items are keyed by their
+#'   own variable names. Default `NULL` (no base rows).
 #'
 #' @return `invisible(file_name)` — the path supplied in `file_name`.
 #'
@@ -52,7 +59,8 @@ export_topline <- function(
   decimals   = 1L,
   variance   = NULL,
   show_n     = TRUE,
-  show_eff_n = FALSE
+  show_eff_n = FALSE,
+  base_notes = NULL
 ) {
   rlang::check_installed("surveycore")
 
@@ -80,6 +88,7 @@ export_topline <- function(
   vars_resolved <- names(tidyselect::eval_select(rlang::enquo(vars), data_for_select))
 
   .validate_export_inputs(design, vars_resolved, file_name, conf_level, decimals)
+  .validate_base_notes(base_notes)
 
   # Classify variables (collection: use first wave's design)
   design_for_classify <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
@@ -119,14 +128,16 @@ export_topline <- function(
       var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
       result    <- .render_topline_single(
         wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed
+        show_n, show_eff_n, decimals, freq_result$suppressed,
+        base_notes
       )
     } else if (vtype == "sata") {
       group_vars <- classify_out$variable[classify_out$group == group_id]
       var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
       result     <- .render_topline_sata(
         wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed
+        show_n, show_eff_n, decimals, freq_result$suppressed,
+        base_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     } else {
@@ -135,7 +146,8 @@ export_topline <- function(
       var_frame  <- freq_result$frame[freq_result$frame$variable %in% group_vars, ]
       result     <- .render_topline_battery(
         wb, "Topline", var_frame, current_row,
-        show_n, show_eff_n, decimals, freq_result$suppressed
+        show_n, show_eff_n, decimals, freq_result$suppressed,
+        base_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     }
@@ -153,7 +165,8 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_single <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
 
@@ -195,8 +208,15 @@ export_topline <- function(
     bold = TRUE
   )
 
-  # Row 2: column headers
-  header_row <- start_row + 1L
+  # Optional italic base-note row directly under the title
+  base_note  <- .base_note_for(frame, base_notes)
+  note_shift <- if (is.null(base_note)) 0L else 1L
+  if (note_shift == 1L) {
+    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
+  }
+
+  # Column headers
+  header_row <- start_row + note_shift + 1L
   wb <- openxlsx2::wb_add_data(
     wb, sheet = sheet, x = "Response",
     start_row = header_row, start_col = 1L
@@ -334,7 +354,8 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_sata <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
 
@@ -360,8 +381,15 @@ export_topline <- function(
     bold = TRUE
   )
 
-  # Row 2: column headers
-  header_row <- start_row + 1L
+  # Optional italic base-note row directly under the title
+  base_note  <- .base_note_for(frame, base_notes)
+  note_shift <- if (is.null(base_note)) 0L else 1L
+  if (note_shift == 1L) {
+    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
+  }
+
+  # Column headers
+  header_row <- start_row + note_shift + 1L
   wb <- openxlsx2::wb_add_data(
     wb, sheet = sheet, x = "Item",
     start_row = header_row, start_col = 1L
@@ -377,22 +405,17 @@ export_topline <- function(
     )
   }
 
-  # Data rows: one row per SATA item, pct for value == "1"
+  # Data rows: one row per SATA item, pct for value == "1", with
+  # true-zero handling (see .sata_pct_cell())
   data_start <- header_row + 1L
   for (j in seq_along(sata_vars)) {
     var     <- sata_vars[[j]]
     row_num <- data_start + j - 1L
 
     item_label <- frame$var_label[frame$variable == var][[1L]]
-    item_rows  <- frame[
-      frame$variable == var &
-        frame$subgroup_type == "total" &
-        frame$value == "1",
-    ]
-
-    pct_val <- if (nrow(item_rows) > 0L) {
-      round(item_rows$pct[[1L]] * 100, decimals)
-    } else NA_real_
+    pct_val <- .sata_pct_cell(
+      frame, var, .total_col_group(), "Total", decimals
+    )
 
     wb <- openxlsx2::wb_add_data(
       wb, sheet = sheet, x = item_label,
@@ -403,7 +426,7 @@ export_topline <- function(
       start_row = row_num, start_col = 2L
     )
     if (show_n) {
-      n_val <- if (nrow(item_rows) > 0L) item_rows$n[[1L]] else NA_integer_
+      n_val <- .sata_n_cell(frame, var)
       wb <- openxlsx2::wb_add_data(
         wb, sheet = sheet, x = n_val,
         start_row = row_num, start_col = 3L
@@ -425,7 +448,8 @@ export_topline <- function(
 #' @keywords internal
 #' @noRd
 .render_topline_battery <- function(
-  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed
+  wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
+  base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
 
@@ -459,10 +483,13 @@ export_topline <- function(
     var_label_val              <- var_frame$var_label[[1L]]
     var_frame$question_text    <- var_label_val
 
+    # base_notes passes through: each sub-item is keyed by its own
+    # variable name
     result <- .render_topline_single(
       wb, sheet, var_frame, current_row,
       show_n, show_eff_n, decimals,
-      suppressed[integer(0), ]  # no per-item footnote
+      suppressed[integer(0), ],  # no per-item footnote
+      base_notes
     )
     wb          <- result$wb
     current_row <- result$next_row + 1L

@@ -617,3 +617,161 @@ test_that("export_topline() errors when decimals is not a positive integer", {
     export_topline(d, vars = q1, file_name = out, decimals = 0)
   )
 })
+
+# 11. base_notes ------------------------------------------------------------------
+
+test_that("export_topline() writes an italic base row under the title and shifts the table", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(
+    d, vars = q1, file_name = out,
+    base_notes = c(q1 = "Base: All respondents (n=200)")
+  )
+
+  df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  expect_identical(as.character(df[1L, 1L]), "Agreement question")
+  expect_identical(as.character(df[2L, 1L]), "Base: All respondents (n=200)")
+  # Header shifted from row 2 to row 3
+  expect_identical(as.character(df[3L, 1L]), "Response")
+})
+
+test_that("export_topline() writes no base row when base_notes is NULL", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  d   <- surveycore::set_var_label(d, variable = "q1", label = "Agreement question")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = q1, file_name = out)
+
+  df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  expect_identical(as.character(df[2L, 1L]), "Response")
+  expect_false(any(grepl("^Base:", as.character(df[[1L]])), na.rm = TRUE))
+})
+
+test_that("export_topline() keys battery sub-item base notes by their own variable names", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("bat_1", "bat_2", "bat_3"),
+    label    = c("Item one", "Item two", "Item three")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(
+    d, vars = c(bat_1, bat_2, bat_3), file_name = out,
+    base_notes = c(bat_1 = "Base: item-one note", bat_3 = "Base: item-three note")
+  )
+
+  df    <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  col_a <- as.character(df[[1L]])
+
+  row_1 <- which(col_a == "Item one")[[1L]]
+  row_2 <- which(col_a == "Item two")[[1L]]
+  row_3 <- which(col_a == "Item three")[[1L]]
+  expect_identical(col_a[[row_1 + 1L]], "Base: item-one note")
+  expect_identical(col_a[[row_2 + 1L]], "Response",
+                   label = "sub-item without an entry gets no base row")
+  expect_identical(col_a[[row_3 + 1L]], "Base: item-three note")
+})
+
+test_that("export_topline() keys a SATA group's base note by its first member", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(
+    d, vars = c(sata_a, sata_b, sata_c), file_name = out,
+    base_notes = c(sata_a = "Base: sata group note")
+  )
+
+  df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  expect_identical(as.character(df[2L, 1L]), "Base: sata group note")
+  expect_identical(as.character(df[3L, 1L]), "Item")
+})
+
+test_that("export_topline() errors when base_notes is not fully named", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_topline(d, vars = q1, file_name = out, base_notes = c("unnamed note")),
+    class = "surveyreports_error_base_notes_invalid"
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_topline(d, vars = q1, file_name = out, base_notes = c("unnamed note"))
+  )
+})
+
+test_that("export_topline() errors when base_notes is not a character vector", {
+  skip_if_not_installed("surveycore")
+  d   <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_topline(d, vars = q1, file_name = out, base_notes = 1L:3L),
+    class = "surveyreports_error_base_notes_invalid"
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_topline(d, vars = q1, file_name = out, base_notes = 1L:3L)
+  )
+})
+
+# 12. True-zero SATA cells --------------------------------------------------------
+
+test_that("export_topline() prints 0 for an asked-but-never-selected SATA option", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data$sata_b <- 0L
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+  df    <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
+  expect_identical(as.numeric(df[row_b, 2L]), 0)
+  expect_identical(as.numeric(df[row_b, 3L]), 0)
+})
+
+test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  # sata_b: never asked at all (all NA) -- must stay blank
+  d@data$sata_b <- NA_integer_
+  d <- surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label    = c("Option A", "Option B", "Option C")
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+  df    <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  col_a <- as.character(df[[1L]])
+  row_b <- which(col_a == "Option B")
+  if (length(row_b) > 0L) {
+    expect_true(is.na(df[row_b[[1L]], 2L]),
+                label = "never-asked item pct is blank")
+  } else {
+    # get_freqs() may drop an all-NA item from the frame entirely --
+    # absence (no 0-valued row) also satisfies the contract
+    expect_true(TRUE)
+  }
+})

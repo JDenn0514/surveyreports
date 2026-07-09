@@ -24,6 +24,7 @@ All `cli_abort()` and `cli_warn()` calls must use a class from this table.
 | `surveyreports_error_interaction_not_in_banner` | `export_crosstab()` | A variable in `interactions` is not in `banner` |
 | `surveyreports_error_interactions_not_list` | `export_crosstab()` | `interactions` is not a list |
 | `surveyreports_error_collection_not_supported_for_crosstab` | `export_crosstab()` | `design` is a `survey_collection`; not supported — use `export_topline()` for trend output |
+| `surveyreports_error_base_notes_invalid` | `export_topline()`, `export_crosstab()` | `base_notes` is not `NULL` and is not a fully named character vector |
 
 ## Warnings
 

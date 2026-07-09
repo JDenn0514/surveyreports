@@ -41,6 +41,15 @@
 #'   headers. Default `FALSE`.
 #' @param decimals Positive integer. Number of decimal places for displayed
 #'   percentages. Default `1L`.
+#' @param show_total Logical. Whether to render a `Total` column (the
+#'   full-sample distribution) before the banner columns in every table.
+#'   Default `TRUE`.
+#' @param base_notes Optional named character vector mapping variable names
+#'   to base descriptions (e.g.
+#'   `c(q5 = "Base: adults who donated (n=425)")`). When a rendered table's
+#'   first variable has an entry, its text is written as an italic row
+#'   directly under the question title. For sata/battery groups the lookup
+#'   key is the group's first member. Default `NULL` (no base rows).
 #'
 #' @return `invisible(file_name)` -- the path supplied in `file_name`.
 #'
@@ -71,7 +80,9 @@ export_crosstab <- function(
   conf_level   = 0.95,
   show_n       = TRUE,
   show_eff_n   = FALSE,
-  decimals     = 1L
+  decimals     = 1L,
+  show_total   = TRUE,
+  base_notes   = NULL
 ) {
   # 1. survey_collection rejection FIRST
   if (S7::S7_inherits(design, surveycore::survey_collection)) {
@@ -150,6 +161,9 @@ export_crosstab <- function(
     }
   }
 
+  # 8. base_notes validation
+  .validate_base_notes(base_notes)
+
   layout   <- match.arg(layout)
   pub_type <- match.arg(pub_type)
 
@@ -185,7 +199,7 @@ export_crosstab <- function(
         result <- .render_crosstab_single(
           wb, sheet_name, var_frame, 1L,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -196,7 +210,7 @@ export_crosstab <- function(
         result <- .render_crosstab_sata(
           wb, sheet_name, var_frame, 1L,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -207,7 +221,7 @@ export_crosstab <- function(
         result <- .render_crosstab_battery(
           wb, sheet_name, var_frame, 1L,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       }
 
@@ -231,7 +245,7 @@ export_crosstab <- function(
         result <- .render_crosstab_single(
           wb, "Crosstab", var_frame, current_row,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -240,7 +254,7 @@ export_crosstab <- function(
         result <- .render_crosstab_sata(
           wb, "Crosstab", var_frame, current_row,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -249,7 +263,7 @@ export_crosstab <- function(
         result <- .render_crosstab_battery(
           wb, "Crosstab", var_frame, current_row,
           show_n, show_eff_n, decimals, freq_result$suppressed,
-          banner_resolved, interactions
+          banner_resolved, interactions, show_total, base_notes
         )
       }
 
@@ -375,7 +389,7 @@ export_crosstab <- function(
 #' @noRd
 .render_crosstab_single <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions
+  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))
 
@@ -386,6 +400,9 @@ export_crosstab <- function(
   values     <- unique(total_rows$value)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  if (show_total) {
+    col_groups <- c(list(.total_col_group()), col_groups)
+  }
 
   # n_cols includes an extra column when show_n = TRUE
   n_pct_cols <- .count_render_cols(col_groups)
@@ -394,10 +411,17 @@ export_crosstab <- function(
   # Row 1: question text merged across all columns (bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
-  spanner_row <- start_row + 1L
-  header_row  <- start_row + 2L
+  # Optional italic base-note row directly under the title
+  base_note  <- .base_note_for(frame, base_notes)
+  note_shift <- if (is.null(base_note)) 0L else 1L
+  if (note_shift == 1L) {
+    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
+  }
 
-  # Row 2 (spanner) + Row 3 (column headers)
+  spanner_row <- start_row + note_shift + 1L
+  header_row  <- start_row + note_shift + 2L
+
+  # Spanner row + column headers
   wb <- .write_crosstab_headers(
     wb, sheet, spanner_row, header_row, col_groups, "Response"
   )
@@ -426,12 +450,7 @@ export_crosstab <- function(
     current_col <- 2L
     for (cg in col_groups) {
       for (level in cg$levels) {
-        pct_rows <- frame[
-          frame$subgroup_type == cg$type &
-            frame$subgroup_var == cg$subgroup_var &
-            frame$subgroup_value == level &
-            frame$value == val,
-        ]
+        pct_rows <- .cell_rows(frame, cg, level, val = val)
         pct_val <- if (nrow(pct_rows) > 0L) {
           round(pct_rows$pct[[1L]] * 100, decimals)
         } else {
@@ -490,7 +509,7 @@ export_crosstab <- function(
 #' @noRd
 .render_crosstab_sata <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions
+  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
@@ -498,6 +517,9 @@ export_crosstab <- function(
   sata_vars     <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  if (show_total) {
+    col_groups <- c(list(.total_col_group()), col_groups)
+  }
 
   n_pct_cols <- .count_render_cols(col_groups)
   n_cols     <- n_pct_cols + if (show_n) 1L else 0L
@@ -505,10 +527,17 @@ export_crosstab <- function(
   # Row 1: question preface (merged, bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
-  spanner_row <- start_row + 1L
-  header_row  <- start_row + 2L
+  # Optional italic base-note row directly under the title
+  base_note  <- .base_note_for(frame, base_notes)
+  note_shift <- if (is.null(base_note)) 0L else 1L
+  if (note_shift == 1L) {
+    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
+  }
 
-  # Row 2 (spanner) + Row 3 (column headers) \u2014 "Item" in col 1
+  spanner_row <- start_row + note_shift + 1L
+  header_row  <- start_row + note_shift + 2L
+
+  # Spanner row + column headers — "Item" in col 1
   wb <- .write_crosstab_headers(
     wb, sheet, spanner_row, header_row, col_groups, "Item"
   )
@@ -522,7 +551,8 @@ export_crosstab <- function(
     )
   }
 
-  # Data rows: one row per SATA item; pct where value == "1"
+  # Data rows: one row per SATA item; pct where value == "1", with
+  # true-zero handling (see .sata_pct_cell())
   data_start <- header_row + 1L
   for (j in seq_along(sata_vars)) {
     var     <- sata_vars[[j]]
@@ -538,18 +568,7 @@ export_crosstab <- function(
     current_col <- 2L
     for (cg in col_groups) {
       for (level in cg$levels) {
-        pct_rows <- frame[
-          frame$variable == var &
-            frame$subgroup_type == cg$type &
-            frame$subgroup_var == cg$subgroup_var &
-            frame$subgroup_value == level &
-            frame$value == "1",
-        ]
-        pct_val <- if (nrow(pct_rows) > 0L) {
-          round(pct_rows$pct[[1L]] * 100, decimals)
-        } else {
-          NA_real_
-        }
+        pct_val <- .sata_pct_cell(frame, var, cg, level, decimals)
         wb <- openxlsx2::wb_add_data(
           wb, sheet = sheet, x = pct_val,
           start_row = row_num, start_col = current_col
@@ -560,16 +579,7 @@ export_crosstab <- function(
 
     # Write total n for this item when show_n = TRUE
     if (show_n) {
-      total_var_rows <- frame[
-        frame$variable == var &
-          frame$subgroup_type == "total" &
-          frame$value == "1",
-      ]
-      n_val <- if (nrow(total_var_rows) > 0L) {
-        total_var_rows$n[[1L]]
-      } else {
-        NA_integer_
-      }
+      n_val <- .sata_n_cell(frame, var)
       wb <- openxlsx2::wb_add_data(
         wb, sheet = sheet, x = n_val,
         start_row = row_num, start_col = n_col
@@ -590,7 +600,7 @@ export_crosstab <- function(
 #' @noRd
 .render_crosstab_battery <- function(
   wb, sheet, frame, start_row, show_n, show_eff_n, decimals, suppressed,
-  banner_resolved, interactions
+  banner_resolved, interactions, show_total = TRUE, base_notes = NULL
 ) {
   if (nrow(frame) == 0L) return(list(wb = wb, next_row = start_row))  # nocov
 
@@ -598,23 +608,63 @@ export_crosstab <- function(
   bat_vars      <- unique(frame$variable)
 
   col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  if (show_total) {
+    col_groups <- c(list(.total_col_group()), col_groups)
+  }
 
   n_pct_cols <- .count_render_cols(col_groups)
-  n_cols     <- n_pct_cols + if (show_n) 1L else 0L
+  # Item + Response label columns replace the flattened "item (value)"
+  # single label column, so the battery table is one column wider than
+  # .count_render_cols() (which assumes one label column) accounts for.
+  n_cols <- n_pct_cols + 1L + if (show_n) 1L else 0L
 
   # Row 1: battery preface (merged, bold)
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
 
-  spanner_row <- start_row + 1L
-  header_row  <- start_row + 2L
+  # Optional italic base-note row directly under the title
+  base_note  <- .base_note_for(frame, base_notes)
+  note_shift <- if (is.null(base_note)) 0L else 1L
+  if (note_shift == 1L) {
+    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
+  }
 
-  # Row 2 (spanner) + Row 3 (column headers) \u2014 "Item" in col 1
-  wb <- .write_crosstab_headers(
-    wb, sheet, spanner_row, header_row, col_groups, "Item"
+  spanner_row <- start_row + note_shift + 1L
+  header_row  <- start_row + note_shift + 2L
+
+  # Two label columns; banner spanners start at column 3
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = "Item",
+    start_row = header_row, start_col = 1L
+  )
+  wb <- openxlsx2::wb_add_data(
+    wb, sheet = sheet, x = "Response",
+    start_row = header_row, start_col = 2L
   )
 
-  # Write "N" column header when show_n = TRUE
-  n_col <- n_pct_cols + 1L
+  current_col <- 3L
+  for (cg in col_groups) {
+    span_start <- current_col
+    span_end   <- span_start + length(cg$levels) - 1L
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = cg$spanner,
+      start_row = spanner_row, start_col = span_start
+    )
+    if (span_end > span_start) {
+      wb <- openxlsx2::wb_merge_cells(
+        wb, sheet = sheet,
+        dims = openxlsx2::wb_dims(rows = spanner_row, cols = span_start:span_end)
+      )
+    }
+    for (k in seq_along(cg$levels)) {
+      wb <- openxlsx2::wb_add_data(
+        wb, sheet = sheet, x = cg$levels[[k]],
+        start_row = header_row, start_col = current_col
+      )
+      current_col <- current_col + 1L
+    }
+  }
+
+  n_col <- current_col
   if (show_n) {
     wb <- openxlsx2::wb_add_data(
       wb, sheet = sheet, x = "N",
@@ -622,10 +672,8 @@ export_crosstab <- function(
     )
   }
 
-  # Data rows: one row per battery sub-item \u00d7 scale value
-  data_start  <- header_row + 1L
-  current_row <- data_start
-
+  # Data rows: one row per battery sub-item × scale value
+  current_row <- header_row + 1L
   for (var in bat_vars) {
     var_frame  <- frame[frame$variable == var, ]
     item_label <- var_frame$var_label[[1L]]
@@ -634,23 +682,22 @@ export_crosstab <- function(
     total_sub <- var_frame[var_frame$subgroup_type == "total", ]
     values    <- unique(total_sub$value)
 
+    # Item label once, on its first value row
+    wb <- openxlsx2::wb_add_data(
+      wb, sheet = sheet, x = item_label,
+      start_row = current_row, start_col = 1L
+    )
+
     for (val in values) {
-      row_label <- paste0(item_label, " (", val, ")")
       wb <- openxlsx2::wb_add_data(
-        wb, sheet = sheet, x = row_label,
-        start_row = current_row, start_col = 1L
+        wb, sheet = sheet, x = val,
+        start_row = current_row, start_col = 2L
       )
 
-      current_col <- 2L
+      current_col <- 3L
       for (cg in col_groups) {
         for (level in cg$levels) {
-          pct_rows <- frame[
-            frame$variable == var &
-              frame$subgroup_type == cg$type &
-              frame$subgroup_var == cg$subgroup_var &
-              frame$subgroup_value == level &
-              frame$value == val,
-          ]
+          pct_rows <- .cell_rows(frame, cg, level, val = val, var = var)
           pct_val <- if (nrow(pct_rows) > 0L) {
             round(pct_rows$pct[[1L]] * 100, decimals)
           } else {
