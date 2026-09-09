@@ -96,7 +96,11 @@ Examples: `feature/report-freqs`, `fix/report-freqs-empty-domain`, `test/report-
 | `refactor` | Internal restructuring with no behavioral change |
 | `perf` | Performance improvement |
 
-Scopes: `freqs`, `means`, `totals`, `crosstabs`, `t-test`, `utils`, `ci`, `context`
+Scopes: `freqs`, `means`, `totals`, `crosstabs`, `t-test`, `utils`, `ci`,
+`context`, `pipeline`
+
+Use `pipeline` for the workflow skills, agents, and rule files under
+`.claude/` — the pipeline machinery rather than the package code.
 
 Examples:
 ```
