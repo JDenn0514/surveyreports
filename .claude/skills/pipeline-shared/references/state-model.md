@@ -24,7 +24,7 @@ advance without them MUST refuse and report to the user.
 | PIPELINES_COMPLETE | REVIEW_PASSED | `review.md` exists with verdict = PASS. |
 | REVIEW_PASSED | DONE | PR merged to `develop`. Plan checkbox `[x]` marked. Branch deleted. |
 
-`pipeline-spec` owns `NEW → SPEC_READY`. `/implementation-workflow` owns
+`pipeline-spec` owns `NEW → SPEC_READY`. `pipeline-implement` owns
 `SPEC_READY → PLAN_READY`. `/r-implement` and `/commit-and-pr` own the states
 after that.
 
