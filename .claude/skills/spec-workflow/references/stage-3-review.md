@@ -16,11 +16,34 @@ code-level decision has introduced a new error.
 
 ## Input Requirement
 
-Attempt to locate the spec at `plans/spec-{id}.md` (infer `{id}` from context).
-If found, read it directly. Only ask the user to provide the spec if the file
-cannot be found.
+Locate both artifacts (infer `{id}` from context):
 
-Read the full spec once before generating any output.
+- `plans/spec-{id}.md` — the behavioral contract
+- `plans/test-spec-{id}.md` — the validation scenarios
+
+Read each directly if found. Only ask the user to provide a file that cannot be
+found. If `test-spec-{id}.md` does not exist, Stage 1 is incomplete — say so
+and stop rather than reviewing half the work.
+
+Read both files once, in full, before generating any output.
+
+You are the one role that reads both. Lens 1 and Lenses 3–6 work on
+`spec-{id}.md`; Lens 2 works on `test-spec-{id}.md`; the cross-check below
+works on the pair.
+
+**Cross-artifact check** — run it before the lenses, because a failure here
+makes the rest of the review moot:
+
+- Every function contract in `spec-{id}.md` has at least one scenario in
+  `test-spec-{id}.md`
+- Every output column in the spec's Returns block appears in a structural
+  assertion in the test-spec
+- Neither file references the other
+- `spec-{id}.md` carries no tolerance, dataset, or oracle call
+- `test-spec-{id}.md` carries no `R/` path or internal `.helper()` name
+
+A leak in either direction is a BLOCKING issue, not a nitpick — it is the
+barrier that makes independent verification mean anything.
 
 ---
 
@@ -41,6 +64,8 @@ Find every place two functions describe the same behavior:
   `package-conventions.md` instead of citing the rule
 
 ### Lens 2 — Test Completeness
+
+Applies to `test-spec-{id}.md`.
 
 Apply all 7 test categories from `testing.md` to every exported function.
 If a category doesn't apply to a specific function, mark it **N/A** and state
@@ -69,8 +94,24 @@ Also check:
 
 ### Lens 3 — Contract Completeness
 
+Applies to `spec-{id}.md`.
+
+Read `.claude/standards/function-documentation.md` before running this lens.
+It decides which `@details`, `@section`, and `@examples` content each
+function's tier requires, and you cannot check the tier without it.
+
 For every exported function:
 
+- Is a documentation tier assigned — Utility, Standard, Algorithmic, or
+  Dispatcher — and does it match the function's actual complexity?
+- Does the contract reflect that tier's required content? Output Columns for
+  any tier that returns a table; Workbook Layout for every `export_*()`;
+  Algorithm for Tier 3; `@references` for Tier 3 and Tier 4
+- Does every output column carry a presence condition — which argument
+  combination makes it appear?
+- Does the Delegation line name the exact `surveycore::get_*()` call and its
+  arguments? "Delegates to surveycore" is not a contract
+- Does the design support matrix have a yes or no in every row, with no blanks?
 - All arguments documented with type, default, one-sentence description?
 - Argument order correct? Per `code-style.md`:
   `design` → required NSE → required scalar → optional NSE → optional scalar → `...`
@@ -251,9 +292,12 @@ No new issues found.
 
 Ask yourself:
 
+- Did I run the cross-artifact check before the lenses?
 - Have I applied all six lenses?
 - For Lens 2: did I check all 7 test categories for every exported function?
-- For Lens 3: did I verify argument order, `vars` resolution order, and the error table?
+- For Lens 3: did I Read `function-documentation.md`, and did I verify the
+  documentation tier, argument order, `vars` resolution order, and the error
+  table?
 - For Lens 6: did I trace at least one realistic multi-variable workflow?
 - Have I flagged actual problems, not manufactured ones?
 - Is the overall assessment honest?

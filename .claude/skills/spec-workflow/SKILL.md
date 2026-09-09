@@ -15,7 +15,7 @@ description: >
 
 This skill governs spec work for surveyreports. Five stages, always in order:
 
-1. **Stage 1 — Draft:** Write the spec sheet
+1. **Stage 1 — Draft:** Write `spec-{id}.md` and `test-spec-{id}.md`
 2. **Stage 2 — Methodology Review:** Adversarial reporting-layer pass; flags every
    statistical specification flaw — output column contracts, CI formula and df,
    cross-design consistency, domain estimation behavior, and delegation accuracy
@@ -28,6 +28,22 @@ This skill governs spec work for surveyreports. Five stages, always in order:
 
 Stages 2 and 2 Resolve are conditional — skip them if the spec contains no
 statistical output (e.g., a pure utility, a print method, or a documentation change).
+
+**Stage 1 produces two files, not one.** `spec-{id}.md` carries the behavioral
+contract and `test-spec-{id}.md` carries the validation scenarios. Neither
+references the other. See `references/stage-1-draft.md` for the line between
+them and `.claude/skills/pipeline-shared/references/pipeline-isolation.md` for
+why the barrier exists.
+
+**Review loops are capped at 3 passes.** Pass 1 is the only full pass; passes 2
+and 3 review only what the resolver changed. If findings are still open after
+pass 3, stop and ask the user. The measured cost of an uncapped loop was 7
+passes and about $300 of API-equivalent usage on one surveycore feature. Full
+rules: `.claude/skills/pipeline-spec/SKILL.md`, Review-loop budget section.
+
+**To run these five stages with a state machine, paper ingestion, and the
+review-loop cap enforced, use `/pipeline-spec`.** It wraps this skill; it does
+not replace it.
 
 ```dot
 digraph spec_stages {
@@ -107,7 +123,7 @@ Every stage works alongside — never instead of — these rule files:
 | Rule file | What it governs |
 |---|---|
 | `code-style.md` | Indentation, pipe, air formatter, S7 patterns, cli error structure, argument order, helper placement |
-| `package-conventions.md` | `::` usage, NAMESPACE, roxygen2, `@return`, `@examples`, export policy, function naming |
+| `package-conventions.md` | `::` usage, NAMESPACE, roxygen2, `@returns`, `@examples`, export policy, function naming |
 | `testing.md` | `test_that()` scope, 98%+ coverage, cross-design testing, numerical accuracy against `surveycore::get_*()` |
 | `github-strategy.md` | Branch naming, PR granularity, commit format, merge strategy |
 
@@ -122,11 +138,18 @@ authoritative — the spec doesn't need to repeat it.
 The `{id}` matches the feature branch identifier (e.g., `report-freqs`, `report-means`).
 
 ```
-Spec:                     plans/spec-{id}.md
+Spec (builder's input):   plans/spec-{id}.md
+Test-spec (tester's):     plans/test-spec-{id}.md
 Methodology review:       plans/spec-methodology-{id}.md
 Spec review:              plans/spec-review-{id}.md
 Decisions log:            plans/decisions-{id}.md
+Comprehension (if any):   plans/comprehension-{id}.md
 ```
+
+Under `/pipeline-spec`, the in-progress copies live in
+`.surveyreports-workspace/runs/{YYYY-MM-DD-id}/` (gitignored) and are copied
+into `plans/` at SPEC_READY. See
+`.claude/skills/pipeline-shared/references/workspace-layout.md`.
 
 **Determining `{id}`:** Infer from user context first (e.g., "report_freqs spec" →
 `report-freqs`, "means spec" → `report-means`). If the spec file already exists,

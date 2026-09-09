@@ -56,3 +56,6 @@ rsconnect/
 
 # Git worktrees
 .worktrees/
+
+# Pipeline workspace (per-request runtime artifacts)
+.surveyreports-workspace/
