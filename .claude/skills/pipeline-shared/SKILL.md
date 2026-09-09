@@ -2,8 +2,9 @@
 name: pipeline-shared
 description: >
   Shared reference infrastructure for the surveyreports pipeline skills. Not
-  invoked directly — loaded by pipeline-spec and by the pipeline agents
-  (planner, extractor, builder, tester, reviewer, shipper) as needed.
+  invoked directly — loaded by pipeline-spec, pipeline-implement, and by the
+  pipeline agents (planner, extractor, builder, tester, reviewer, shipper) as
+  needed.
 ---
 
 # Pipeline Shared References
@@ -15,11 +16,11 @@ and agents load specific reference files from here as needed.
 
 | File | Used by |
 |------|---------|
-| `references/state-model.md` | pipeline-spec |
-| `references/artifact-schemas.md` | planner, reviewer, pipeline-spec |
-| `references/pipeline-isolation.md` | builder, tester, reviewer, shipper |
+| `references/state-model.md` | pipeline-spec, pipeline-implement |
+| `references/artifact-schemas.md` | planner, reviewer, pipeline-spec, pipeline-implement |
+| `references/pipeline-isolation.md` | builder, tester, reviewer, shipper, pipeline-implement |
 | `references/signals.md` | all agents |
-| `references/workspace-layout.md` | pipeline-spec, all agents |
+| `references/workspace-layout.md` | pipeline-spec, pipeline-implement, all agents |
 | `references/r-package-profile.md` | builder, tester, reviewer |
 
 ## Relationship to the rule files

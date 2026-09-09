@@ -288,13 +288,16 @@ On PASS from Stage 2 (where applicable) and Stage 3:
 
 | State | Skill |
 |---|---|
-| SPEC_READY → PLAN_READY | `/implementation-workflow` |
+| SPEC_READY → PLAN_READY | `/pipeline-implement` |
 | PLAN_READY → PIPELINES_COMPLETE | `/r-implement` |
 | REVIEW_PASSED → DONE | `/commit-and-pr` |
 
-surveywts routes to `pipeline-implement` and `pipeline-ship` at these points.
-Those skills are not ported here; `implementation-workflow`, `r-implement`,
-and `commit-and-pr` cover the same ground.
+`/pipeline-implement` wraps `/implementation-workflow` the way this skill wraps
+`spec-workflow`. For a Tier 2 change that fits in one PR, call
+`/implementation-workflow` directly instead.
+
+surveywts routes to `pipeline-ship` after PLAN_READY. That skill is not ported
+here; `/r-implement` and `/commit-and-pr` cover the same ground.
 
 ## References
 
