@@ -13,7 +13,7 @@
 | `R CMD check` | 0 errors, 0 warnings, ≤2 pre-approved notes |
 | Export policy | All `report_*()` functions; no `.`-prefixed helpers; no re-exports |
 | Internal function docs | `@keywords internal` + `@noRd` for complex helpers |
-| `@return` | Required on all exported functions |
+| `@returns` | Required on all exported functions — `@returns`, never `@return` |
 | `@examples` | All runnable — no `\dontrun{}` |
 | Version pinning | Minimum versions only (e.g., `cli (>= 3.6.0)`) |
 | Function naming | `report_*` for exported; `.validate_*` for validators; `.` prefix for all internals |
@@ -50,10 +50,10 @@ arguments; fuller for anything with constraints, `NULL` behavior, or interaction
 #'   intervals. Default `0.95`.
 ```
 
-### `@return` for report functions
+### `@returns` for report functions
 
 ```r
-#' @return A tibble with one row per variable × response category, containing:
+#' @returns A tibble with one row per variable × response category, containing:
 #'   - `variable`: the variable name
 #'   - `label`: variable label (from surveycore metadata), or `NA`
 #'   - `value`: the response category
@@ -268,7 +268,7 @@ Package-level documentation (`R/surveyreports-package.R`):
 ## 7. Pre-Commit Documentation Checklist
 
 - [ ] `devtools::document()` run; `NAMESPACE` and `man/` files updated
-- [ ] All exported functions have `@return` describing the tibble structure
+- [ ] All exported functions have `@returns` describing the tibble structure
 - [ ] All `@examples` are runnable and demonstrate multi-variable usage
 - [ ] Internal helpers have `@keywords internal` + `@noRd` if needed
 - [ ] `@family` tags are correct

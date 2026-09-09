@@ -51,7 +51,7 @@
 #'   directly under the question title. For sata/battery groups the lookup
 #'   key is the group's first member. Default `NULL` (no base rows).
 #'
-#' @return `invisible(file_name)` -- the path supplied in `file_name`.
+#' @returns `invisible(file_name)` -- the path supplied in `file_name`.
 #'
 #' @examples
 #' \dontrun{

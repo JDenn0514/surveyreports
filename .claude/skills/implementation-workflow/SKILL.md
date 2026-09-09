@@ -95,7 +95,7 @@ Every stage works alongside — never instead of — these rule files:
 | Rule file | What it governs |
 |---|---|
 | `code-style.md` | Indentation, pipe, air formatter, S7 patterns, cli error structure, argument order, helper placement |
-| `package-conventions.md` | `::` usage, NAMESPACE, roxygen2, `@return`, `@examples`, export policy, function naming |
+| `package-conventions.md` | `::` usage, NAMESPACE, roxygen2, `@returns`, `@examples`, export policy, function naming |
 | `testing.md` | `test_that()` scope, 98%+ coverage, cross-design testing, numerical accuracy against `surveycore::get_*()` |
 | `github-strategy.md` | Branch naming, PR granularity, commit format, merge strategy |
 

@@ -34,7 +34,7 @@
 #'   key is the group's first member; battery sub-items are keyed by their
 #'   own variable names. Default `NULL` (no base rows).
 #'
-#' @return `invisible(file_name)` — the path supplied in `file_name`.
+#' @returns `invisible(file_name)` — the path supplied in `file_name`.
 #'
 #' @examples
 #' \dontrun{

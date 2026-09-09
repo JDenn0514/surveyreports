@@ -39,7 +39,7 @@
 #'   `new_col` column is silently dropped from each element before
 #'   binding; no warning.
 #'
-#' @return An object of S3 class `c("survey_pooled_pvals", "tbl_df",
+#' @returns An object of S3 class `c("survey_pooled_pvals", "tbl_df",
 #'   "tbl", "data.frame")` -- a tibble with an additional class tag.
 #'   Column ordering: (1) the union of input columns in input-union
 #'   order; (2) `id_col`; (3) `new_col`; (4) `paste0(new_col,
@@ -439,7 +439,7 @@ pool_pvals <- function(
 #'   through to `print.tbl_df`. Default `10`.
 #' @param ... Additional arguments passed to `print.tbl_df`.
 #'
-#' @return `invisible(x)`.
+#' @returns `invisible(x)`.
 #'
 #' @family multiplicity correction
 #'
