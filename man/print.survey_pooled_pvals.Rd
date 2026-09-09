@@ -33,7 +33,7 @@ print(out)
 
 }
 \seealso{
-Other multiplicity correction: 
-\code{\link{pool_pvals}()}
+Other multiplicity correction:
+\code{\link[=pool_pvals]{pool_pvals()}}
 }
 \concept{multiplicity correction}

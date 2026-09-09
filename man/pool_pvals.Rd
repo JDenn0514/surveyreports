@@ -213,7 +213,7 @@ based on a modified Bonferroni test. \emph{Biometrika} 75(2), 383-386.
 \code{\link[surveycore:get_diffs]{surveycore::get_diffs()}} and \code{\link[surveycore:get_t_test]{surveycore::get_t_test()}} for
 upstream functions that produce the \code{p_value} column
 
-Other multiplicity correction: 
-\code{\link{print.survey_pooled_pvals}()}
+Other multiplicity correction:
+\code{\link[=print.survey_pooled_pvals]{print.survey_pooled_pvals()}}
 }
 \concept{multiplicity correction}

@@ -106,7 +106,7 @@ export_crosstab(d, vars = q1, banner = group, file_name = "crosstab.xlsx")
 \code{\link[=export_topline]{export_topline()}} for topline (no banner) output,
 \code{\link[surveycore:get_freqs]{surveycore::get_freqs()}} for the underlying frequency function.
 
-Other frequency functions: 
-\code{\link{export_topline}()}
+Other frequency functions:
+\code{\link[=export_topline]{export_topline()}}
 }
 \concept{frequency functions}
