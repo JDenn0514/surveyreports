@@ -23,8 +23,14 @@
 |------|-------------|----------|
 | **1 — Full** | New phases, new exported functions, anything where correct behavior is undecided | spec → plan → implement → PR |
 | **2 — Plan only** | Medium bug fixes, new arguments, edge cases — behavior obvious, approach isn't | plan → implement → PR |
-| **3 — Direct** | Clear bug fixes in 1–2 functions, test additions, roxygen changes | branch → implement → PR |
+| **3 — Direct** | Clear bug fixes in 1–2 functions, test additions, roxygen changes | see the split below |
 | **0 — Commit** | Typos, comments, `.gitignore`, README tweaks | direct commit to `develop` |
+
+**Tier 3 splits on the write surface.** A Tier 3 change that edits R code or a
+test file runs `/pipeline-simplified` — planner-lite, builder, tester, shipper,
+then `/commit-and-pr`. A Tier 3 change that edits only roxygen comments,
+`man/`, the README, a vignette, `_pkgdown.yml`, or `plans/` runs no agents:
+branch, implement, PR. A roxygen comment is not R code.
 
 ---
 

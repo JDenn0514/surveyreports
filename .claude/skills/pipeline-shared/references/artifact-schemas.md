@@ -39,7 +39,18 @@ skills validate these sections before advancing state.
 - Rationale: {one sentence}
 ```
 
-Anything below tier-1-full does not need the pipeline. Say so and stop.
+The tier result routes the request. Only `tier-1-full` runs the full pipeline:
+
+| Result | Route |
+|---|---|
+| `tier-1-full` | `/pipeline-spec`, then `/pipeline-implement` |
+| `tier-2` | `/implementation-workflow`, then `/r-implement` |
+| `tier-3`, and Files touched includes R code or a test | `/pipeline-simplified` |
+| `tier-3`, docs only | Branch, implement, PR |
+| `tier-0` | Commit to `develop` |
+
+Read the R-code-or-docs split off the Files touched list. A roxygen comment is
+not R code.
 
 ## `comprehension.md` (methods-heavy only)
 

@@ -32,7 +32,8 @@ instead:
 
 | Change | Use |
 |---|---|
-| A clear bug fix in 1–2 functions, a test addition, a roxygen change | Tier 3 — branch, implement, PR |
+| A clear bug fix in 1–2 functions, or a test addition | Tier 3, code — `/pipeline-simplified` |
+| A roxygen change, or any Tier 3 change that edits no R code | Tier 3, docs — branch, implement, PR |
 | A typo, a comment, `.gitignore`, a README tweak | Tier 0 — commit to `develop` |
 | A medium bug fix, a new argument, an edge case that fits in one PR | `/implementation-workflow` on its own |
 
@@ -198,8 +199,9 @@ On PASS:
 | PLAN_READY → PIPELINES_COMPLETE | `/r-implement` |
 | REVIEW_PASSED → DONE | `/commit-and-pr` |
 
-surveywts routes to `pipeline-ship` at PLAN_READY. That skill is not ported
-here; `/r-implement` and `/commit-and-pr` cover the same ground.
+There is no `pipeline-ship` skill in this repo. The `shipper` agent gates the
+PR and hands a SHIP READY block back to the main session; `/commit-and-pr` then
+opens the PR and monitors CI.
 
 ## References
 

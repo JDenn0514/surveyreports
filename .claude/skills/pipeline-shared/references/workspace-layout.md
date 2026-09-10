@@ -18,6 +18,7 @@ reviews, decisions) live in `plans/` and are committed.
 │           ├── extraction-{slug}.md optional — one per attached paper
 │           ├── decisions.md         HOLD/STOP resolutions log
 │           ├── logs/                gate output (gate-{N}-*.log)
+│           │   └── baseline/        Before-column capture on a clean tree
 │           └── prs/
 │               └── pr-{n}-{slug}/
 │                   ├── implementation.md   builder output

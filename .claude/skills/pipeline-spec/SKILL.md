@@ -37,12 +37,13 @@ tier instead:
 
 | Change | Use |
 |---|---|
-| A clear bug fix in 1–2 functions, a test addition, a roxygen change | Tier 3 — branch, implement, PR |
+| A clear bug fix in 1–2 functions, or a test addition | Tier 3, code — `/pipeline-simplified` |
+| A roxygen change, or any Tier 3 change that edits no R code | Tier 3, docs — branch, implement, PR |
 | A typo, a comment, `.gitignore`, a README tweak | Tier 0 — commit to `develop` |
 | A medium bug fix, a new argument, an edge case where the behavior is obvious but the approach is not | Tier 2 — `/implementation-workflow`, then `/r-implement` |
 
 Running the pipeline on a Tier 3 change costs two documents, six dispatches,
-and a review loop to produce a one-line fix. Say so and stop.
+and a review loop to produce a one-line fix. Route it and stop.
 
 ## Preconditions
 
@@ -76,7 +77,10 @@ PASS, subject to the review-loop budget below.
    `.surveyreports-workspace/runs/{YYYY-MM-DD-id}/`
 3. Write `request.md` from the user's description, per `artifact-schemas.md`.
 4. Write `impact.md`. Assess scope and set the workflow tier result. If the
-   tier is not `tier-1-full`, stop here and route to that tier.
+   tier is not `tier-1-full`, stop here and route the request per
+   `artifact-schemas.md`, `impact.md` section. A `tier-3` change that edits R
+   code or a test routes to `/pipeline-simplified`, which keeps the run
+   directory you just created and continues from state NEW.
 5. Append `NEW` to `status.md`.
 
 ## Stage 0 — Deep Comprehension
@@ -297,8 +301,15 @@ On PASS from Stage 2 (where applicable) and Stage 3:
 `spec-workflow`. For a Tier 2 change that fits in one PR, call
 `/implementation-workflow` directly instead.
 
-surveywts routes to `pipeline-ship` after PLAN_READY. That skill is not ported
-here; `/r-implement` and `/commit-and-pr` cover the same ground.
+There is no `pipeline-ship` skill in this repo. The `shipper` agent gates the
+PR and hands a SHIP READY block back to the main session; `/commit-and-pr` then
+opens the PR and monitors CI.
+
+`/pipeline-simplified` runs the short chain, NEW → PLANNED → DONE, and reaches
+the same `shipper` and `/commit-and-pr` pair. It escalates back to this skill
+at Stage 0 when a small change grows. See
+`.claude/skills/pipeline-shared/references/state-model.md`, Simplified workflow
+section.
 
 ## References
 

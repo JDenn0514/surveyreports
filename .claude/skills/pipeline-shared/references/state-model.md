@@ -28,10 +28,38 @@ advance without them MUST refuse and report to the user.
 `SPEC_READY → PLAN_READY`. `/r-implement` and `/commit-and-pr` own the states
 after that.
 
-Note: surveywts also defines a shorter chain for small changes
-(`NEW → PLANNED → …`), driven by a `pipeline-simplified` skill. That skill is
-not ported here. For a change of that size, use workflow Tier 3 or Tier 0 from
-`.claude/rules/github-strategy.md §Workflow Tiers` instead.
+## Simplified workflow
+
+A Tier 3 change that edits R code or a test runs a shorter chain, driven by
+`/pipeline-simplified`:
+
+```
+NEW → PLANNED → DONE
+```
+
+| From | To | Preconditions |
+|------|----|----|
+| — | NEW | `request.md` exists. `impact.md` exists with the tier result `tier-3`. The change edits R code or a test file. |
+| NEW | PLANNED | `request.md` carries the four planner-lite sections: Change, Acceptance criteria, Write surface, Validation. |
+| PLANNED | DONE | `implementation.md` exists. `audit.md` exists with verdict = PASS. PR merged to `develop`. Branch deleted. |
+
+The two chains differ in three ways:
+
+1. **No spec artifacts.** `request.md` is the contract for both the builder and
+   the tester. There is no `spec-{id}.md` and no `test-spec-{id}.md`, so no
+   COMPREHENDED, SPEC_READY, or PLAN_READY state exists.
+2. **The tester is the quality gate.** No reviewer runs, so there is no
+   REVIEW_PASSED state and no STOP signal. `audit.md` verdict = PASS is what
+   the shipper reads.
+3. **Escalation replaces a BLOCK loop that will not close.** The chain has no
+   way to absorb a growing change. `status.md` records
+   `ESCALATED — {reason}`, and the request restarts on the full chain at
+   `pipeline-spec` Stage 0. Triggers are in `pipeline-simplified/SKILL.md`,
+   Escalation section.
+
+A Tier 3 change that edits only documentation runs no pipeline at all — branch,
+implement, PR. Tier 0 commits straight to `develop`. See
+`.claude/rules/github-strategy.md`, Workflow Tiers.
 
 ## Rules
 

@@ -72,8 +72,29 @@ output naming specifics only available there — the orchestrating skill MUST:
 
 ## When isolation is not worth its friction
 
-Isolation costs two documents and two dispatches. For a change that meets
-Tier 3 or Tier 0 in `.claude/rules/github-strategy.md §Workflow Tiers` — a
-clear bug fix in one or two functions, a test addition, a roxygen change — skip
-the pipeline entirely and use that tier. Do not run a half-isolated pipeline:
-either the two artifacts are independent or the barrier is theatre.
+Isolation costs two documents and two dispatches. A Tier 3 or Tier 0 change in
+`.claude/rules/github-strategy.md`, Workflow Tiers, does not earn that cost.
+Never run a half-isolated pipeline: either the two artifacts are independent,
+or the barrier is theatre.
+
+Two paths drop the barrier honestly.
+
+**Tier 0, and Tier 3 with a docs-only change.** No pipeline runs. Branch,
+implement, PR — or commit straight to `develop` for Tier 0.
+
+**Tier 3 with a change to R code or a test.** `/pipeline-simplified` runs, and
+it writes no `spec-{id}.md` and no `test-spec-{id}.md`. `request.md` is the
+contract both the builder and the tester read. Two barriers come down and two
+stay up:
+
+| Barrier | In simplified |
+|---|---|
+| The builder never reads the test-spec | Down — no test-spec exists. The builder may read and edit `tests/testthat/` |
+| The tester never reads the spec | Down — both read `request.md` |
+| The tester never reads `implementation.md` | Up |
+| The tester never relaxes a tolerance, and never skips a design type | Up |
+
+The two that stay up are what makes the tester an independent gate once the
+reviewer is gone. A change that would make either one costly — a new estimator,
+a moved number, a new exported contract — is above Tier 3 and belongs on the
+full chain.

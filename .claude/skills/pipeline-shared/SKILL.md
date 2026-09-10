@@ -16,11 +16,11 @@ and agents load specific reference files from here as needed.
 
 | File | Used by |
 |------|---------|
-| `references/state-model.md` | pipeline-spec, pipeline-implement |
-| `references/artifact-schemas.md` | planner, reviewer, pipeline-spec, pipeline-implement |
-| `references/pipeline-isolation.md` | builder, tester, reviewer, shipper, pipeline-implement |
+| `references/state-model.md` | pipeline-spec, pipeline-implement, pipeline-simplified |
+| `references/artifact-schemas.md` | planner, reviewer, pipeline-spec, pipeline-implement, pipeline-simplified |
+| `references/pipeline-isolation.md` | builder, tester, reviewer, shipper, pipeline-implement, pipeline-simplified |
 | `references/signals.md` | all agents |
-| `references/workspace-layout.md` | pipeline-spec, pipeline-implement, all agents |
+| `references/workspace-layout.md` | pipeline-spec, pipeline-implement, pipeline-simplified, all agents |
 | `references/r-package-profile.md` | builder, tester, reviewer |
 
 ## Relationship to the rule files
