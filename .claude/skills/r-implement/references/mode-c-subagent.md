@@ -63,7 +63,7 @@ After the implementer reports success, dispatch a spec compliance reviewer:
 > (1) every function signature matches the argument table,
 > (2) every error class from the spec's error table is present in the code,
 > (3) every output column matches the output contract,
-> (4) all three design types (taylor, replicate, twophase) are tested,
+> (4) every design type required by .claude/rules/testing.md is tested,
 > (5) no behavior was added beyond spec scope.
 > Report PASS or list specific deviations."
 

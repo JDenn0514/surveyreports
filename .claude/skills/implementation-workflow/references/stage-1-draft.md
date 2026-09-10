@@ -57,8 +57,8 @@ the spec.
 
 Rules for the PR map:
 
-- **One PR per `report_*()` function.** Never bundle multiple report functions
-  into one PR unless they share a helper that cannot ship alone.
+- **One PR per exported function.** Two exports ship together only when they
+  share a helper that cannot ship on its own.
 - Shared infrastructure (validators, helpers, test data generators) ships in its
   own PR before the functions that depend on it.
 - No PR should contain more than ~3 new R files + their test files.
@@ -81,8 +81,8 @@ Rules for the PR map:
 - [ ] All new tests confirmed failing (red) before implementation began
 - [ ] `devtools::check()` 0 errors, 0 warnings, ≤2 pre-approved notes
 - [ ] `devtools::document()` run; NAMESPACE and man/ in sync
-- [ ] Happy path tests pass for all three design types (taylor, replicate, twophase)
-- [ ] All 7 test categories from testing.md covered
+- [ ] Happy path tests pass for every design type in `testing.md`
+- [ ] Every section in this file's template in `testing.md` covered
 - [ ] Numerical oracle: estimates match surveycore::get_*() at point 1e-10, SE 1e-8
 - [ ] All error paths covered with dual pattern (class= + snapshot)
 - [ ] plans/error-messages.md updated if new error/warning classes introduced
@@ -99,6 +99,6 @@ in the spec — gotchas, ordering constraints, etc.]
 Tell the user:
 
 > "Review the PR map carefully — the scope of each PR is harder to change
-> once implementation starts. Confirm that no PR bundles report_*() functions
-> that should be separate. Run Stage 2 in a new session for an adversarial
-> review of this plan before handing off to `/r-implement`."
+> once implementation starts. Confirm that each PR carries one exported
+> function. Run Stage 2 in a new session for an adversarial review of this
+> plan before handing off to `/r-implement`."

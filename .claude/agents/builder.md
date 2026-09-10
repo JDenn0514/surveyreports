@@ -78,7 +78,8 @@ For each task in the PR's task list:
    needed. Do this before writing any R code.
 2. **Write the failing test.** A unit test in `tests/testthat/`. Expect the
    behavior the spec's Errors, Warnings, and Edge cases sections specify. Run
-   it against all three design types from `make_all_designs()`.
+   it against every design type from `make_all_designs()`, per
+   `.claude/rules/testing.md`.
 3. **Run it.** `Rscript -e 'devtools::test(filter = "{pattern}")'`. Confirm it
    fails for the right reason, not a typo.
 4. **Implement.** Write the minimum code to make it pass.

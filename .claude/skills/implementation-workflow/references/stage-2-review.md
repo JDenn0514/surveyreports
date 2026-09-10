@@ -24,13 +24,13 @@ corresponding spec if available — you need it to check coverage.
 
 The right PR is the smallest coherent unit of work:
 
-- Is there one PR per `report_*()` function? Bundling multiple report functions
-  is not acceptable unless they are inseparably linked (rare).
+- Is there one PR per exported function? Two exports in one PR are acceptable
+  only when they are inseparably linked (rare).
 - Are any PRs missing that should exist?
   (e.g., shared validators lumped into the first function's PR)
 - Does any PR contain more than ~3 new R files + their test files?
-- Is there a dedicated PR for shared infrastructure (`R/utils.R`, test helpers)
-  that ships before the functions depending on it?
+- Is there a dedicated PR for shared infrastructure (`R/export-utils.R`, test
+  helpers) that ships before the functions depending on it?
 - Is `tests/testthat/helper-test-data.R` (with `make_all_designs()` and
   `make_survey_data()`) in an infrastructure PR if it doesn't already exist?
 
@@ -48,21 +48,19 @@ The right PR is the smallest coherent unit of work:
 For every PR:
 
 - Are all acceptance criteria **objectively verifiable**?
-  ("works correctly" is not verifiable; "all 7 test categories from testing.md pass"
-  is.)
+  ("works correctly" is not verifiable; "every section of the testing.md
+  template for this file passes" is.)
 - Are the standard criteria present?
   - `devtools::check()` pass (0 errors, 0 warnings, ≤2 pre-approved notes)
   - `devtools::document()` run; NAMESPACE and man/ in sync
   - 98%+ line coverage stated
   - `plans/error-messages.md` update listed where new error classes are introduced
-- Are all 7 test categories from `testing.md` explicitly listed?
-  1. Happy path — all three design types
-  2. Multiple variables
-  3. Group argument
-  4. ci = FALSE (where applicable)
-  5. Error paths — dual pattern (class= + snapshot)
-  6. Edge cases — all-NA, single-row, single-value variable
-  7. Numerical accuracy — against surveycore::get_*() at stated tolerances
+- Are all the sections from this file's template in `testing.md` explicitly
+  listed? Every template ends with error paths, edge cases, and numerical
+  accuracy — check those three hardest, since they are the ones a plan drops:
+  - Error paths — dual pattern (`class=` + snapshot)
+  - Edge cases — all-NA, single-row, single-value variable, empty banner level
+  - Numerical accuracy — against `surveycore::get_*()` at stated tolerances
 - Are numerical tolerances stated for oracle tests? (point 1e-10, SE 1e-8, CI 1e-6)
 - Is `plans/error-messages.md` listed as a criterion for any PR that introduces
   new error or warning classes?
@@ -71,7 +69,7 @@ For every PR:
 
 Compare the plan against the spec:
 
-- Does every `report_*()` function in the spec have a corresponding PR?
+- Does every exported function in the spec have a corresponding PR?
 - Does every error class in the spec have a test requirement in the acceptance
   criteria?
 - Are any behaviors from the spec absent from the plan?
@@ -184,7 +182,7 @@ No new issues found.
 Ask yourself:
 
 - Have I applied all five lenses?
-- For every PR: did I check all 7 test categories, numerical tolerances, and
+- For every PR: did I check every template section, numerical tolerances, and
   all required files?
 - Have I cross-referenced against the spec for coverage gaps?
 - Is the overall assessment honest?

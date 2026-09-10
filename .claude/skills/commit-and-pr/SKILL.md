@@ -149,7 +149,7 @@ Format section).
 Pass the commit message via HEREDOC:
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(freqs): implement report_freqs() for all design types
+feat(export): add base notes to export_topline()
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF

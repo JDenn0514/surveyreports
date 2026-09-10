@@ -104,7 +104,7 @@ Each hit is a BLOCK. The tester reports in `audit.md`:
 ## CRAN cookbook violations
 | File | Line | Violation | Label |
 |------|------|-----------|-------|
-| R/report-freqs.R | 42 | T as logical | cookbook_tf_abbrev |
+| R/export-topline.R | 42 | T as logical | cookbook_tf_abbrev |
 ```
 
 ## DESCRIPTION checks

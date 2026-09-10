@@ -162,7 +162,7 @@ hints, no file paths from `R/`, no internal helper names.
 - {any second oracle, e.g. survey::svymean for a hand-check, with version}
 
 ## Datasets
-- `make_all_designs(seed = 42)` → the three design types; structure and error tests
+- `make_all_designs(seed = 42)` → every design type; structure and error tests
 - `make_survey_data(n = 200, n_psu = 20, n_strata = 4, seed = 123)` → plain data.frame
 - {package data: anes_2024 | gss_2024 | ns_wave1 | pew_jewish_2020} → {purpose}
 - Edge case data: inline in the test block, never a new generator parameter
@@ -173,10 +173,11 @@ hints, no file paths from `R/`, no internal helper names.
 
   | Scenario | Design type | Dataset | Expected | Tolerance |
   |----------|-------------|---------|----------|-----------|
-  | ... | taylor / replicate / twophase | ... | ... | 1e-10 |
+  | ... | taylor / replicate / twophase / nonprob | ... | ... | 1e-10 |
 
-- **Cross-design** — every scenario runs against all three design types from
-  `make_all_designs()`. A row naming one design type only is a gap.
+- **Cross-design** — every scenario runs against every design type in
+  `.claude/rules/testing.md`, Cross-design testing. A row naming one design
+  type only is a gap. A function that takes no design has no such row.
 - **Error paths** — one row per named error class
 
   | Error class | Trigger | Pattern |
@@ -251,7 +252,7 @@ No implementation hints. No file paths from `R/`. No internal helper names.
 **Acceptance criteria** — observable outcomes before merge:
 - [ ] devtools::check(): 0 errors, 0 warnings, at most 2 pre-approved notes
 - [ ] All tests in PR scope pass (list the specific test names)
-- [ ] Every scenario runs against all three design types
+- [ ] Every scenario runs against every design type required by `testing.md`
 - [ ] Coverage at or above 98% overall, 95% floor, no uncovered new lines
 - [ ] plans/error-messages.md updated (if applicable)
 
@@ -364,7 +365,7 @@ Logs: {log directory path}
 ## Convergence checks
 - Spec coverage: {the audit validates every item in spec-{id}.md Function contracts — y/n}
 - Test-spec coverage of spec: {test-spec-{id}.md covers every item in spec-{id}.md — y/n}
-- Cross-design coverage: {every function tested against all three design types — y/n}
+- Cross-design coverage: {every design-taking function tested against every required design type — y/n}
 - Tolerance integrity: {the tester used the tolerances from the test-spec — y/n}
 - Scope discipline: {implementation.md write surface matches the plan — y/n}
 - Regression safety: {no test outside PR scope changed state — y/n}

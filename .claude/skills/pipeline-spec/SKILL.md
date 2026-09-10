@@ -69,7 +69,7 @@ PASS, subject to the review-loop budget below.
 ## Setup (before Stage 0)
 
 1. Determine `{id}` — infer it from the user's description
-   (`report_freqs()` → `report-freqs`, "the crosstab totals" →
+   (`export_topline()` → `export-topline`, "the crosstab totals" →
    `crosstab-totals`). Ask if it is ambiguous. The `{id}` is the feature branch
    identifier and the suffix on every `plans/` filename.
 2. Create the workspace run directory:
@@ -180,7 +180,8 @@ Also verify, before advancing:
 - Every output column in `spec-{id}.md` Returns has a name, a type, and a
   presence condition
 - The Design support matrix has a yes or no in every row, no blanks
-- Every scenario in `test-spec-{id}.md` covers all three design types
+- Every scenario in `test-spec-{id}.md` covers every design type required by
+  `.claude/rules/testing.md`
 
 Append `DRAFT` to `status.md`.
 

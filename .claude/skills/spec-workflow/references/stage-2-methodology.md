@@ -50,24 +50,28 @@ a batch pass — do not resolve issues here. Resolution happens in Stage 2 Resol
 
 ### Lens 1 — Output Column Contracts
 
-The output tibble is the primary user-facing contract. Every column must be
-precisely defined.
+The output is the primary user-facing contract. For an `export_*()` function
+that is the written sheet; for a function that returns data it is the tibble.
+Both need every field defined.
 
-- Is every output column listed with its exact name, R type, and statistical meaning?
-- For proportion columns: is `prop` a probability (0–1) or a percentage? Is this
-  stated explicitly?
-- For SE columns: are `prop_se`, `mean_se`, etc. standard errors (not variances)?
-  Is this stated?
-- For count columns: is `n` the unweighted sample count or the weighted estimate?
-  Is this stated? Both cannot be named `n` without disambiguation.
-- For CI columns: are `prop_low` / `prop_high` (or equivalent) present only when
-  `ci = TRUE`? Are the column names consistent across all `report_*()` functions?
-- Does the column naming scheme follow a consistent pattern across functions
-  (e.g., `{estimand}_se`, `{estimand}_low`, `{estimand}_high`)?
-- When `group` is supplied: is the group column named `group`, or does it use the
-  actual variable name? Is this explicitly stated?
-- Are there any columns that would differ between design types (Taylor vs.
-  replicate vs. twophase)? If so, are those differences specified?
+The internal frame that feeds the sheet carries these columns — a spec that
+changes any of their meanings must say so: `value`, `pct`, `n`, `eff_n`,
+`variable`, `question_text`, `var_label`, `var_type`, `question_preface`,
+`group_id`, and the `subgroup_*` set.
+
+- Is every output field listed with its exact name, R type, and statistical
+  meaning?
+- Is `pct` a probability (0–1) or a percentage? Is this stated explicitly?
+- Are SE values standard errors, not variances? Is this stated?
+- Is `n` the unweighted sample count or the weighted estimate? Is this stated?
+  Both cannot be named `n` without disambiguation.
+- Is `eff_n` defined, and is the formula stated or delegated?
+- Are the SE and CI values present only under the `variance` values that
+  request them? Is the mapping from `variance` to written cells explicit?
+- For a written sheet: does the spec say which row each field lands on, and
+  what happens to a block that has no rows?
+- Are there any fields that would differ between design types? If so, are those
+  differences specified?
 
 ### Lens 2 — Confidence Interval Specification
 
@@ -83,65 +87,75 @@ all structure tests.
   Does the spec state which df is used, or delegate to surveycore?
 - If the spec delegates CI computation entirely to surveycore (i.e., surveycore
   returns CI bounds directly), is this stated explicitly? If so, does the spec
-  document what level surveycore uses and how `ci_level` is passed?
-- What happens when `ci = FALSE`? Are CI columns absent from the result, or present
+  document what level surveycore uses and how `conf_level` is passed?
+- What happens when `variance = NULL`? Are the SE and CI columns absent, or present
   with `NA` values? The spec must choose one and state it.
 - Are CI bounds guaranteed to respect the estimand's support (e.g., proportions
   bounded to [0, 1])? If surveycore does not enforce this, does surveyreports?
-- Is `ci_level` passed correctly to surveycore? The spec must show the mapping.
+- Is `conf_level` passed correctly to surveycore? The spec must show the mapping.
 
 ### Lens 3 — Statistical Delegation Accuracy
 
 surveyreports wraps `surveycore::get_*()`. An incorrect delegation contract
 produces silently wrong results.
 
-- For each design type (Taylor, replicate, twophase): which specific
-  `surveycore::get_*()` function is called? Is this stated?
-- What arguments are passed? Is every relevant argument (`ci`, `ci_level`,
-  `group`, domain column) shown in the delegation contract?
+- For each design type: which specific `surveycore::get_*()` function is
+  called? Is this stated?
+- What arguments are passed? Is every relevant argument (`conf_level`,
+  `variance`, the banner variable, the domain column) shown in the delegation
+  contract?
 - What does surveycore return? Is the spec's description of the return value
   consistent with what `get_*()` actually returns (column names, types,
   structure)?
 - Does the spec describe how surveyreports transforms surveycore output into the
   final tibble? Are any column renames, reorderings, or additions explicitly
   specified?
-- For multi-variable iteration: the spec must state that `report_*()` calls
-  surveycore once per variable (via `lapply()`). Is the iteration strategy shown,
-  including how results are combined (`dplyr::bind_rows()`)?
+- For multi-variable iteration: the spec must state that the function calls
+  surveycore once per variable. Is the iteration strategy shown, including how
+  the results are combined — a row cursor threaded through workbook blocks, or
+  `dplyr::bind_rows()` for a returned tibble?
+- Does the spec say how `surveycore::classify_question_type()` routes a
+  variable to the single, SATA, or battery path, and that a SATA or battery
+  group renders once for the group rather than once per variable?
 - If surveycore raises an error or warning for an edge case (e.g., all-NA
   variable), does the spec state whether surveyreports propagates it, catches it,
   or adds its own?
 
 ### Lens 4 — Cross-Design Consistency
 
-surveyreports must work correctly across Taylor, replicate, and twophase designs.
+surveyreports must work correctly across every `survey_base` subclass.
 
-- Does the spec explicitly state that all three design types are supported?
+- Does the spec's Design support matrix carry a yes or no for every design
+  type, with no blanks?
 - Are there any behavioral differences between design types? (Usually there
   should be none at the reporting layer — all differences are handled by
   surveycore.) If differences exist, are they intentional and documented?
 - Does the spec state how the design type is detected? (Via
   `S7::S7_inherits(design, surveycore::survey_base)` or similar — not string
   checks.)
-- Are edge cases (e.g., very small df in some replicate designs, empty domain
-  across all three types) addressed consistently?
+- Are edge cases (e.g., very small df in some replicate designs, an empty
+  domain) addressed consistently across design types?
 
-### Lens 5 — Domain and Grouping Behavior
+### Lens 5 — Domain, Banner, and Suppression Behavior
 
-Domain estimation and grouped analysis are the most common sources of subtle
-reporting errors.
+Domain estimation, banner splits, and suppression are the most common sources
+of subtle reporting errors.
 
-- When `group` is supplied: does the spec state that `report_*()` passes the
-  group argument to surveycore, or does it iterate over group levels manually?
-  The former is preferred; the latter is a delegation contract change.
-- When a domain is active on the design: does `report_*()` respect it? Is this
+- When a `banner` is supplied: does the spec state that the function passes the
+  banner variable to surveycore, or that it iterates over banner levels
+  manually? The former is preferred; the latter is a delegation contract
+  change.
+- When a domain is active on the design: does the function respect it? Is this
   stated explicitly?
-- When both `group` and a domain are active: does the spec define the composed
+- When both a banner and a domain are active: does the spec define the composed
   behavior?
-- For empty groups (a group level present in the design but with no in-domain
-  rows): what does the spec say happens? Silence is not acceptable.
-- Is the `group` column resolution specified? (Using `tidyselect::eval_select()`
-  per `package-conventions.md`.)
+- For an empty banner level (a level present in the design but with no
+  in-domain rows): what does the spec say happens? Silence is not acceptable.
+- Under `pub_type = "external"` or `"internal"`: does the spec state the
+  effective-n threshold, which cells are suppressed, and that a single warning
+  lists every suppressed subgroup?
+- Is the banner column resolution specified? (Using
+  `tidyselect::eval_select()` per `package-conventions.md`.)
 
 ---
 
@@ -259,7 +273,7 @@ Ask yourself:
 - Have I applied all five lenses?
 - Have I flagged every column whose statistical meaning is vague or unstated?
 - Have I verified the CI formula and df source are explicit?
-- Have I checked the delegation contract for all three design types?
+- Have I checked the delegation contract for every design type?
 - Is every issue assigned UNAMBIGUOUS or JUDGMENT CALL?
 - Is the overall assessment honest?
 

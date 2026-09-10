@@ -145,10 +145,11 @@ Follow `artifact-schemas.md` section `spec-{id}.md` exactly. Key rules:
 Follow `artifact-schemas.md` section `test-spec-{id}.md` exactly. Key rules:
 
 - Every spec contract item generates at least one test row.
-- **Every scenario runs against all three design types** from
-  `make_all_designs(seed = N)`. A scenario naming one design type only is a
-  gap, per `.claude/rules/testing.md`. This is the surveyreports equivalent of
-  an invariant check — it is not optional.
+- **Every scenario runs against every design type** from
+  `make_all_designs(seed = N)`, per `.claude/rules/testing.md`. A scenario
+  naming one design type only is a gap. This is the surveyreports equivalent
+  of an invariant check — it is not optional. A function that takes no design
+  is exempt.
 - The reference oracle is the single-variable `surveycore::get_*()` function.
   Name it, and name the columns being compared.
 - Default tolerances: point estimates `1e-10`, SE `1e-8`, CI bounds `1e-6`.
@@ -194,7 +195,7 @@ Before writing any artifact to disk, verify:
       condition
 - [ ] `test-spec-{id}.md` has zero file paths from `R/` and zero internal
       helper names
-- [ ] Every scenario in `test-spec-{id}.md` covers all three design types
+- [ ] Every scenario in `test-spec-{id}.md` covers every required design type
 - [ ] Neither file says "see the other document"
 - [ ] Every error class referenced exists in `plans/error-messages.md`
 - [ ] `impl-{id}.md` write surfaces are disjoint across concurrent PRs

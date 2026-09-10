@@ -71,10 +71,18 @@ Do not silently change it.
 
 ## Cross-design coverage (ABSOLUTE)
 
-`.claude/rules/testing.md` requires every `report_*()` and `export_*()`
-function to be tested against all three design types from
-`make_all_designs()`. A scenario run against one design type only is a BLOCK,
-classification `contract-miss`, even when that one run passes.
+`.claude/rules/testing.md` requires every function that accepts a `design` to
+be tested against all four `survey_base` subclasses from `make_all_designs()` —
+taylor, replicate, twophase, and nonprob. A scenario run against one design
+type only is a BLOCK, classification `contract-miss`, even when that one run
+passes.
+
+`pool_pvals()` takes a list of tibbles, not a design. This rule does not apply
+to it; mark its row N/A.
+
+`make_all_designs()` does not yet return a nonprob design. Until it does, mark
+the nonprob column `gap` rather than `pass` or an empty cell, and say so in
+`audit.md`.
 
 Fill in the Cross-design coverage table in `audit.md` for every function in
 scope. An empty cell is a BLOCK.
@@ -119,7 +127,7 @@ Record one row per scenario in the Per-Test Result Table in `audit.md`:
 ```
 | Test | Design type | Got | Expected | Tolerance | Pass |
 |------|-------------|-----|----------|-----------|------|
-| report_freqs prop vs get_freqs | taylor | 0.4213 | 0.4213 | 1e-10 | pass |
+| .build_freq_frame pct vs get_freqs | taylor | 0.4213 | 0.4213 | 1e-10 | pass |
 ```
 
 ## Step 3 — CRAN cookbook scan

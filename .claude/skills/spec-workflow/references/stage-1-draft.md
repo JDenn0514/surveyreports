@@ -10,14 +10,12 @@ questions:
     header: "Feature"
     multiSelect: false
     options:
-      - label: "report_freqs() — weighted frequencies and proportions"
-        description: "Tabulates one or more categorical variables across all three design types."
-      - label: "report_means() — survey-weighted means"
-        description: "Computes means with SEs and CIs for continuous variables."
-      - label: "report_totals() — estimated population totals"
-        description: "Computes weighted totals with SEs and CIs."
-      - label: "Other / new function"
-        description: "A new report_*() function or a utility/helper not listed above."
+      - label: "A change to an existing export"
+        description: "A new argument, a changed output contract, or a fix in export_topline(), export_crosstab(), or pool_pvals()."
+      - label: "A new output function"
+        description: "A new function that writes a formatted file from a survey design."
+      - label: "A new reporting helper"
+        description: "A function that supports the reporting workflow without writing a file."
 
   - question: "Is there an existing roadmap or prior spec to reference?"
     header: "Reference documents"
@@ -38,9 +36,10 @@ questions:
         description: "Rely on surveycore::get_*() conventions as specified."
 ```
 
-Confirm the `{id}` with the user if not obvious from context. Default patterns:
-`report_freqs()` → `report-freqs`, `report_means()` → `report-means`. The output
-file will be `plans/spec-{id}.md` — establish this before writing anything.
+Confirm the `{id}` with the user if it is not obvious from context. Derive it
+from the function or the feature: `export_topline()` → `export-topline`, "the
+crosstab base notes" → `crosstab-base-notes`. The output file will be
+`plans/spec-{id}.md` — establish this before writing anything.
 
 Wait for the user to provide any referenced documents. Read all provided context
 before writing a single line of the spec.
@@ -108,9 +107,9 @@ Required sections:
 
 Two rules carry the most weight:
 
-- **Every scenario covers all three design types.** A row naming one design
-  type only is a gap. `.claude/rules/testing.md` makes cross-design testing
-  required, and it is the surveyreports equivalent of an invariant check.
+- **Every scenario covers every design type** in `.claude/rules/testing.md`,
+  Cross-design testing. A row naming one design type only is a gap. This is
+  the surveyreports equivalent of an invariant check.
 - **Every error class from the spec gets both assertions** —
   `expect_error(class = )` and `expect_snapshot(error = TRUE)`.
 
@@ -142,10 +141,10 @@ These apply to `spec-{id}.md`.
   `> ⚠️ GAP: [description]` so they are easy to find.
 - The spec must explicitly state which `surveycore::get_*()` function is called
   for each design type and what the delegation contract is.
-- Cross-design behavior must be specified: what changes (if anything) between
-  Taylor, replicate, and twophase designs?
-- CI behavior must be fully specified: formula, df source, distribution (t vs z),
-  and what happens when `ci = FALSE`.
+- Cross-design behavior must be specified: what changes, if anything, between
+  the `survey_base` subclasses?
+- CI behavior must be fully specified: formula, df source, distribution (t vs
+  z), and what happens under each `variance` value.
 - Do NOT restate rules already defined in `code-style.md` or
   `package-conventions.md`. Reference them.
 

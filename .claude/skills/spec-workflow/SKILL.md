@@ -4,7 +4,7 @@ description: >
   Use this skill for any surveyreports spec work — drafting a new spec,
   running a methodology review, or resolving spec issues interactively. Trigger
   whenever the user says "draft spec", "review the spec", "resolve spec issues",
-  or "start planning" for a report_*() function or feature.
+  or "start planning" for an exported function or feature.
   Five-stage workflow: draft → methodology review → resolve → spec review →
   resolve + log. After Stage 4 is complete, move to /implementation-workflow.
 ---
@@ -135,7 +135,8 @@ authoritative — the spec doesn't need to repeat it.
 
 ## File Locations
 
-The `{id}` matches the feature branch identifier (e.g., `report-freqs`, `report-means`).
+The `{id}` matches the feature branch identifier (e.g., `export-topline`,
+`pool-pvals`).
 
 ```
 Spec (builder's input):   plans/spec-{id}.md
@@ -151,7 +152,7 @@ Under `/pipeline-spec`, the in-progress copies live in
 into `plans/` at SPEC_READY. See
 `.claude/skills/pipeline-shared/references/workspace-layout.md`.
 
-**Determining `{id}`:** Infer from user context first (e.g., "report_freqs spec" →
-`report-freqs`, "means spec" → `report-means`). If the spec file already exists,
+**Determining `{id}`:** Infer from user context first (e.g., "topline spec" →
+`export-topline`, "the pvals spec" → `pool-pvals`). If the spec file already exists,
 derive `{id}` from its filename. If ambiguous, ask the user before reading or
 writing any file.

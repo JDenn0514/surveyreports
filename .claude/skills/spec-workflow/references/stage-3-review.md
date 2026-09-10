@@ -54,8 +54,8 @@ barrier that makes independent verification mean anything.
 Find every place two functions describe the same behavior:
 
 - Validation logic (e.g., survey object check, vars-exist check) described
-  separately for multiple `report_*()` functions instead of referencing a
-  shared helper
+  separately for two exported functions instead of referencing a shared
+  helper
 - The same error condition appearing in two function error tables without
   cross-referencing
 - Test setup (design creation, data setup) that will clearly be duplicated
@@ -67,17 +67,19 @@ Find every place two functions describe the same behavior:
 
 Applies to `test-spec-{id}.md`.
 
-Apply all 7 test categories from `testing.md` to every exported function.
+Apply every section of the relevant `testing.md` template to every exported
+function.
 If a category doesn't apply to a specific function, mark it **N/A** and state
 why — N/A is a deliberate decision.
 
-1. **Happy path** — standard inputs, expected output; must cover all three design
-   types (taylor, replicate, twophase) via `make_all_designs()`
-2. **Multiple variables** — all vars appear in output; one row per variable (or
-   variable × value for freqs); test that `variable` column contains all input vars
-3. **Group argument** — group column present in result; rows split correctly by group
-4. **ci = FALSE** — CI columns absent from result (for functions where `ci` is
-   an argument); this is a structural check, not numerical
+1. **Happy path** — standard inputs, expected output; must cover every design
+   type in `.claude/rules/testing.md` via `make_all_designs()`
+2. **Multiple variables** — every variable appears in the output, one block per
+   variable in a workbook or one row per variable in a tibble
+3. **Banner argument** — one column group per banner level, plus the Total
+   column
+4. **Variance options** — the SE and CI cells appear under each `variance`
+   value and are absent otherwise; a structural check, not a numerical one
 5. **Error paths** — every row in the error table covered by the dual pattern:
    `expect_error(class = "surveyreports_error_*")` + `expect_snapshot(error = TRUE)`
 6. **Edge cases** — all-NA variable, single-row design, single-value variable,
@@ -147,9 +149,9 @@ These scenarios must appear explicitly somewhere in the spec:
 - Single-row design (degenerate for variance)
 - Domain-filtered design with empty domain
 
-**For CI:**
-- `ci = FALSE` (CI columns absent)
-- `ci_level` outside (0, 1) (→ typed error)
+**For variance and confidence:**
+- `variance = NULL` (SE and CI cells absent)
+- `conf_level` outside (0, 1) (→ typed error)
 
 "The implementation should handle edge cases gracefully" is not a spec.
 
@@ -162,7 +164,7 @@ behavior at boundaries, error class named in text but absent from the error
 table, helper functions called from 2+ places but not specified as shared.
 
 **Over-engineered:** abstraction layers without two real call sites in the spec,
-generalization for hypothetical future `report_*()` functions not in scope,
+generalization for hypothetical future functions not in scope,
 optimization specified before correctness is established.
 
 ### Lens 6 — API Coherence & User Expectations
@@ -190,8 +192,8 @@ The function must do what its name and signature suggest, for every valid input.
 **For the API as a whole:**
 - Would a survey analyst reading the function name and signature expect the
   described behavior?
-- Is there a plausible workflow where a user chains `report_*()` calls and gets
-  a silently wrong result?
+- Is there a plausible workflow where a user chains these calls and gets a
+  silently wrong result?
 
 "Methodologically correct but confusing" is flagged as REQUIRED.
 "Technically correct but will cause user error in realistic workflows" is flagged as BLOCKING.
@@ -294,7 +296,7 @@ Ask yourself:
 
 - Did I run the cross-artifact check before the lenses?
 - Have I applied all six lenses?
-- For Lens 2: did I check all 7 test categories for every exported function?
+- For Lens 2: did I check every template section for every exported function?
 - For Lens 3: did I Read `function-documentation.md`, and did I verify the
   documentation tier, argument order, `vars` resolution order, and the error
   table?

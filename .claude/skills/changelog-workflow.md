@@ -14,7 +14,8 @@ Populated: From git log develop..HEAD --oneline
 ```
 
 Where `{branch-name}` is the full branch name without the `feature/`, `fix/`,
-etc. prefix (e.g., branch `feature/report-freqs` → file `changelog/report-freqs.md`).
+etc. prefix (e.g., branch `feature/export-topline` → file
+`changelog/export-topline.md`).
 
 ---
 
@@ -63,26 +64,28 @@ These are enforced by `commit-and-pr` before a PR is opened:
 
 ## Example
 
-For a branch `feature/report-freqs`:
+For a branch `feature/export-topline-base-notes`:
 
 ```markdown
-# feat(freqs): implement report_freqs() for Taylor, replicate, and two-phase designs
+# feat(export): add base notes to export_topline()
 
 **Date**: 2026-05-10
-**Branch**: feature/report-freqs
+**Branch**: feature/export-topline-base-notes
 
 ## Changes
 
-- Implement `report_freqs()` returning a tibble with one row per variable × value
-- Add cross-design support for taylor, replicate, and twophase designs
-- Add `group` argument for grouped frequency tables
-- Add numerical accuracy tests comparing against `surveycore::get_freqs()`
-- Update `plans/error-messages.md` with new freqs-specific error classes
+- Add a `base_notes` argument that writes a per-question base note beneath
+  each block
+- Validate `base_notes` and raise a typed error for an unnamed list
+- Add cross-design tests for every design type from `make_all_designs()`
+- Update `plans/error-messages.md` with the new error class
 
 ## Files Modified
 
-- `R/report-freqs.R` — implement `report_freqs()` and internal helpers
-- `tests/testthat/test-report-freqs.R` — full test suite including cross-design and numerical accuracy
-- `plans/error-messages.md` — new error class rows for report_freqs validation
-- `_pkgdown.yml` — add `report_freqs` to the frequency functions reference section
+- `R/export-topline.R` — accept and thread `base_notes` through the render
+  helpers
+- `R/export-utils.R` — add `.validate_base_notes()` and `.write_base_note()`
+- `tests/testthat/test-export-topline.R` — cross-design and error-path tests
+- `tests/testthat/_snaps/export-topline.md` — snapshot for the new error
+- `plans/error-messages.md` — new error class row for base note validation
 ```

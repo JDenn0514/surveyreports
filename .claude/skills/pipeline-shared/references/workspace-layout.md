@@ -44,10 +44,10 @@ new one.
 ## Request ID
 
 Format: `YYYY-MM-DD-{slug}` where slug is short kebab-case. Example:
-`2026-09-09-report-freqs`. Stable across the whole lifecycle.
+`2026-09-09-export-topline`. Stable across the whole lifecycle.
 
 The `{id}` used inside `plans/` filenames is the slug alone, without the date —
-`spec-report-freqs.md`, not `spec-2026-09-09-report-freqs.md`. It matches the
+`spec-export-topline.md`, not `spec-2026-09-09-export-topline.md`. It matches the
 feature branch identifier.
 
 ## Gitignore

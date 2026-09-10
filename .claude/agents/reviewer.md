@@ -85,9 +85,13 @@ every test row:
 
 ## Step 3 — Cross-design coverage check
 
-Open `audit.md`, Cross-design coverage table. Every `report_*()` and
-`export_*()` function in the write surface must have a passing cell for
-taylor, replicate, and twophase.
+Open `audit.md`, Cross-design coverage table. Every function in the write
+surface that accepts a `design` must have a passing cell for taylor,
+replicate, twophase, and nonprob — the four `survey_base` subclasses.
+
+A function that takes no design (`pool_pvals()`) has no row to fill. So does a
+row marked `gap` for nonprob while `make_all_designs()` still returns three
+designs — note it, do not BLOCK on it.
 
 - An empty cell → BLOCK, traceable to the tester
 - A cell marked N/A → check `spec-{id}.md`, Design support matrix. N/A is
@@ -124,8 +128,8 @@ For each new or modified exported function in the write surface, verify against
   only gate on it
 - Every `@examples` block runs, includes a multi-variable call, and uses the
   data source the standard specifies for that function kind
-- `@seealso` names the underlying `surveycore::get_*()` for every `report_*()`
-  function, and every sibling in the same `@family`
+- `@seealso` names the underlying `surveycore::get_*()` for every function
+  that delegates estimation, and every sibling in the same `@family`
 - `@references` is present for any function implementing a published method,
   and for every Tier 3 and Tier 4 function
 - Mathematical notation uses `\eqn{}` / `\deqn{}` where subscripts,

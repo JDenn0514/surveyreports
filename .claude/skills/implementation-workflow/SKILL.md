@@ -103,7 +103,8 @@ Every stage works alongside — never instead of — these rule files:
 
 ## File Locations
 
-The `{id}` matches the feature branch identifier (e.g., `report-freqs`, `report-means`).
+The `{id}` matches the feature branch identifier (e.g., `export-topline`,
+`pool-pvals`).
 
 ```
 Implementation plan:  plans/impl-{id}.md

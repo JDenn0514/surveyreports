@@ -181,7 +181,8 @@ checks before marking it `[x]`:
 - Every error condition in the spec fires correctly and has a corresponding test?
 - Every explicitly listed edge case has a test?
 - Return type visibility matches the spec (`invisible()` vs. visible)?
-- All three design types tested (taylor, replicate, twophase)?
+- Every design type from `.claude/rules/testing.md` tested? (A function that
+  takes no design is exempt.)
 
 **Conventions** — does it follow the package rules?
 - `class=` on every `cli_abort()` and `cli_warn()`?
