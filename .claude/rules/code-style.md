@@ -92,15 +92,9 @@ if (!S7::S7_inherits(design, surveycore::survey_base)) {
 
 ### Design classes
 
-`survey_base` has four subclasses. A function that takes a `design` must work
-with all four:
-
-| Class | Created by |
-|-------|-----------|
-| `survey_taylor` | `surveycore::as_survey()` |
-| `survey_replicate` | `surveycore::as_survey_replicate()` |
-| `survey_twophase` | `surveycore::as_survey_twophase()` |
-| `survey_nonprob` | `surveycore::as_survey_nonprob()` |
+A function that takes a `design` must work with every `survey_base` subclass.
+`.claude/rules/testing.md`, **Cross-design testing**, holds the canonical list
+and each subclass's constructor.
 
 `survey_collection` is separate — it holds several designs for wave comparison
 and does NOT inherit `survey_base`. Check for it explicitly:

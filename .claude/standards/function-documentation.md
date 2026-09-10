@@ -61,8 +61,7 @@ the delegation. A user needs to know where the numbers come from:
 **Type annotation.** Lead every `@param` with a type annotation:
 
 ```r
-#' @param design A `survey_taylor`, `survey_replicate`, `survey_twophase`, or
-#'   `survey_nonprob`.
+#' @param file_name Character scalar. The path of the `.xlsx` file to write.
 ```
 
 **Defaults.** State the default first and call it the default:
@@ -80,15 +79,16 @@ output — not the internal mechanism. Mechanism goes in `@details` or a named
 section.
 
 **`@param design` specifically.** Lead with the accepted classes, then say what
-happens to the rest. Name the classes the function actually accepts:
+happens to the rest. Name every `survey_base` subclass the function accepts and
+link each one to its constructor — the canonical list is in
+`.claude/rules/testing.md`, **Cross-design testing**:
 
 ```r
-#' @param design A `survey_taylor`, `survey_replicate`, `survey_twophase`, or
-#'   `survey_nonprob`, created by [surveycore::as_survey()],
-#'   [surveycore::as_survey_replicate()], [surveycore::as_survey_twophase()],
-#'   or [surveycore::as_survey_nonprob()]. A `survey_collection` produces trend
-#'   output — see the **Design Types** section. A plain `data.frame` is an
-#'   error.
+#' @param design A `survey_taylor` or `survey_replicate`, created by
+#'   [surveycore::as_survey()] or [surveycore::as_survey_replicate()].
+#'   (Name every subclass the function accepts, not only these two.)
+#'   A `survey_collection` produces trend output — see the **Design Types**
+#'   section. A plain `data.frame` is an error.
 ```
 
 **tidy-select arguments.** Every tidy-select argument carries the standard
@@ -171,9 +171,9 @@ for a sub-section inside one (roxygen2 does not nest `@section`).
    meaning is not obvious from the name. Required whenever the column set
    changes with an argument (`ci`, `group`, `total`, `banner`).
 
-2. **Design Types** — how behavior differs across `survey_taylor`,
-   `survey_replicate`, `survey_twophase`, `survey_nonprob`, and
-   `survey_collection`. Documents
+2. **Design Types** — how behavior differs across the `survey_base` subclasses
+   (the list is in `.claude/rules/testing.md`, **Cross-design testing**) and
+   across `survey_collection`, which is not one of them. Documents
    *scope and availability* differences, not the variance formulas themselves —
    those are surveycore's. Include whenever the function accepts more than one
    design class and the handling differs.

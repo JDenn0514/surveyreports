@@ -11,7 +11,7 @@
 | Nesting | Flat — no `describe()` blocks |
 | Coverage target | 98%+ line coverage; PRs blocked below 95% |
 | Test categories | Happy path + error paths + edge cases |
-| All design types | Every design-taking function tested with all four `survey_base` subclasses: taylor, replicate, twophase, nonprob |
+| All design types | Every design-taking function tested with every `survey_base` subclass — see **Cross-design testing** for the list |
 | Private function testing | Default indirect; direct only when gap can't be closed via public API |
 | Error testing | Dual: `expect_error(class=)` + `expect_snapshot(error=TRUE)` for all user-facing errors |
 | Result structure | Assert the written sheet's cells, or the result tibble's columns and types, in every test block |
@@ -87,9 +87,23 @@ Every exported function must have tests in all three:
 
 ### Cross-design testing (REQUIRED)
 
-Every function that accepts a `design` must be tested with all four
-`survey_base` subclasses — taylor, replicate, twophase, and nonprob — via
-`make_all_designs()`. Loop over the names so a failure says which design broke:
+This table is the canonical list of `survey_base` subclasses for the whole
+repo. Every other rule, standard, skill, and agent file cites it instead of
+repeating it, so adding a subclass is an edit to this one table:
+
+| Subclass | Constructor |
+|----------|-------------|
+| `survey_taylor` | `surveycore::as_survey()` |
+| `survey_replicate` | `surveycore::as_survey_replicate()` |
+| `survey_twophase` | `surveycore::as_survey_twophase()` |
+| `survey_nonprob` | `surveycore::as_survey_nonprob()` |
+
+`survey_collection` is not in the table. It holds several designs for wave
+comparison and does NOT inherit `survey_base`.
+
+Every function that accepts a `design` must be tested with every subclass in
+the table, via `make_all_designs()`. Loop over the names so a failure says
+which design broke:
 
 ```r
 test_that("export_topline() writes a non-empty file for all design types", {
@@ -110,15 +124,15 @@ test_that("export_topline() writes a non-empty file for all design types", {
 Never write a test that covers only one design type.
 
 `export_topline()` also accepts a `survey_collection` for wave comparison. That
-is a fifth case, not one of the four — give it its own block.
+is a separate case, not one of the subclasses in the table — give it its own
+block.
 
 `pool_pvals()` takes a list of tibbles, not a design, so this rule does not
 apply to it.
 
-**Gap to close:** `make_all_designs()` currently returns three designs —
-`taylor`, `replicate`, and `twophase`. It must gain a `nonprob` entry built
-with `surveycore::as_survey_nonprob()`. Until it does, the loops above cover
-three of the four required subclasses.
+**Gap to close:** `make_all_designs()` returns no `nonprob` design yet. It must
+gain one, built with `surveycore::as_survey_nonprob()`. Until it does, the
+loops above cover every subclass in the table except `survey_nonprob`.
 
 ### Result structure assertions
 
@@ -293,32 +307,26 @@ Numerical tolerances:
 
 ### `make_all_designs()` and `make_survey_data()`
 
-Both defined in `tests/testthat/helper-test-data.R`:
+Both defined in `tests/testthat/helper-test-data.R` — read it for the column
+names and the design arguments:
 
 ```r
-# make_all_designs: named list of design objects
-designs <- make_all_designs(seed = 42)
-# designs$taylor    — survey_taylor
-# designs$replicate — survey_replicate (JK1, delete-one-PSU jackknife)
-# designs$twophase  — survey_twophase
-# designs$nonprob   — survey_nonprob  (not present yet; see the gap above)
-
-# make_survey_data: plain data.frame, 19 columns
+designs <- make_all_designs(seed = 42)  # named list of designs, keyed by subclass
 df <- make_survey_data(n = 200, n_psu = 20, n_strata = 4, seed = 123)
 ```
 
-`make_survey_data()` columns, by what they are for:
+What the fixture covers, which the column names alone do not say:
 
-| Columns | For testing |
-|---------|-------------|
-| `psu`, `strata`, `fpc`, `wt` | Design construction |
-| `y1`, `y2`, `y3` | Continuous variables |
-| `q1`, `q2` | Categorical single-response questions |
-| `group` | A banner variable |
-| `sata_a`, `sata_b`, `sata_c` | Select-all-that-apply blocks |
-| `bat_1`, `bat_2`, `bat_3` | Battery blocks on a shared 1–5 scale |
-| `in_phase2` | The phase-2 indicator for the two-phase design |
-| `all_na_var` | The all-NA edge case |
+- **All three question shapes the export functions dispatch on** —
+  single-response, select-all-that-apply, and battery. The SATA and battery
+  groups already carry their surveycore metadata, so a dispatch test needs no
+  setup.
+- **A phase-2 indicator**, so the two-phase design has a subset to build from.
+- **An all-NA column.** Use it for the all-NA edge case rather than adding a
+  second one.
+
+The column set of both functions is fixed. An edge case gets built in the test
+body instead — see **Edge case data: inline** below.
 
 | Test type | Data source |
 |-----------|-------------|
@@ -339,11 +347,7 @@ test_that("export_topline() handles a single-value variable", {
 ```
 
 Do not add edge case parameters to `make_all_designs()` or
-`make_survey_data()`. Their column set is fixed; build the edge case in the
-test body by assigning into `d@data`.
-
-`all_na_var` is already a column in `make_survey_data()`. Use it rather than
-adding a second all-NA column.
+`make_survey_data()`. Assign into `d@data` instead, as above.
 
 ### `skip_if_not_installed()` — block-level
 

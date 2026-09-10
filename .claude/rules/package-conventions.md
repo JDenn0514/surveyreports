@@ -32,10 +32,14 @@
 Write `@param` proportional to how non-obvious the argument is. Terse for simple
 arguments; fuller for anything with constraints, `NULL` behavior, or interactions.
 
+The `@param design` entry names every accepted subclass and links each one to
+its constructor. Take the list from `.claude/rules/testing.md`, **Cross-design
+testing**; take the wording from
+`.claude/standards/function-documentation.md`.
+
 ```r
-#' @param design A survey design object created by [surveycore::as_survey()],
-#'   [surveycore::as_survey_replicate()], [surveycore::as_survey_twophase()],
-#'   or [surveycore::as_survey_nonprob()]. `export_topline()` also accepts a
+#' @param design A survey design object created by one of the
+#'   `surveycore::as_survey*()` constructors. `export_topline()` also accepts a
 #'   [surveycore::as_survey_collection()] object for wave comparison.
 #'
 #' @param vars <[`tidy-select`][tidyselect::language]> Variable(s) to tabulate.
@@ -286,57 +290,19 @@ Pre-approved notes (do not block merging):
 Run `devtools::document()` before committing any roxygen2 changes.
 Run `devtools::check()` before opening any PR.
 
-**Version pinning:** minimum bounds only — `cli (>= 3.6.0)`, `rlang (>= 1.1.0)`,
-`surveycore (>= 0.8.2)`. No exact pins (`==`).
+**Version pinning:** minimum bounds only. No exact pins (`==`).
 
 ---
 
 ## 6. Package Metadata
 
-DESCRIPTION:
+Read DESCRIPTION for its current contents. Two of its lines carry a reason the
+file itself does not state, and both must stay:
 
-```
-Package: surveyreports
-Title: Automate Survey Analysis and Helpers
-Version: 0.0.0.9000
-Authors@R:
-    person("Jacob", "Dennen", , "jdenn0514@gmail.com",
-           role = c("aut", "cre", "cph"),
-           comment = c(ORCID = "0000-0003-3006-7364"))
-Description: Automate reporting analyses over multiple variables for Taylor
-    series, replicate weight, and two-phase survey designs. Some common
-    analyses covered by this package are frequencies/cross-tabs, descriptive
-    statistics, t-tests, and others.
-License: GPL (>= 3)
-Encoding: UTF-8
-LazyData: true
-Roxygen: list(markdown = TRUE)
-Depends:
-    R (>= 4.3.0)
-Imports:
-    cli (>= 3.6.0),
-    dplyr (>= 1.0.0),
-    openxlsx2 (>= 1.0.0),
-    rlang (>= 1.0.0),
-    S7,
-    surveycore (>= 0.8.2),
-    tibble (>= 3.0.0),
-    tidyselect (>= 1.2.0)
-Suggests:
-    covr,
-    knitr,
-    rmarkdown,
-    testthat (>= 3.0.0),
-    withr (>= 2.5.0)
-Remotes:
-    JDenn0514/surveycore
-VignetteBuilder: knitr
-Config/testthat/edition: 3
-Config/roxygen2/version: 8.1.0
-```
-
-`LazyData: true` is required — the package ships four datasets. `Remotes:`
-carries surveycore, which is not on CRAN. Neither line may be removed.
+- `LazyData: true` — the package ships four datasets, and they load lazily.
+- `Remotes: JDenn0514/surveycore` — surveycore is not on CRAN. It belongs in
+  `Imports`, never in `Suggests`. Moving it to `Suggests`, or dropping the
+  `Remotes:` line, breaks installation.
 
 Package-level documentation (`R/surveyreports-package.R`):
 

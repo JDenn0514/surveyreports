@@ -54,10 +54,11 @@ The output is the primary user-facing contract. For an `export_*()` function
 that is the written sheet; for a function that returns data it is the tibble.
 Both need every field defined.
 
-The internal frame that feeds the sheet carries these columns — a spec that
-changes any of their meanings must say so: `value`, `pct`, `n`, `eff_n`,
-`variable`, `question_text`, `var_label`, `var_type`, `question_preface`,
-`group_id`, and the `subgroup_*` set.
+The internal frame that feeds a sheet is not part of the contract. Its columns
+are private and change freely, so a spec that says nothing about them is
+correct, not incomplete. Check the contract the caller sees: every written cell
+and every returned field. A spec that renames one, drops one, or changes what
+one means must say so.
 
 - Is every output field listed with its exact name, R type, and statistical
   meaning?
