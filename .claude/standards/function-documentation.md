@@ -30,8 +30,8 @@ These apply to every exported function, whatever its tier.
 - Write an active verb phrase in the present tense: "Tabulate weighted
   frequencies", not "Frequency tabulation" or "Tabulating frequencies"
 - Do not repeat the verb in the function name — use a second angle on intent
-  (`report_freqs()` → "Tabulate weighted frequencies across many variables",
-  not "Report frequencies")
+  (`export_topline()` → "Write a formatted topline workbook", not "Export a
+  topline")
 - Drop "survey" from the title where the package context already implies it
 - Say what is unique about this function against its siblings in the same
   `@family`. If two functions in a family share a title, one of them is wrong
@@ -61,7 +61,8 @@ the delegation. A user needs to know where the numbers come from:
 **Type annotation.** Lead every `@param` with a type annotation:
 
 ```r
-#' @param design A `survey_taylor`, `survey_replicate`, or `survey_twophase`.
+#' @param design A `survey_taylor`, `survey_replicate`, `survey_twophase`, or
+#'   `survey_nonprob`.
 ```
 
 **Defaults.** State the default first and call it the default:
@@ -82,9 +83,10 @@ section.
 happens to the rest. Name the classes the function actually accepts:
 
 ```r
-#' @param design A `survey_taylor`, `survey_replicate`, or `survey_twophase`
-#'   created by [surveycore::as_survey()], [surveycore::as_survey_rep()], or
-#'   [surveycore::as_survey_twophase()]. A `survey_collection` produces trend
+#' @param design A `survey_taylor`, `survey_replicate`, `survey_twophase`, or
+#'   `survey_nonprob`, created by [surveycore::as_survey()],
+#'   [surveycore::as_survey_replicate()], [surveycore::as_survey_twophase()],
+#'   or [surveycore::as_survey_nonprob()]. A `survey_collection` produces trend
 #'   output — see the **Design Types** section. A plain `data.frame` is an
 #'   error.
 ```
@@ -117,8 +119,8 @@ by `R CMD check`.
 
 - Describe the output's **shape** — class, one row per what — and its
   **behavioral guarantees**
-- Enumerate the columns. For a report function this is the contract, so name
-  every column, its type, and when it is present:
+- Enumerate the columns. For a function that returns data this is the
+  contract, so name every column, its type, and when it is present:
 
 ```r
 #' @returns A tibble with one row per variable and response category:
@@ -170,7 +172,8 @@ for a sub-section inside one (roxygen2 does not nest `@section`).
    changes with an argument (`ci`, `group`, `total`, `banner`).
 
 2. **Design Types** — how behavior differs across `survey_taylor`,
-   `survey_replicate`, `survey_twophase`, and `survey_collection`. Documents
+   `survey_replicate`, `survey_twophase`, `survey_nonprob`, and
+   `survey_collection`. Documents
    *scope and availability* differences, not the variance formulas themselves —
    those are surveycore's. Include whenever the function accepts more than one
    design class and the handling differs.
@@ -228,13 +231,12 @@ Required, not optional, in three cases:
 
 1. **Dispatchers** — link to every function the dispatcher routes to
 2. **Sibling functions** — link to every other function in the same `@family`
-3. **The underlying surveycore function** — every `report_*()` links to the
-   single-variable `surveycore::get_*()` it delegates to
+3. **The underlying surveycore function** — every function that delegates
+   estimation links to the single-variable `surveycore::get_*()` it calls
 
 ```r
 #' @seealso
-#'   [report_means()] for continuous variables,
-#'   [report_totals()] for estimated totals,
+#'   [export_topline()] for topline (no banner) output,
 #'   [surveycore::get_freqs()] for the single-variable underlying function
 ```
 
@@ -249,11 +251,11 @@ to show:
 
 | Function kind | Data |
 |---|---|
-| `report_*()`, `export_*()` | Package data — `anes_2024`, `gss_2024`, `ns_wave1`, `pew_jewish_2020`. Real labels, real factor levels, and real missingness are part of what the example demonstrates |
+| `export_*()` | Package data — `anes_2024`, `gss_2024`, `ns_wave1`, `pew_jewish_2020`. Real labels, real factor levels, and real missingness are part of what the example demonstrates. Write the output to `tempfile()` |
 | Utilities with no design input (`pool_pvals()`) | A small inline object, as in `package-conventions.md` section 1 |
 
 A small inline `data.frame` piped through `surveycore::as_survey()` stays
-acceptable for a `report_*()` function whose point is the argument surface
+acceptable for an `export_*()` function whose point is the argument surface
 rather than the data — but prefer package data where labels or missingness
 matter to the output.
 
@@ -374,11 +376,13 @@ statistical table as output, and estimation delegated to
 
 ### Illustrative examples
 
-- `report_freqs()` — Output Columns section for the `ci` and `group` column
-  sets; Design Types section for the `survey_collection` trend path; Algorithm
-  section only for the CI construction it does on top of
+- `export_topline()` — Output Columns section for the `show_n` and
+  `show_eff_n` column sets; Design Types section for the `survey_collection`
+  trend path; Algorithm section only for the CI construction it does on top of
   `surveycore::get_freqs()`
-- `report_means()` — same shape, `@family descriptive statistics`
+- `export_crosstab()` — same shape, plus an Output Columns note on the banner
+  column groups and the Total column, and a Missing Data note on suppression
+  under `pub_type`
 
 ---
 

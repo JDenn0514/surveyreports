@@ -2,7 +2,12 @@
 
 **Part of the surveyverse ecosystem.**
 
-surveyreports automates reporting analyses over multiple variables for Taylor series, replicate weight, and two-phase survey designs.
+surveyreports turns a survey design into finished reporting output. It writes
+formatted spreadsheets over many variables at once, and supplies helpers for
+the steps around them. It supports Taylor series, replicate weight, two-phase,
+and non-probability designs.
+
+Exported functions: `export_topline()`, `export_crosstab()`, `pool_pvals()`.
 
 ---
 

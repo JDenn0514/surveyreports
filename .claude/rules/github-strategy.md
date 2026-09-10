@@ -76,7 +76,8 @@ Format: `{type}/{short-description}`
 | `chore/` | Maintenance (CI config, build tooling) |
 | `refactor/` | Internal restructuring, no behavioral change |
 
-Examples: `feature/report-freqs`, `fix/report-freqs-empty-domain`, `test/report-freqs-cross-design`
+Examples: `feature/export-topline-base-notes`, `fix/crosstab-empty-banner-level`,
+`test/topline-cross-design`
 
 ---
 
@@ -96,21 +97,26 @@ Examples: `feature/report-freqs`, `fix/report-freqs-empty-domain`, `test/report-
 | `refactor` | Internal restructuring with no behavioral change |
 | `perf` | Performance improvement |
 
-Scopes: `freqs`, `means`, `totals`, `crosstabs`, `t-test`, `utils`, `ci`,
-`context`, `pipeline`
+Scopes: `export`, `pvals`, `data`, `pipeline`, `ci`, `docs`
 
-Use `pipeline` for the workflow skills, agents, and rule files under
-`.claude/` — the pipeline machinery rather than the package code.
+| Scope | Covers |
+|-------|--------|
+| `export` | `R/export-topline.R`, `R/export-crosstab.R`, `R/export-utils.R` |
+| `pvals` | `R/pool-pvals.R` and the `print.survey_pooled_pvals()` method |
+| `data` | `R/data.R` and the bundled datasets |
+| `pipeline` | The workflow skills, agents, and rule files under `.claude/` |
+| `ci` | GitHub Actions workflows and coverage config |
+| `docs` | README, `_pkgdown.yml`, vignettes, and files in `plans/` |
 
 Examples:
 ```
-feat(freqs): implement report_freqs() for Taylor and replicate designs
-fix(freqs): handle all-NA variable without error
-test(freqs): add cross-design tests for domain filtering
+feat(export): add show_eff_n to topline and crosstab
+fix(export): handle an empty banner level without error
+test(pvals): add BH edge cases for a single-row family
 chore(ci): add test-coverage GitHub Actions workflow
 ```
 
-Squash merge commit: `feat(freqs): implement report_freqs() for all design types (#3)`
+Squash merge commit: `feat(export): add base notes to topline and crosstab (#3)`
 
 ---
 
@@ -120,6 +126,8 @@ Squash merge commit: `feat(freqs): implement report_freqs() for all design types
 - [ ] R CMD check: 0 errors, 0 warnings (`devtools::check()`)
 - [ ] Roxygen docs updated and `devtools::document()` run
 - [ ] `plans/error-messages.md` updated (if new errors/warnings added)
+- [ ] `_pkgdown.yml` updated (if a new export was added)
+- [ ] Changelog entry created at `changelog/{branch-name}.md`
 - [ ] PR title is a valid Conventional Commit (`feat(scope): description`)
 
 ---
@@ -133,8 +141,8 @@ Squash merge commit: `feat(freqs): implement report_freqs() for all design types
 
 | Tag | What it means |
 |-----|---------------|
-| `v0.1.0` | Phase 0 complete — core report functions |
-| `v0.2.0` | Phase 1 complete — extended analyses |
+| `v0.1.0` | Core output functions — `export_topline()`, `export_crosstab()` |
+| `v0.2.0` | Reporting helpers beyond the two export functions |
 | `v1.0.0` | Stable API, CRAN submission |
 
 ---

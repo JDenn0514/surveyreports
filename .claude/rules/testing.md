@@ -11,17 +11,17 @@
 | Nesting | Flat — no `describe()` blocks |
 | Coverage target | 98%+ line coverage; PRs blocked below 95% |
 | Test categories | Happy path + error paths + edge cases |
-| All design types | Every `report_*()` tested with all three: taylor, replicate, twophase |
+| All design types | Every design-taking function tested with all four `survey_base` subclasses: taylor, replicate, twophase, nonprob |
 | Private function testing | Default indirect; direct only when gap can't be closed via public API |
 | Error testing | Dual: `expect_error(class=)` + `expect_snapshot(error=TRUE)` for all user-facing errors |
-| Result structure | Assert tibble columns present and correct types in every test block |
+| Result structure | Assert the written sheet's cells, or the result tibble's columns and types, in every test block |
 | Numerical accuracy | Compare against surveycore's `get_*()` functions |
 | Snapshot failures | Block PRs; update via `snapshot_review()` before opening |
 | Warning capture | `expect_warning()` wrapping call; result from return value |
 | Structural assertions | `expect_identical()` |
 | Numeric assertions | `expect_equal()` |
 | Synthetic data | `make_all_designs(seed = N)` in `helper-test-data.R` |
-| Edge case data | Inline in tests — never add edge case params to a data generator |
+| Edge case data | Inline in tests; the generator carries only the fixed columns it already has |
 | `skip_if_not_installed` | Block-level, inside the affected `test_that()` block |
 
 ---
@@ -30,10 +30,11 @@
 
 | Source file | Test file |
 |-------------|-----------|
-| `R/report-freqs.R` | `tests/testthat/test-report-freqs.R` |
-| `R/report-means.R` | `tests/testthat/test-report-means.R` |
-| `R/report-totals.R` | `tests/testthat/test-report-totals.R` |
-| `R/utils.R` | (covered inline by other test files) |
+| `R/export-topline.R` | `tests/testthat/test-export-topline.R` |
+| `R/export-crosstab.R` | `tests/testthat/test-export-crosstab.R` |
+| `R/pool-pvals.R` | `tests/testthat/test-pool-pvals.R` |
+| `R/export-utils.R` | (covered inline by the two export test files) |
+| `R/data.R` | `tests/testthat/test-package.R` |
 
 ---
 
@@ -44,11 +45,11 @@ categories:
 
 ```r
 # Correct
-test_that("report_freqs() rejects non-survey-design input", { ... })
-test_that("report_freqs() returns one row per variable × value", { ... })
+test_that("export_topline() rejects non-survey-design input", { ... })
+test_that("export_topline() writes one block per variable", { ... })
 
 # Wrong — vague
-test_that("report_freqs() validates input", { ... })
+test_that("export_topline() validates input", { ... })
 ```
 
 **Flat structure only.** No `describe()` blocks.
@@ -81,41 +82,75 @@ Every exported function must have tests in all three:
 
 1. **Happy path** — normal inputs, expected behavior
 2. **Error paths** — every typed error class from `plans/error-messages.md`
-3. **Edge cases** — all-NA variable, single-row data, single-value variable, empty domain
+3. **Edge cases** — all-NA variable, single-row data, single-value variable,
+   empty banner level, a missing variable label
 
 ### Cross-design testing (REQUIRED)
 
-Every `report_*()` function must be tested with all three design types via
-`make_all_designs()`:
+Every function that accepts a `design` must be tested with all four
+`survey_base` subclasses — taylor, replicate, twophase, and nonprob — via
+`make_all_designs()`. Loop over the names so a failure says which design broke:
 
 ```r
-test_that("report_freqs() returns a tibble for all design types", {
+test_that("export_topline() writes a non-empty file for all design types", {
+  skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
-  for (d in designs) {
-    result <- report_freqs(d, vars = q1)
-    expect_s3_class(result, "tbl_df")
-    expect_true(all(c("variable", "value", "prop") %in% names(result)))
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    file.remove(out)
+    export_topline(designs[[nm]], vars = q1, file_name = out)
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    expect_gt(file.info(out)$size, 0L, label = paste0(nm, ": non-empty"))
   }
 })
 ```
 
-Never write a test that only covers one design type.
+Never write a test that covers only one design type.
+
+`export_topline()` also accepts a `survey_collection` for wave comparison. That
+is a fifth case, not one of the four — give it its own block.
+
+`pool_pvals()` takes a list of tibbles, not a design, so this rule does not
+apply to it.
+
+**Gap to close:** `make_all_designs()` currently returns three designs —
+`taylor`, `replicate`, and `twophase`. It must gain a `nonprob` entry built
+with `surveycore::as_survey_nonprob()`. Until it does, the loops above cover
+three of the four required subclasses.
 
 ### Result structure assertions
 
 Assert structure before numerical checks in every block:
 
+An `export_*()` function returns a path, so assert on the workbook it wrote:
+
 ```r
-test_that("report_freqs() returns the expected columns", {
+test_that("export_topline() returns the path invisibly and writes the sheet", {
+  skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
-  result <- report_freqs(d, vars = q1)
+  out <- withr::local_tempfile(fileext = ".xlsx")
 
-  expect_s3_class(result, "tbl_df")
-  expect_true(all(c("variable", "value", "prop", "prop_se") %in% names(result)))
-  expect_true(is.character(result$variable))
-  expect_true(is.numeric(result$prop))
+  result <- withVisible(export_topline(d, vars = q1, file_name = out))
 
-  expect_identical(unique(result$variable), "q1")
+  expect_false(result$visible)
+  expect_identical(result$value, out)
+
+  wb <- openxlsx2::wb_load(out)
+  expect_true("Topline" %in% wb$sheet_names)
+})
+```
+
+For `pool_pvals()`, which returns data, assert the columns and their types:
+
+```r
+test_that("pool_pvals() returns the adjusted p-value column", {
+  result <- pool_pvals(list(tibble::tibble(p_value = c(0.01, 0.05))))
+
+  expect_s3_class(result, "survey_pooled_pvals")
+  expect_true(all(c("p_value", "p_value_adj") %in% names(result)))
+  expect_true(is.numeric(result$p_value_adj))
 })
 ```
 
@@ -133,26 +168,34 @@ coverage cannot be closed indirectly AND the behavior is material.
 All surveyreports errors are user-facing. Use both assertions:
 
 ```r
-test_that("report_freqs() errors when design is not a survey object", {
+test_that("export_topline() errors when design is not a survey object", {
   df <- data.frame(q1 = 1:5, wt = rep(1, 5))
+  out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_error(
-    report_freqs(df, vars = q1),
+    export_topline(df, vars = q1, file_name = out),
     class = "surveyreports_error_not_survey_object"
   )
-  expect_snapshot(error = TRUE, report_freqs(df, vars = q1))
+  expect_snapshot(
+    error = TRUE,
+    export_topline(df, vars = q1, file_name = out)
+  )
 })
 
-test_that("report_freqs() errors when vars are not in the design", {
+test_that("export_topline() errors when vars are not in the design", {
+  skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_error(
-    report_freqs(d, vars = nonexistent_var),
+    export_topline(d, vars = nonexistent_var, file_name = out),
     class = "surveyreports_error_var_not_found"
   )
-  expect_snapshot(error = TRUE, report_freqs(d, vars = nonexistent_var))
 })
 ```
+
+Snapshot the message for each error class once. Repeating the snapshot for
+every function that raises the same class adds files without adding coverage.
 
 ### Snapshots
 
@@ -164,16 +207,27 @@ Snapshots live in `tests/testthat/_snaps/` and are committed to version control.
 ### Warning capture
 
 ```r
-test_that("report_freqs() warns and still returns a result for all-NA variable", {
+test_that("export_crosstab() warns when a subgroup is suppressed", {
+  skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_warning(
-    result <- report_freqs(d, vars = all_na_var),
-    class = "surveyreports_warning_all_na"
+    result <- export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      pub_type = "external"
+    ),
+    class = "surveyreports_warning_subgroup_suppressed"
   )
-  expect_s3_class(result, "tbl_df")
+  expect_identical(result, out)
+  expect_true(file.exists(out))
 })
 ```
+
+A warning must not stop the write. Assert the file still exists.
 
 Do not use `withCallingHandlers()` or `tryCatch()` in tests.
 
@@ -189,26 +243,39 @@ Do not use `withCallingHandlers()` or `tryCatch()` in tests.
 
 ## Numerical Accuracy Testing
 
-Compare `report_*()` output against surveycore's single-variable `get_*()` functions.
-Put these in a dedicated section at the end of each test file.
+Compare the estimates surveyreports computes against surveycore's
+single-variable `get_*()` functions. Put these in a dedicated section at the end
+of each test file and tag the description `[numerical]`.
+
+An `export_*()` function returns a path, so its numbers are not reachable from
+the return value. Test the frame builder directly instead — this is the one
+place where testing an internal helper beats going through the public API:
 
 ```r
-test_that("report_means() matches surveycore::get_means() per variable [numerical]", {
+test_that(".build_freq_frame() totals match surveycore::get_freqs() [numerical]", {
+  skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
+  clf <- surveycore::classify_question_type(d, "q1")
 
-  sc_result <- surveycore::get_means(d, y1)
-  rr_result <- report_means(d, vars = y1)
+  frame <- surveyreports:::.build_freq_frame(
+    d,
+    "q1",
+    clf,
+    conf_level = 0.95,
+    show_eff_n = FALSE
+  )$frame
+  total_rows <- frame[frame$subgroup_type == "total", ]
 
-  expect_equal(
-    rr_result$mean[rr_result$variable == "y1"],
-    sc_result$mean,
-    tolerance = 1e-10
-  )
-  expect_equal(
-    rr_result$mean_se[rr_result$variable == "y1"],
-    sc_result$se,
-    tolerance = 1e-8
-  )
+  ref <- suppressWarnings(surveycore::get_freqs(d, q1))
+
+  for (val in ref[[1L]]) {
+    expect_equal(
+      total_rows$pct[total_rows$value == as.character(val)],
+      ref$pct[ref[[1L]] == val],
+      tolerance = 1e-10,
+      label = paste0("pct match for value '", val, "'")
+    )
+  }
 })
 ```
 
@@ -229,16 +296,29 @@ Numerical tolerances:
 Both defined in `tests/testthat/helper-test-data.R`:
 
 ```r
-# make_all_designs: named list of three design objects
+# make_all_designs: named list of design objects
 designs <- make_all_designs(seed = 42)
 # designs$taylor    — survey_taylor
-# designs$replicate — survey_replicate (BRR)
+# designs$replicate — survey_replicate (JK1, delete-one-PSU jackknife)
 # designs$twophase  — survey_twophase
+# designs$nonprob   — survey_nonprob  (not present yet; see the gap above)
 
-# make_survey_data: plain data.frame
+# make_survey_data: plain data.frame, 19 columns
 df <- make_survey_data(n = 200, n_psu = 20, n_strata = 4, seed = 123)
-# Columns: psu, strata, fpc, wt, y1, y2, y3, q1, q2, group
 ```
+
+`make_survey_data()` columns, by what they are for:
+
+| Columns | For testing |
+|---------|-------------|
+| `psu`, `strata`, `fpc`, `wt` | Design construction |
+| `y1`, `y2`, `y3` | Continuous variables |
+| `q1`, `q2` | Categorical single-response questions |
+| `group` | A banner variable |
+| `sata_a`, `sata_b`, `sata_c` | Select-all-that-apply blocks |
+| `bat_1`, `bat_2`, `bat_3` | Battery blocks on a shared 1–5 scale |
+| `in_phase2` | The phase-2 indicator for the two-phase design |
+| `all_na_var` | The all-NA edge case |
 
 | Test type | Data source |
 |-----------|-------------|
@@ -249,14 +329,21 @@ df <- make_survey_data(n = 200, n_psu = 20, n_strata = 4, seed = 123)
 ### Edge case data: inline
 
 ```r
-test_that("report_freqs() handles all-NA variable", {
+test_that("export_topline() handles a single-value variable", {
+  skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
-  d@data$all_na <- NA_real_
+  d@data$constant <- "Agree"
+  out <- withr::local_tempfile(fileext = ".xlsx")
   # ...
 })
 ```
 
-Do not add edge case parameters to `make_all_designs()` or `make_survey_data()`.
+Do not add edge case parameters to `make_all_designs()` or
+`make_survey_data()`. Their column set is fixed; build the edge case in the
+test body by assigning into `d@data`.
+
+`all_na_var` is already a column in `make_survey_data()`. Use it rather than
+adding a second all-NA column.
 
 ### `skip_if_not_installed()` — block-level
 
@@ -273,23 +360,46 @@ Do not place `skip_if_not_installed()` at the top of a file.
 
 ## Test File Section Templates
 
-### `test-report-freqs.R`
+### `test-export-topline.R`
 ```
-# 1. Happy paths — result tibble structure for all 3 design types
-# 2. Multiple variables — all vars appear in output; one row per var × value
-# 3. Group argument — group column present; rows split by group × value
-# 4. ci = FALSE — CI columns absent from result
-# 5. Error paths — non-survey object, var not found
-# 6. Edge cases — all-NA variable, single-row data, single-value variable
-# 7. Numerical accuracy — results match surveycore::get_freqs() per variable
+# 1. Happy paths — a non-empty file with the expected sheet, all design types
+# 2. Multiple variables — every variable name appears in the workbook
+# 3. survey_collection wave columns — one column per wave
+# 4. var_type dispatch — SATA and battery blocks
+# 5. Variance options — variance = NULL, "se", "ci"
+# 6. show_n and show_eff_n — the columns appear and disappear
+# 7. Missing metadata warning — one warning listing every affected variable
+# 8. Error paths — non-survey object, var not found
+# 9. Edge cases — all-NA variable, single-row data, single-value variable
+# 10. Numerical accuracy — .build_freq_frame() matches surveycore::get_freqs()
 ```
 
-### `test-report-means.R`
+### `test-export-crosstab.R`
 ```
-# 1. Happy paths — result tibble structure for all 3 design types
-# 2. Multiple variables — all vars appear in output
-# 3. Group argument — group column present
-# 4. Error paths — non-survey object, var not found, non-numeric variable
-# 5. Edge cases — all-NA variable, single-row data
-# 6. Numerical accuracy — results match surveycore::get_means() per variable
+# 1. Happy paths — a non-empty file with the expected sheet, all design types
+# 2. Multiple variables — every variable name appears in the workbook
+# 3. Layout — per_question and stacked
+# 4. Banner columns — one column group per banner level, plus Total
+# 5. Interactions — crossed banner variables
+# 6. Self-banner — a variable used as its own banner
+# 7. var_type dispatch — SATA and battery blocks
+# 8. Variance options — variance = NULL, "se", "ci"
+# 9. show_n and show_eff_n — the columns appear and disappear
+# 10. Suppression — pub_type = "external" and "internal", warning class
+# 11. Error paths — non-survey object, var not found, a collection
+# 12. Numerical accuracy — cell percentages match surveycore::get_freqs()
 ```
+
+### `test-pool-pvals.R`
+```
+# 1. Happy paths — result tibble structure, S3 class, .meta attribute
+# 2. Per-upstream-function happy paths
+# 3. Multiple inputs — column union, id_col, named vs unnamed list
+# 4. strip_within_adj — rename-to-within vs. drop behavior, warning class
+# 5. Error paths — not a list, empty, invalid method, missing p_col
+# 6. Edge cases — all-NA p_value column, single-element list, partial NA
+# 7. Numerical accuracy — adjusted values match stats::p.adjust()
+```
+
+Number the sections in the file with comment banners and keep them in order.
+`pool_pvals()` has no design, so it has no cross-design section.
