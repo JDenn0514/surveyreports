@@ -1,8 +1,8 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.14.0
-**Date:** 2026-09-16
+**Version:** 0.15.0
+**Date:** 2026-09-22
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
 **Standards read:** `.claude/rules/testing.md`,
@@ -733,25 +733,16 @@ tolerance, so an unrounded oracle fails the row on correct code.
   the return value is the path
 - No `withCallingHandlers()` and no `tryCatch()` in tests
 
-**Snapshot once per class, for an error and for a warning alike.** A second
-scenario raising a class another scenario already snapshotted asserts the class
-alone and says where the snapshot lives. A warning message is user-facing text,
-so a class with no snapshot ships with nothing pinning its wording.
+`.claude/rules/testing.md` owns the dual pattern and the one-snapshot-per-class
+rule for both condition types. This document names the scenarios the rule
+applies to.
 
-**One exception: a class whose message names the argument it was raised for.**
-That class has one wording per argument, and the rule is one snapshot per
-wording. `XV-01` and `XV-02` are the pair — the same class, raised for `vars`
-and for `banner`, two texts, two snapshots. `TW-01` is the other side of the
-same test: both functions raise that class for `vars`, the text is the same, and
-the second scenario asserts the class alone.
-
-**Where the warning form comes from.** `.claude/rules/testing.md` defines the
-dual pattern for errors only. Its warning section gives the class assertion and
-the file-still-written assertion, and it snapshots no warning. No warning
-snapshot exists in the tree today: all three files under
-`tests/testthat/_snaps/` hold error blocks. The warning form above is therefore
-stated in this document. The repo rule needs the same addition, and that edit
-is a separate change — this document does not make it.
+**The argument-wording exception, applied here.** A class whose message names
+the argument it was raised for takes one snapshot per wording. `XV-01` and
+`XV-02` are the pair — the same class, raised for `vars` and for `banner`, two
+texts, two snapshots. `TW-01` is the other side of the same test: both
+functions raise that class for `vars`, the text is the same, and the second
+scenario asserts the class alone and says where the snapshot lives.
 
 **Snapshot handling for this change.** Every committed crosstab snapshot moves.
 That is expected, not a failure. `testing.md` owns the review procedure and

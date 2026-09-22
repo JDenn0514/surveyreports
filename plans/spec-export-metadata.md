@@ -1,8 +1,8 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.19.0
-**Date:** 2026-09-16
+**Version:** 0.20.0
+**Date:** 2026-09-22
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
 **Target version:** 0.1.0.9000
@@ -728,26 +728,18 @@ export_crosstab(
 ```
 
 **Argument order follows `code-style.md`'s groups, with one deviation.** The
-groups run `design`, required NSE, required scalar, optional NSE, then optional
-scalar control arguments. Across the nineteen arguments above, exactly one
-argument sits outside its group: `layout`, an optional scalar, precedes
-`interactions`, an optional tidy-select. Every argument this spec adds is an
-optional scalar and follows `interactions`.
+groups run `design`, required NSE, required scalar, optional scalar, then
+optional tidy-select. `layout`, an optional scalar, precedes `interactions`, an
+optional tidy-select, which is the order the groups give. The optional scalars
+from `min_eff_n` onward follow `interactions`, which is not. Every argument
+this spec adds is an optional scalar and joins that trailing run.
 
-**`layout` does not move.** It ships in that position. Measured 2026-09-16:
-`export_crosstab()` takes `layout` as its fifth argument, ahead of
-`interactions`. So moving it would change a shipped argument's position for no
-behavioral gain, and it would break a positional call that works today. The release is
-already breaking, so this is a choice and not a constraint; the choice is to
-leave a working signature alone.
-
-**`code-style.md` contradicts itself on this point.** Its numbered list puts an
-optional tidy-select ahead of every optional scalar, and its worked example for
-this very function — line 230 — reads
-`export_crosstab(design, vars, banner, file_name, layout, interactions, ...)`,
-which puts them the other way round. The current signature matches the worked
-example and not the list. The rule file needs its own correction, as a separate
-change. This spec does not edit it.
+**No shipped argument moves.** Measured 2026-09-16: `export_crosstab()` takes
+`layout` as its fifth argument and `interactions` as its sixth. Moving
+`interactions` ahead of the trailing optional scalars would change a shipped
+argument's position for no behavioral gain, and it would break a positional
+call that works today. The release is already breaking, so this is a choice and
+not a constraint; the choice is to leave a working signature alone.
 
 ### 3.2 Arguments
 
@@ -2028,28 +2020,6 @@ must hold.
 
 So section 7.2 cannot be read as "edit these blocks". Two of them do not exist,
 and writing them whole is a deliverable.
-
-**The standard names both functions under two tiers, and this spec claims Tier
-4.** `.claude/standards/function-documentation.md` lists `export_topline()` and
-`export_crosstab()` as illustrative examples of Tier 2, at about lines 379-386,
-and again as illustrative examples of Tier 4, at about lines 453-458. The two
-listings cannot both hold.
-
-Tier 4 is the right one. Both functions route blocks by question structure and
-run no algorithm of their own: every estimate is delegated to a
-`surveycore::get_*()` call, and the function decides which block shape receives
-it. Tier 2 covers a function that invents no statistics but still computes
-something itself — a Total row, or an interval on top of a standard error. The
-standard's Tier 2 entry asks `export_topline()` for "Algorithm section only for
-the CI construction it does on top of `surveycore::get_freqs()`". Measured
-2026-09-16: `R/export-topline.R` holds no `qnorm()`, no `qt()` and no arithmetic
-on `ci_low` or `ci_high`. It passes `conf_level` to surveycore and reads the
-bounds back — section 1.4. So the construction the Tier 2 entry names does not
-exist, and the entry rests on it.
-
-The standard needs its own correction: the Tier 2 illustrative examples should
-name a different function. That is a separate change and this spec does not
-make it.
 
 ### 7.2 Required roxygen changes
 

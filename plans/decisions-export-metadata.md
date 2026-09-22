@@ -926,3 +926,57 @@ The spec is v0.19.0 and the test-spec is v0.14.0. `plans/error-messages.md`
 holds every class the two functions raise. Two template rows in that file,
 `surveyreports_error_not_data_frame` and `surveyreports_warning_example`, are
 raised nowhere in `R/` and are left for a separate cleanup.
+
+---
+
+## [2026-09-22] — Three rule files fixed; the spec paragraphs that recorded them removed
+
+### Context
+
+Three sections of the two artifacts existed only to record a contradiction in a
+rule file. The rule files are now fixed, so those sections are wrong rather
+than stale. No judgment call was involved, so this entry records facts. It
+closes issues #9, #10 and #11.
+
+### What changed
+
+**The three rule files.**
+
+- `.claude/rules/testing.md` defined the dual pattern for errors alone. Its
+  **Assertions** section now covers both condition types: the class assertion
+  plus one snapshot of the message, per class, for an error and for a warning
+  alike. The **Warning capture** example gained the snapshot call. The
+  argument-wording exception the test-spec had found moved into the rule: a
+  class whose message names its argument takes one snapshot per wording.
+- `.claude/rules/code-style.md` put an optional tidy-select argument ahead of
+  an optional scalar in its numbered list, and the other way round in its
+  worked example for `export_crosstab()`. The example matches the shipped
+  signature, so the numbered list was swapped to agree with it. Groups 4 and 5
+  are now optional scalar, then optional tidy-select. No signature changed.
+- `.claude/standards/function-documentation.md` listed `export_topline()` and
+  `export_crosstab()` as illustrative examples of Tier 2 and again of Tier 4.
+  Both stay under Tier 4, because both route blocks by question structure and
+  run no algorithm of their own. Measured 2026-09-22: `R/` holds no `qnorm()`
+  and no `qt()`, so the CI construction the Tier 2 entry named does not exist.
+  Tier 2 now names `.build_freq_frame()`, which computes the Total row itself
+  and invents no statistic. No function is listed under two tiers.
+
+**The three artifact sections.**
+
+- Spec section 3.1 no longer says the signature deviates from the numbered
+  list in the way it did, and no longer says the rule file contradicts itself.
+  The deviation that remains is the opposite one: the optional scalars from
+  `min_eff_n` onward follow `interactions`. No shipped argument moves.
+- Spec section 7.1 lost the block recording the two-tier listing.
+- The test-spec lost its local definition of the warning dual pattern and the
+  note saying the form came from this document. It now reads that rule from
+  `.claude/rules/testing.md`, as it reads every other testing rule, and keeps
+  only the mapping of the argument-wording exception to `XV-01`, `XV-02` and
+  `TW-01`.
+
+### Outcome
+
+The spec is v0.20.0 and the test-spec is v0.15.0, both dated 2026-09-22. Both
+stay at `SPEC_READY`; the edits removed stale text and added no contract. The
+spec still holds no tolerance value, no `expect_` call and no test id, and the
+test-spec still holds no `R/` path and no dot-prefixed helper name.
