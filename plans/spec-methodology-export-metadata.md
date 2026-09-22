@@ -1115,3 +1115,874 @@ workstream 1, and one edit to 3.5 plus one row in 3.8 closes both. 15 and 19 are
 both consequences of the `get_effective_n()` signature and should be read as one
 pass over 3.5. 23 pulls 4.2's merge with it — decide the caller-versus-universe
 precedence and the helper's signature in the same sitting.
+
+---
+
+## Methodology Review: export-metadata — Pass 3 (2026-09-14)
+
+### Scope assessment
+
+Stage 2 **applies**, and it applies harder than in Passes 1 and 2. v0.8.0 adds
+three things the earlier versions did not have:
+
+- a published statistical decision rule the package now owns outright — the
+  `min_eff_n` floor of section 3.5, with the raw-N test removed
+- a written definition of `effective sample size` in the glossary of section
+  3.15, which ships inside every workbook
+- a variance contract, section 3.12, that renders SE and CI values into cells
+
+All five lenses apply. Lens 2 was declared not applicable in Passes 1 and 2. It
+applies now, because section 3.12 writes CI bounds into the deliverable and
+section 3.3 decides how a number is printed.
+
+### Evidence base
+
+Every measurement below ran on 2026-09-14 against surveycore `1.1.0.9000` and
+openxlsx2 `1.28`, in this repository, through `Rscript`. Each issue says whether
+it rests on a measurement or on reading the spec.
+
+Four measurements drive most of Pass 3:
+
+```
+# 1. get_freqs() returns proportions, not percentages
+get_freqs(d, q1)                     pct = 0.356, 0.306, 0.337   (sums to 1)
+get_freqs(d, q1, variance = "se")    se = 0.0290, 0.0278, 0.0286
+get_freqs(d, q1, variance = "ci")    ci_low = 0.300, ci_high = 0.413
+
+# 2. the interval is a normal-approximation Wald interval, on every design type
+(ci_high - ci_low) / 2 / se = 1.959964 = qnorm(0.975)   taylor, replicate, twophase
+qt(0.975, 299) would be 1.96793.  No df is used.
+
+# 3. the bounds are not clipped to the support
+rare category, 2 of 300:  pct = 0.00719, ci_low = -0.00343, ci_high = 0.0178
+
+# 4. Kish n_eff is not the SRS-equivalent sample size
+400 rows, 20 clusters, real intra-cluster correlation on q1:
+  get_effective_n(d, method = "kish")   n = 400, n_eff = 370.4, deff_kish = 1.08
+  design SE for pct(Agree) = 0.04133;  p(1-p)/se^2 = 139.7
+```
+
+Measurement 4 is the one that matters most. The workbook would print `370.4`
+where the glossary's own sentence describes `139.7`.
+
+Two further facts, both measured:
+
+```
+get_effective_n(coll)                            2 rows, keyed by .survey
+get_effective_n(d, group = gen)                  drops the NA level
+get_effective_n(d, group = gen, na.rm = FALSE)   keeps it: <NA> n = 25, n_eff = 23.1
+get_freqs(d, q1, group = gen, na.rm = FALSE)     every pct re-based on the larger denominator
+as_survey(df_with_zero_weights)                  aborts on non-positive weights
+```
+
+One spec claim I set out to falsify and could not: `survey_nonprob`. Measured —
+`get_effective_n()`, `get_freqs(variance = "ci")`, `extract_universe()`,
+`extract_var_extra()` and `extract_dataset_metadata()` all work on a design built
+with `as_survey_nonprob()`. Section 1.5's "no difference in behavior" holds, and
+section 1.6's fixture deliverable is buildable as written.
+
+---
+
+### Prior Issues (Passes 1 and 2)
+
+Each row was re-checked against the v0.8.0 text. A row reads Resolved only where
+a v0.8.0 section carries the resolution, named in the last column.
+
+| # | Title | Lens | Status |
+|---|---|---|---|
+| 1 | crosstab never renders `eff_n` | 1 | ✅ Resolved — 3.4 renders it, in two rows; 3.2 records that `show_eff_n` was a no-op |
+| 2 | interaction subgroups keep the code vocabulary | 1 | ✅ Resolved — 3.8, "Interaction levels read labels, not codes" |
+| 3 | cover sheet naming, ordering, header | 1 | ✅ Resolved — 3.14, all four rows present |
+| 4 | universe fallback on a SATA or battery block | 1 | ✅ Resolved — 3.6, the unanimity table |
+| 5 | `get_effective_n()` already does workstream 1 | 3 | ✅ Resolved — 1.4.1 and 2.2 `.resolve_eff_n()` |
+| 6 | duplicate value label aborts in `get_freqs()` | 3 | ✅ Resolved — 3.7 aborts, with a named class |
+| 7 | `.resolve_roles()` breaks on allowed payloads | 3 | ✅ Resolved — 3.10, the five-row coercion table |
+| 8 / 21 | the abort message quote | 3 | ✅ Resolved — 1.5 quotes no message and says why |
+| 9 | twophase `eff_n` uses phase-1 rows | 4 | ✅ Resolved — 1.4.1 table, 3.20 |
+| 10 | the role guard reaches collections through `vars` | 4 | ✅ Resolved — 1.5, "Every metadata read in A2, A3 and A4 must branch on the design type". But 2.2 contradicts it — issue 35 |
+| 11 | topline has no `banner` | 4 | ✅ Resolved — 4.1, the paragraph before the pooled-Total note |
+| 12 | the domain column is ignored | 5 | ✅ Resolved — 1.4.1 table, 3.20 |
+| 13 | interaction banner levels are codes | 5 | ✅ Resolved — 3.8 |
+| 14 | interactions are never suppression-evaluated | 5 | ✅ Resolved — 3.5 brings them in scope |
+| 15 | `eff_n` ignores the tabulated variable | 1 | ✅ Resolved — 1.4.1 "A third cause stays unaddressed", 3.4. The floor built on it is new — issue 37 |
+| 16 | 3.5 pseudocode contradicts its collection row | 1 | ⚠️ **Regressed** — the pseudocode is gone, and 2.2's replacement contract carries the same error. Issue 33 |
+| 17 | a partially labelled banner yields an NA level | 1 | ✅ Resolved — 3.7 row 3, 3.19 |
+| 18 | character coercion re-sorts factor spanners | 1 | ✅ Resolved — 2.2, "factor in -> factor out, LEVEL ORDER PRESERVED" |
+| 19 | `surveycore_warning_small_cell` leaks | 3 | ✅ Resolved — 2.2, `.resolve_eff_n()` muffles it |
+| 20 | the collection wave call site | 3 | ✅ Resolved — 4.1, last two paragraphs |
+| 22 | the sheet-suffix rule has no owner | 4 | ✅ Resolved — 2.1 and 2.2 `.unique_sheet_name()` |
+| 23 | `.unanimous_across()` misses the battery case | 5 | ✅ Resolved — 2.2 states the transpose; 3.6 keeps the two sources separate |
+
+Twenty-two of twenty-three survive the rewrite. One regressed: issue 16.
+
+---
+
+### New Issues
+
+#### Lens 1 — Output Column Contracts
+
+**Issue 24: section 3.3's rounds-to-zero threshold is wrong by a factor of 100**
+Severity: BLOCKING
+Lens: 1 — Output Column Contracts
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 2.2 defines the input: "`p`: the proportion from
+`get_freqs()`". Section 3.3 row 3 then tests
+
+> `0 < p < 0.5 × 10^-decimals`
+
+At `decimals = 1` that threshold is `0.05`. On the proportion scale `0.05` is
+five percent. So an implementer writing `.fmt_pct()` from the table prints
+`<0.1%` for every estimate below 5 percent.
+
+`get_freqs()` returns a proportion, measured:
+
+```
+> get_freqs(d, q1)
+  q1         pct     n
+  Agree    0.356   107
+```
+
+Worked through the rule as written, at `decimals = 1`:
+
+| `p` | rule fires? | the cell it should hold |
+|---|---|---|
+| 0.0004 | yes | `<0.1%` — correct |
+| 0.0040 | yes | `0.4%` — **wrong** |
+| 0.0400 | yes | `4.0%` — **wrong** |
+| 0.4000 | no | `40.0%` — correct |
+
+The existing code already converts. `R/export-utils.R:746` reads
+`round(one_rows$pct[[1L]] * 100, decimals)`. The spec drops the `* 100`.
+
+This passes every structure test. Each cell is a string, each carries `%`, each
+matches one of the four forms in invariant 8.1. Only the numbers are wrong, and
+they are wrong on small estimates, which is where a rounding rule is read most
+closely.
+
+Fix: state the scale once, in section 2.2 and in section 3.3. Either
+`.fmt_pct()` takes a proportion and the threshold is `0.5 × 10^-(decimals + 2)`,
+or `.fmt_pct()` takes percentage points and section 2.2 says the caller
+multiplies by 100 first. The second is clearer, because `decimals` already
+counts decimal places on a percentage.
+
+---
+
+**Issue 25: the glossary defines the effective sample size as a design-effect quantity, and the number printed is Kish**
+Severity: BLOCKING
+Lens: 1 — Output Column Contracts
+Resolution type: JUDGMENT CALL
+
+Measured. Section 3.15 writes this sentence into every workbook:
+
+> **Effective sample size (ESS)** — The number of people a simple random sample
+> would need to measure this group as precisely as the weighted sample does.
+
+That sentence defines `n / deff`, where `deff` is the full design effect. The
+number printed is `n / deff_kish`, and Kish's `deff_kish` measures weight
+variation alone. It excludes clustering and stratification.
+
+On a clustered design the two differ by more than a factor of two. Measured, 400
+rows in 20 clusters with real intra-cluster correlation on `q1`:
+
+```
+get_effective_n(d, method = "kish")     n = 400   n_eff = 370.4   deff_kish = 1.08
+design SE for pct(Agree)                0.04133
+SRS-equivalent size, p(1-p)/se^2        139.7
+```
+
+The workbook prints `370.4`. Its own glossary says that number is `139.7`.
+
+The entry's second sentence is Kish-accurate — "the more the weights vary, the
+smaller it gets" — so the entry holds both definitions and they disagree.
+
+Three consequences, not one:
+
+1. The printed statistic carries a false definition, in the deliverable, in
+   plain language aimed at a reader who cannot check it.
+2. The `min_eff_n` floor of section 3.5 keys on the same number. A clustered
+   subgroup at `n_eff = 105` is published, and its estimates carry the precision
+   of about 40 respondents. Section 3.15 tells the reader the opposite: "its
+   estimates are too imprecise to report" is the stated reason a column is
+   missing, so a column that is present reads as precise enough.
+3. surveyreports supports Taylor, replicate and two-phase designs. Clustering is
+   the normal case here, not the exception.
+
+Switching estimator is not a one-word change. Measured —
+`get_effective_n(method = "deff")` routes to `get_means()` and aborts on a
+character variable:
+
+```
+> get_effective_n(d, x = q1, method = "deff")
+x `x` must be numeric, not <character>.
+i Column q1 cannot be used with `get_means()`.
+```
+
+So a design-effect ESS is not reachable through that API for a categorical
+question, which is what a crosstab tabulates.
+
+Options:
+- **[A]** Keep Kish and rewrite the glossary entry to describe it: the effective
+  sample size after weighting, which accounts for unequal weights and not for
+  clustering — Effort: low, Risk: low, Impact: the definition becomes true; the
+  floor keeps its current, weaker guarantee, and section 3.15's "too imprecise
+  to report" sentence needs the same correction.
+- **[B]** Compute a design-effect ESS per rendered estimate from the SE
+  surveycore already returns, and key the floor on it — Effort: high, Risk:
+  high, Impact: the floor matches its stated meaning; the ESS becomes one number
+  per cell rather than one per subgroup, so the two sample-size rows of section
+  3.4 no longer have a single value to hold.
+- **[C] Do nothing** — the workbook states a definition measurement contradicts
+  by a factor of 2.6 on a clustered design, and the floor over-publishes.
+
+**Recommendation: A** — the quantity is the one the package already computes and
+delegates, and the defect is in the words, not the arithmetic. B is a separate
+spec.
+
+---
+
+**Issue 26: `has_rows` has no derivation rule, and `get_freqs()` returns present rows with `n = 0`**
+Severity: REQUIRED
+Lens: 1 — Output Column Contracts
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 3.3 row 1 says a cell holds `-` when "the response value
+appears nowhere in this column". Section 2.2 gives `.fmt_pct()` a `has_rows`
+argument and never says how the caller computes it.
+
+Row absence is the wrong test. `get_freqs()` emits a row with `n = 0`. Measured
+with `na.rm = FALSE` on a banner and a variable that both carry missing values:
+
+```
+   gen    q1         pct     n
+ 9 <NA>   Agree    0.303     8
+12 <NA>   <NA>     0         0
+```
+
+The last row is present, `n` is `0`, and `pct` is `0`. Under section 3.3 as
+written, the implementer finds a row, finds `p == 0`, and prints `0.0%` — the
+"exactly 0" form — where the rule intends `-`.
+
+The package already knows this. `R/export-utils.R:733-739` carries the comment:
+
+> `get_freqs()` emits a placeholder row (n = 0, pct = NA) for a subgroup with
+> zero non-NA observations even when the item was never asked there at all, so
+> "a row exists" alone is not sufficient: the row's own n must be > 0.
+
+A second contract goes with it. That comment records a **third** state for SATA
+— asked and nobody chose it prints `0`, never asked prints blank. Section 3.3
+has four forms and invariant 8.1 fixes the set at four. So a SATA item never
+asked in a subgroup now renders `-`, the same cell as an item nobody chose. The
+spec does not say it is dropping that distinction.
+
+Fix: define `has_rows` as `nrow(rows) > 0 && rows$n > 0`, and add a fifth row to
+3.3 for the SATA never-asked case, or state that the distinction is dropped and
+why. Amend invariant 8.1 to match.
+
+---
+
+**Issue 27: `.write_sample_size_rows()` cannot produce its cells from its arguments**
+Severity: REQUIRED
+Lens: 1 — Output Column Contracts
+Resolution type: UNAMBIGUOUS
+
+Read from the spec. Section 2.2:
+
+```r
+.write_sample_size_rows <- function(wb, sheet, start_row, label_cols,
+                                    levels, show_ess)
+```
+
+Section 3.4 says the two rows hold "the subgroup's `n` from `.resolve_eff_n()`"
+and "the subgroup's `n_eff`, at one decimal". Neither reaches the helper. There
+is no `counts` argument and no `design` argument, so `levels` would have to
+carry the numbers, and section 2.2 says nothing about its type.
+
+The Total column needs a value in both rows too. It is not a banner level, so it
+is not in `levels` either.
+
+This is the one helper in section 2.2 whose signature does not support its job.
+Every other one states its return shape and its inputs.
+
+Fix: give it the resolved counts — a frame of `level`, `n`, `n_eff` including a
+row for the Total column — and state the type of `levels` and the column order
+the cells are written in.
+
+---
+
+**Issue 28: the rounding mode is unstated, and R rounds half to even**
+Severity: SUGGESTION
+Lens: 1 — Output Column Contracts
+Resolution type: JUDGMENT CALL
+
+Measured. Section 3.3's fourth row says "the rounded value with a `%` suffix".
+It does not say which rounding.
+
+```
+round(41.25, 1)          41.2
+sprintf("%.1f", 41.25)   41.2
+round(0.35, 1)           0.3
+round(2.5)               2
+```
+
+R rounds half to even, in both `round()` and `sprintf()`. Report convention is
+usually half away from zero, so a reader who checks `41.25` by hand gets `41.3`
+and the workbook says `41.2`.
+
+The rule matters twice: it decides the printed value, and it decides whether a
+value sits on the `<0.1%` boundary of issue 24.
+
+Fix: name the mode in 3.3. Half to even, as R does it, is the low-effort choice
+and matches the current code. Say so, so the tester does not treat a half-even
+result as a defect.
+
+---
+
+**Issue 29: the rule has a floor and no ceiling, so a cell can read `100.0%` when it is not 100**
+Severity: SUGGESTION
+Lens: 1 — Output Column Contracts
+Resolution type: JUDGMENT CALL
+
+Measured. Section 3.3 separates "rounds to zero" from "is zero" and gives the
+first its own string, `<0.1%`. It makes no such separation at the other end.
+`sprintf("%.1f%%", 0.99997 * 100)` gives `100.0%`.
+
+So a category that 3 respondents in 10,000 did not choose reads as unanimous.
+The argument for `<0.1%` applies unchanged: a reader who sees `100.0%` concludes
+the complement is empty.
+
+Section 3.9 removes the `100%` row partly because "the visible cells routinely
+do not total 100". A cell that reads `100.0%` next to a nonzero sibling makes
+that worse.
+
+Options:
+- **[A]** Add a symmetric row: `1 - 0.5 × 10^-decimals < p < 1` prints `>99.9%`
+  — Effort: low, Risk: low, Impact: the rule is symmetric and one more form
+  joins invariant 8.1.
+- **[B] Do nothing** — a near-unanimous cell reads as unanimous, and the spec
+  does not say it chose that.
+
+**Recommendation: A** — the asymmetry is not a decision the spec records, and
+the fix is one row in `.fmt_pct()`.
+
+---
+
+#### Lens 2 — Confidence Interval Specification
+
+**Issue 30: SE and CI values come back as proportions, and section 3.12 calls them percentage points**
+Severity: BLOCKING
+Lens: 2 — Confidence Interval Specification
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 3.12's Units column reads "percentage points, at `decimals`
+places" for both `"se"` and `"ci"`. surveycore returns neither on that scale:
+
+```
+> get_freqs(d, q1, variance = "se")
+  q1         pct     se     n
+  Agree    0.356 0.0290   107
+
+> get_freqs(d, q1, variance = "ci")
+  q1         pct ci_low ci_high     n
+  Agree    0.356  0.300   0.413   107
+```
+
+`se` is `0.0290` — 2.9 percentage points. Written at `decimals = 1` with no
+conversion it prints `(0.0)`. Every standard error in the workbook becomes
+`0.0`, and nothing in the structure fails.
+
+This is issue 24 on a second path, and it needs its own fix, because section
+3.12 does not route through `.fmt_pct()` and section 2.2 gives the variance
+values no formatter at all.
+
+Two smaller gaps sit in the same rows and should be closed with it:
+
+- Whether each CI bound carries its own `%`, or the pair carries one. Section
+  3.12 says only "in parentheses, en-dash separated".
+- Whether a variance value uses the three-way rule of section 3.3. An SE of
+  0.0004 proportion is 0.04 percentage points, which rounds to `0.0`. Nothing
+  says whether that prints `<0.1` or `0.0`.
+
+Fix: state that the render multiplies `se`, `ci_low` and `ci_high` by 100, name
+the formatter, and give one worked example of each string.
+
+---
+
+**Issue 31: the interval is a normal-approximation Wald interval and is not clipped to the support**
+Severity: REQUIRED
+Lens: 2 — Confidence Interval Specification
+Resolution type: JUDGMENT CALL
+
+Measured. Section 3.12 delegates the interval entirely and states no formula, no
+df and no distribution. The delegation itself is correct — `variance = "ci"` and
+`conf_level` are both real `get_freqs()` arguments, and `conf_level` changes the
+width, measured at 0.95 and 0.99.
+
+What the delegation leaves unspecified is what surveyreports prints when the
+delegated value falls outside the estimand's support. It does:
+
+```
+rare category, 2 of 300
+  pct = 0.00719   ci_low = -0.00343   ci_high = 0.0178
+```
+
+Under section 3.12 as written that cell reads `(-0.3% – 1.8%)`. A negative
+percentage of respondents is not a quantity, and the cell offers no clue that it
+is an artifact of the normal approximation.
+
+The interval is a Wald interval on the proportion scale, measured on every
+design type:
+
+```
+(ci_high - ci_low) / 2 / se = 1.959964 on taylor, replicate and twophase
+qnorm(0.975) = 1.959964      qt(0.975, 299) = 1.96793
+```
+
+So no degrees of freedom enter, the multiplier is identical across subclasses,
+and the interval is symmetric about `pct`. For a replicate design with 10
+replicates a t interval on 9 df would be 15 percent wider; surveycore does not
+use one. That is surveycore's choice to make, and section 3.12 is right not to
+restate it. It is not right to be silent about the consequence that reaches the
+cell.
+
+The degenerate case is the other end. Measured, a variable with one value gives
+`pct = 1`, `ci_low = 1`, `ci_high = 1` — a zero-width interval, printed as
+`(100.0% – 100.0%)`.
+
+Options:
+- **[A]** Clip the printed bounds to `[0, 100]` and say so in 3.12 — Effort:
+  low, Risk: low, Impact: no negative cell; the printed interval is no longer
+  exactly what surveycore returned, which 3.12 currently promises.
+- **[B]** Print the bound as returned and add one sentence to 3.12 and to the
+  glossary saying the interval is a normal approximation that can fall outside
+  0 to 100 percent for a rare category — Effort: low, Risk: low, Impact: the
+  delegation stays literal; a negative cell still ships, with an explanation.
+- **[C] Do nothing** — a published crosstab can carry a negative percentage, and
+  no section of the spec predicts it.
+
+**Recommendation: B** — section 3.12's whole argument is that the interval is
+surveycore's and is not restated here. Clipping breaks that and hides an
+approximation the reader should see. State the fact instead.
+
+---
+
+**Issue 32: the legend row asserts a coverage level that the spec declines to characterize**
+Severity: SUGGESTION
+Lens: 2 — Confidence Interval Specification
+Resolution type: JUDGMENT CALL
+
+Read from the spec, with issue 31's measurement behind it. Section 3.12 writes
+`Percentages; 95% confidence interval in parentheses.` into the sheet, and two
+paragraphs earlier declines to state the distribution the interval assumes.
+
+Both positions are defensible on their own. Together they put a coverage claim
+in the deliverable that the spec will not describe, so nothing in the repository
+records what the claim rests on. If surveycore moves from a z interval to a
+t interval on design df, every legend row keeps reading `95%`, every number
+changes, and no gate notices.
+
+Fix: keep the legend and add one row to section 1.4's upstream-state table,
+recording what was measured — normal approximation, multiplier `qnorm(1 - α/2)`,
+no degrees of freedom, identical on all three design types tested. That is a
+fact about the dependency, which is what 1.4 exists for, and it gives the change
+something to be detected against.
+
+---
+
+#### Lens 3 — Statistical Delegation Accuracy
+
+**Issue 33: `.resolve_eff_n()`'s one-row contract is false for a collection — Pass 2 issue 16, regressed**
+Severity: REQUIRED
+Lens: 3 — Statistical Delegation Accuracy
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 2.2:
+
+```
+.resolve_eff_n <- function(design, group_var = NULL)
+#    group_var = NULL -> one row, level = NA_character_
+```
+
+Section 1.4.1 says the opposite for a collection, in the same document:
+
+> `survey_collection` — **Accepted.** Returns one row per member with a
+> `.survey` key column.
+
+Measured on a two-wave collection:
+
+```
+> get_effective_n(coll)
+  .survey     n n_eff deff_kish
+1 wave1     200  185.      1.08
+2 wave2     200  186.      1.08
+```
+
+This is Pass 2 issue 16 in a new place. v0.7.0 carried it in pseudocode, the
+rewrite deleted the pseudocode, and the replacement contract restates the error.
+
+The path is live. Section 4.1 says `export_topline()` takes "its effective N per
+wave, joined on the wave name rather than on the subgroup level". An implementer
+who trusts 2.2 writes a helper that returns one row and joins nothing.
+
+Fix: state the collection branch in 2.2. Either the helper rejects a collection
+and the caller loops `design@surveys`, or it returns one row per member with
+`level` taken from `.survey`. Say which, and say what `level` holds.
+
+---
+
+**Issue 34: `.resolve_eff_n()` has no `na.rm`, so the missing-value banner level never gets an effective N**
+Severity: REQUIRED
+Lens: 3 — Statistical Delegation Accuracy
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 3.5 promises that a missing-value banner level under
+`na.rm = FALSE` is "evaluated and removed" when it falls below the floor.
+Section 3.13 repeats it: "A missing-value banner level is a real subgroup and
+faces `min_eff_n` like any other."
+
+`get_effective_n()` excludes missing values from the group unless it is told not
+to. Its signature carries `na.rm = TRUE`, and section 2.2 gives
+`.resolve_eff_n()` no way to pass anything else:
+
+```
+> get_effective_n(d, group = gen)
+  gen        n n_eff
+  Female   139 128.
+  Male     136 125.
+
+> get_effective_n(d, group = gen, na.rm = FALSE)
+  gen        n n_eff
+  Female   139 128.
+  Male     136 125.
+  <NA>      25  23.1
+```
+
+So under `na.rm = FALSE` the frequency frame holds a missing-value column group
+and the counts frame holds no row for it. Three things follow, and the spec
+predicts none of them:
+
+1. The level cannot be tested against `min_eff_n`, so it is published whatever
+   its size — the one subgroup most likely to be small.
+2. Its two sample-size cells have no value, so section 3.4's rows are incomplete
+   for that column.
+3. Invariant 8.1's first bullet is violated by a workbook the spec says is
+   correct.
+
+A second gap sits beside it. Section 3.13 says `na.rm` is "Passed to
+`surveycore::get_freqs()`", and there are four `get_freqs()` call sites —
+`.compute_total_freq()`, `.compute_subgroup_freq()`, `.compute_interaction_freq()`
+and the collection path. The spec names none of them.
+
+Fix: add `na.rm` to `.resolve_eff_n()`, state that the exported function passes
+the same value it passes to `get_freqs()`, and name the four call sites.
+
+---
+
+**Issue 35: the role helpers carry no collection branch, while `.design_universe()` does**
+Severity: REQUIRED
+Lens: 3 — Statistical Delegation Accuracy
+Resolution type: UNAMBIGUOUS
+
+Measured, and read from the spec. Section 1.5 says `extract_var_extra()` aborts
+on a collection, names A3 as its user, and requires that "Every metadata read in
+A2, A3 and A4 must branch on the design type". Measured, the abort is real:
+
+```
+> extract_universe(coll)
+x `x` must be a survey design object or a data frame, not
+  <surveycore::survey_collection>.
+```
+
+Section 2.2 then gives A2's helper the branch, in writing:
+
+```
+.design_universe <- function(design)
+#    Never aborts on a collection.
+```
+
+and gives A3's two helpers neither the branch nor a mention of it:
+
+```
+.roles_of <- function(extra)
+.resolve_roles <- function(design, cols)
+#    Never aborts on a foreign payload.
+```
+
+A reader of 2.2 sees one helper told to survive a collection and two told to
+survive a bad payload, and concludes the difference is deliberate.
+`export_topline()` accepts a collection and runs the role guard on `vars`, so
+the direct implementation aborts on a supported call.
+
+Section 3.6's unanimity table does carry the rule — "a role lookup on a
+collection | the same rule" — but it sits in the base-notes section, four
+sections away from the helper that has to implement it.
+
+Fix: add the collection branch to `.resolve_roles()` in 2.2, with the same
+sentence `.design_universe()` gets, and cross-reference 3.6's unanimity row from
+section 3.10.
+
+---
+
+#### Lens 4 — Cross-Design Consistency
+
+**Issue 36: the glossary ships in every topline workbook, where no floor is in force and no cell is a string**
+Severity: REQUIRED
+Lens: 4 — Cross-Design Consistency
+Resolution type: UNAMBIGUOUS
+
+Read from the spec. This is the split of section 1.1 producing an incoherent
+deliverable, which is the thing the split has to be checked for.
+
+Section 3.14 makes the glossary block unconditional — "What these numbers mean |
+the glossary of section 3.15 | always" — and section 4.1 confirms the sheet
+reaches the other function: "a topline workbook gains the cover sheet, with the
+glossary".
+
+Two of the four glossary entries are false in a topline workbook.
+
+| Entry | What it says | Topline reality |
+|---|---|---|
+| `Why a column is missing` | "A subgroup whose effective sample size falls below the minimum is not shown… The minimum for this workbook is listed above." | Nothing is withheld — section 4.2, "never withheld". Nothing is listed above either: the withheld block is absent, and `.build_workbook()` receives `min_eff_n = NULL` |
+| `Percentages` | describes `<0.1%`, `0.0%` and the dash | Topline percentages are numbers — section 4.2 |
+
+The `Why a column is missing` entry is the worse of the two. It tells the reader
+of a trend workbook that small subgroups were removed for imprecision. Section
+4.2 says the opposite in the same spec: "a trend workbook can still publish a
+wave with an effective N of 60".
+
+The effective-N vocabulary split in section 4.2 — `Eff N` against
+`effective sample size` — is only a wording difference, and it is documented.
+The two functions compute the same quantity from the same delegated call, so
+neither is wrong about the number. This is different: one function's cover sheet
+states the other function's rules.
+
+Fix: make the glossary entries conditional on what the workbook does.
+`Why a column is missing` when `min_eff_n > 0` and a banner exists;
+`Percentages` when the cells are strings. Section 3.14's block table needs a
+fourth column, or `.write_cover_sheet()` needs to take the two facts.
+
+---
+
+#### Lens 5 — Domain, Banner, and Suppression Behavior
+
+**Issue 37: the floor is tested on a base that ignores the tabulated variable, and B2 removes the only signal of the gap**
+Severity: REQUIRED
+Lens: 5 — Domain, Banner, and Suppression Behavior
+Resolution type: JUDGMENT CALL
+
+Measured. Section 3.4 states the limit honestly: "Both counts ignore the
+tabulated variable". Section 1.4.1 records the decision to state it and not
+widen scope, and Pass 2 issue 15 accepted that.
+
+v0.8.0 changes what rests on it. In v0.7.0 the variable-independent count fed a
+displayed number. Now it feeds the publication rule, and the rule is the
+package's own:
+
+```
+get_effective_n(d)        n = 300   n_eff = 278.6
+get_freqs(d, q1)          n sums to 240        (60 missing on q1)
+```
+
+A subgroup at `n_eff = 105` on a question that 40 percent of it skipped carries
+an effective base near 63 for that question, and the floor publishes it. The
+withheld list on the cover sheet says the rule was applied. The glossary says
+the survivors are precise enough to report.
+
+Two changes in the same spec remove the reader's ability to see the gap:
+
+1. B2 deletes the per-response `N` column, so the workbook no longer shows the
+   base any single estimate rests on.
+2. Section VI records the loss as recoverable — "percent × sample size, though
+   not exactly". With item nonresponse it is not recoverable: the percentage is
+   based on responders and the sample size counts everyone, so the product
+   overstates by the nonresponse rate.
+
+Section 3.19 has the row — "a variable with missing values | the response rows
+total less than the sample size above them. This is the stated contract of
+section 3.4, not a defect" — and that is true of the display. It is not an
+argument about the floor.
+
+Options:
+- **[A]** Keep the subgroup-level floor and say, in 3.5 and in the glossary,
+  that the floor is tested on the subgroup's size and not on the base of any one
+  question, so a question with heavy item nonresponse can be published below the
+  floor — Effort: low, Risk: low, Impact: the rule's guarantee becomes the one
+  it delivers.
+- **[B]** Test the floor per variable: call `.resolve_eff_n()` on the design
+  restricted to the variable's non-missing rows — Effort: high, Risk: high,
+  Impact: the floor matches its claim; withholding becomes per question, so the
+  column geometry differs between blocks on one sheet and the two sample-size
+  rows stop being block-invariant.
+- **[C] Do nothing** — the spec's own words carry a guarantee the rule does not
+  deliver, and the reader has no way to check it.
+
+**Recommendation: A** — B is a larger change than the one this spec is making,
+and it breaks the shared column geometry the stacked layout depends on. A costs
+two sentences and makes the claim true. Read this together with issue 25; both
+are the gap between what `n_eff` measures and what section 3.15 says it means.
+
+---
+
+**Issue 38: `min_eff_n` has no validation and no error class**
+Severity: REQUIRED
+Lens: 5 — Domain, Banner, and Suppression Behavior
+Resolution type: UNAMBIGUOUS
+
+Read from the spec. Section 3.2 types the argument "numeric(1), >= 0". Section
+3.17 lists four new error classes and none of them validates it. Section 3.11's
+ordering contract has no validation step for it either.
+
+`conf_level` and `decimals` are both validated today —
+`R/export-utils.R:91-105` raises `surveyreports_error_invalid_conf_level`.
+`min_eff_n` is the sole parameter of the rule that decides what gets published,
+and it takes any value silently:
+
+| Value | What happens, unvalidated |
+|---|---|
+| `-5` | nothing is withheld; the same as `0`, with no warning |
+| `NA` | `n_eff < NA` is `NA`; the filter is undefined |
+| `c(50, 100)` | the comparison recycles and withholds alternate levels |
+| `"100"` | a character comparison; `"23.1" < "100"` is `FALSE`, so a small subgroup is published |
+
+The same gap covers the other new scalars — `total_label`, `na_label`,
+`variance_display`, `sample_size_display`, `withheld_note`, `show_ess` — but
+`min_eff_n` is the one whose bad value changes what is published rather than how
+it looks.
+
+Fix: validate `min_eff_n` in `.validate_export_inputs()` as a length-1,
+non-missing, finite, non-negative numeric, add the error class to 3.17 and to
+`plans/error-messages.md`, and add the step to section 3.11's order, before the
+role guard.
+
+---
+
+**Issue 39: invariant 8.1 contradicts section 3.5's full-sample row**
+Severity: SUGGESTION
+Lens: 5 — Domain, Banner, and Suppression Behavior
+Resolution type: UNAMBIGUOUS
+
+Read from the spec. Invariant 8.1, first bullet:
+
+> Every rendered column has a heading, and every heading names a subgroup whose
+> effective N is at or above `min_eff_n`.
+
+Section 3.5, last row of the degenerate table:
+
+> the full sample's own effective N is below `min_eff_n` |
+> `surveyreports_warning_full_sample_below_min`, and the workbook is written in
+> full.
+
+Both cannot hold. The Total column is a rendered column with a heading, and 3.5
+requires it to stay. A reviewer applying 8.1 literally flags correct code, and a
+tester writing the invariant as an assertion writes a failing test.
+
+3.5 is the rule and wins. Fix: exclude the Total column from the invariant.
+
+---
+
+**Issue 40: dropping the raw-N test is safe, and the spec does not say why**
+Severity: SUGGESTION
+Lens: 5 — Domain, Banner, and Suppression Behavior
+Resolution type: UNAMBIGUOUS
+
+Measured and derived. Section 3.5 states "Raw N: **not tested.** The effective N
+is the number the rule is about", and leaves it there. A reader with the
+`pub_type` history asks whether a subgroup can now pass the floor on a small raw
+count.
+
+It cannot. Kish's `deff = n·Σw² / (Σw)²` is at least 1 by Cauchy–Schwarz, so
+`n_eff ≤ n` always, and `n_eff ≥ min_eff_n` forces `n ≥ min_eff_n`. Every
+measurement in this pass agrees: `deff_kish` ran 1.07 to 1.11 and never fell
+below 1. The raw-N test is subsumed by the effective-N test, not discarded.
+
+One consequence does deserve a line. surveycore's own raw-N warning,
+`surveycore_warning_small_cell` at `min_cell_n = 30`, is muffled by
+`.resolve_eff_n()` and by the three frequency helpers — correctly, per Pass 2
+issue 19. At the default floor of 100 nothing is lost, because 100 exceeds 30.
+At `min_eff_n = 0`, the QA setting section VI names, every raw-N signal in the
+call is silenced at once.
+
+Fix: record the `n_eff ≤ n` reasoning in 3.5, in one sentence, and note that
+`min_eff_n = 0` silences the AAPOR raw-N warning as well as the floor.
+
+---
+
+**Issue 41: section 3.19's zero-weight row cannot occur — `as_survey()` rejects it**
+Severity: SUGGESTION
+Lens: 5 — Domain, Banner, and Suppression Behavior
+Resolution type: UNAMBIGUOUS
+
+Measured. Section 3.19 has the row "zero-weight rows | the call succeeds; both
+counts follow surveycore. This package adds no missing-value path of its own".
+No such design can be built:
+
+```
+> as_survey(df_with_40_zero_weights, weights = wt)
+x Weight column wt has 40 non-positive value(s).
+i All non-NA weights must be strictly greater than 0.
+v Remove or replace rows where wt is 0 or negative.
+```
+
+surveycore validates at construction, so the case never reaches an export
+function. The row is harmless in the spec and will cost a tester a test that
+cannot be written — `testing.md` lists zero-weight rows as a required edge case,
+so somebody will try.
+
+Fix: change the row to record that surveycore rejects a non-positive weight at
+construction, and that no export function can receive one.
+
+---
+
+## Summary (Pass 3)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 3 |
+| REQUIRED | 9 |
+| SUGGESTION | 6 |
+
+**Total issues:** 18
+
+| # | Title | Lens | Severity | Type |
+|---|---|---|---|---|
+| 24 | the rounds-to-zero threshold is off by 100 | 1 | BLOCKING | UNAMBIGUOUS |
+| 25 | the glossary defines ESS as deff-based; the number is Kish | 1 | BLOCKING | JUDGMENT |
+| 26 | `has_rows` has no rule; `n = 0` rows are present | 1 | REQUIRED | UNAMBIGUOUS |
+| 27 | `.write_sample_size_rows()` gets no counts | 1 | REQUIRED | UNAMBIGUOUS |
+| 28 | the rounding mode is unstated | 1 | SUGGESTION | JUDGMENT |
+| 29 | no ceiling rule, so `100.0%` can be untrue | 1 | SUGGESTION | JUDGMENT |
+| 30 | SE and CI are proportions, called percentage points | 2 | BLOCKING | UNAMBIGUOUS |
+| 31 | the Wald interval is not clipped to the support | 2 | REQUIRED | JUDGMENT |
+| 32 | the legend asserts an uncharacterized level | 2 | SUGGESTION | JUDGMENT |
+| 33 | `.resolve_eff_n()` one-row contract, collection | 3 | REQUIRED | UNAMBIGUOUS |
+| 34 | `.resolve_eff_n()` has no `na.rm` | 3 | REQUIRED | UNAMBIGUOUS |
+| 35 | the role helpers carry no collection branch | 3 | REQUIRED | UNAMBIGUOUS |
+| 36 | the glossary ships in topline workbooks | 4 | REQUIRED | UNAMBIGUOUS |
+| 37 | the floor ignores the tabulated variable | 5 | REQUIRED | JUDGMENT |
+| 38 | `min_eff_n` has no validation | 5 | REQUIRED | UNAMBIGUOUS |
+| 39 | invariant 8.1 contradicts 3.5 | 5 | SUGGESTION | UNAMBIGUOUS |
+| 40 | the raw-N reasoning is unrecorded | 5 | SUGGESTION | UNAMBIGUOUS |
+| 41 | zero-weight rows cannot occur | 5 | SUGGESTION | UNAMBIGUOUS |
+
+**Overall assessment:** the rewrite kept 22 of the 23 earlier resolutions, and
+the delegation work Passes 1 and 2 argued for is sound — the twophase, domain,
+label-vocabulary and factor-order fixes all survive, and `survey_nonprob` works
+on every surveycore reader this spec calls. What v0.8.0 adds is weaker than what
+it kept. Part B writes numbers into cells and never states the scale surveycore
+returns them on, so the rounding rule mislabels every estimate under 5 percent
+and every standard error prints as `0.0`. The `min_eff_n` floor is a reasonable
+rule, and dropping the raw-N test is safe because Kish's `n_eff` never exceeds
+`n` — but the glossary tells the reader the floor measures a design-effect
+effective sample size, and on a clustered design that number is 2.6 times
+smaller than the one printed, so the definition and the precision claim built on
+it are both wrong. Lens 2, unused in two passes, was the right place to look:
+the interval is a normal-approximation Wald interval with no degrees of freedom,
+and a rare category returns a negative lower bound that section 3.12 would print
+as a negative percentage.
+
+**Issues that resolve together:** 24 and 30 are one scale decision and should be
+fixed in one edit to 2.2 and 3.3. 25 and 37 are both the gap between what
+`n_eff` measures and what section 3.15 says it means; decide the glossary
+wording once. 33, 34 and 35 are `.resolve_eff_n()` and the role helpers missing
+a branch section I already requires — one pass over section 2.2 closes them. 26
+and 29 both add a row to `.fmt_pct()`, and 39 follows whichever rows land.
