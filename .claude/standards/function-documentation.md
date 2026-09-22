@@ -376,13 +376,12 @@ statistical table as output, and estimation delegated to
 
 ### Illustrative examples
 
-- `export_topline()` — Output Columns section for the `show_n` and
-  `show_eff_n` column sets; Design Types section for the `survey_collection`
-  trend path; Algorithm section only for the CI construction it does on top of
-  `surveycore::get_freqs()`
-- `export_crosstab()` — same shape, plus an Output Columns note on the banner
-  column groups and the Total column, and a Missing Data note on suppression
-  under `pub_type`
+- `.build_freq_frame()` — assembles the frame every render helper writes from.
+  It delegates each estimate to `surveycore::get_freqs()`, then computes the
+  Total row itself and joins the sample-size columns to it. Output Columns
+  section for the column set; Design Types section for the `survey_collection`
+  path, where the Total row is an n-weighted average across the members; no
+  `@references`, because it invents no statistic
 
 ---
 

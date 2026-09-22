@@ -17,7 +17,7 @@
 | Export function return values | `invisible(file_name)` — the path written |
 | Print method return values | `invisible(x)` |
 | Computed-result return values | Visible (no `invisible()`) |
-| Argument order | `design` → required NSE → required scalar → optional scalar → `...` → named-only |
+| Argument order | `design` → required NSE → required scalar → optional scalar → optional NSE → `...` → named-only |
 | Internal helper placement | Same file (below exports) if used in 1 file; `R/export-utils.R` if used in 2+ files |
 | Error structure | `"x"` + `"i"` + optional `"v"` bullets; `class=` on every `cli_abort()` |
 | Warning classes | `class=` on every `cli_warn()` too |
@@ -217,8 +217,8 @@ the data, so the caller can pipe it onward. Never return the workbook object.
 1. `design` — first and required for any function that takes one
 2. Required NSE/tidy-select arguments (`vars`, `banner`)
 3. Required scalar arguments (`file_name`)
-4. Optional NSE/tidy-select arguments (`interactions = NULL`)
-5. Optional scalar control arguments (`conf_level = 0.95`, `decimals = 1L`)
+4. Optional scalar control arguments (`conf_level = 0.95`, `decimals = 1L`)
+5. Optional NSE/tidy-select arguments (`interactions = NULL`)
 6. `...`
 7. Named-only control args (after `...`)
 

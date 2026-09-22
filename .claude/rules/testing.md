@@ -13,11 +13,11 @@
 | Test categories | Happy path + error paths + edge cases |
 | All design types | Every design-taking function tested with every `survey_base` subclass — see **Cross-design testing** for the list |
 | Private function testing | Default indirect; direct only when gap can't be closed via public API |
-| Error testing | Dual: `expect_error(class=)` + `expect_snapshot(error=TRUE)` for all user-facing errors |
+| Error and warning testing | Dual: the class assertion + a snapshot of the message, for every user-facing error and warning |
 | Result structure | Assert the written sheet's cells, or the result tibble's columns and types, in every test block |
 | Numerical accuracy | Compare against surveycore's `get_*()` functions |
 | Snapshot failures | Block PRs; update via `snapshot_review()` before opening |
-| Warning capture | `expect_warning()` wrapping call; result from return value |
+| Warning capture | `expect_warning()` wrapping call; result from return value; the call still writes the file |
 | Structural assertions | `expect_identical()` |
 | Numeric assertions | `expect_equal()` |
 | Synthetic data | `make_all_designs(seed = N)` in `helper-test-data.R` |
@@ -177,9 +177,10 @@ coverage cannot be closed indirectly AND the behavior is material.
 
 ## Assertions
 
-### Error testing: dual pattern
+### Error and warning testing: the dual pattern
 
-All surveyreports errors are user-facing. Use both assertions:
+All surveyreports errors and warnings are user-facing. Each one takes two
+assertions: the class assertion, and a snapshot of the message.
 
 ```r
 test_that("export_topline() errors when design is not a survey object", {
@@ -208,8 +209,18 @@ test_that("export_topline() errors when vars are not in the design", {
 })
 ```
 
-Snapshot the message for each error class once. Repeating the snapshot for
-every function that raises the same class adds files without adding coverage.
+The warning form is the same. **Warning capture** below holds the example.
+
+Snapshot the message once per class, for an error and for a warning alike. A
+warning message is user-facing text, so a class with no snapshot ships with
+nothing that pins its wording. A second test that raises a class an earlier
+test already snapshotted asserts the class alone: a repeat snapshot adds a
+file and adds no coverage.
+
+**One exception: a class whose message names the argument it was raised for.**
+That class has one wording per argument, so it takes one snapshot per wording,
+and not one per class. A class raised for `vars` and again for `banner`
+produces two messages, so it takes two snapshots.
 
 ### Snapshots
 
@@ -238,10 +249,24 @@ test_that("export_crosstab() warns when a subgroup is suppressed", {
   )
   expect_identical(result, out)
   expect_true(file.exists(out))
+
+  expect_snapshot(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      pub_type = "external"
+    )
+  )
 })
 ```
 
 A warning must not stop the write. Assert the file still exists.
+
+The second call takes the snapshot, because `expect_warning()` consumes the
+warning it catches. One snapshot per warning class — see **Error and warning
+testing: the dual pattern** above.
 
 Do not use `withCallingHandlers()` or `tryCatch()` in tests.
 
