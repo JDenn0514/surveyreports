@@ -1021,3 +1021,54 @@ involved, so this entry records facts.
 The spec is v0.21.0, dated 2026-11-04, and stays at `SPEC_READY`. The plan is
 v4.1.0 and stays at `PLAN_DRAFT`. The test-spec did not mention the pin and is
 unchanged at v0.15.0.
+
+---
+
+## [2026-11-04] — Plan review Pass 2: issues 22 and 23 resolved
+
+### Context
+
+Pass 2 of `plans/plan-review-export-metadata.md` gave BLOCK on one blocking
+issue (22) and one required issue (23). This entry records the two choices.
+
+### Questions & Decisions
+
+**Q: Issue 22 — `air format --check .` fails on `develop` for seven files, and
+six of them are in no PR's write surface. How does PR 1 pass its own gate?**
+- Options considered:
+  - **A:** Add the six files to the write surface of
+    `chore/export-metadata-infra`, and format them in the formatting commit of
+    task 19.
+  - **B:** Add an `air.toml` that excludes `data-raw/`, and add
+    `tests/testthat/test-pool-pvals.R` alone. This adds a formatter config that
+    no spec asks for, and it leaves five files unformatted.
+- **Decision:** A.
+- **Rationale:** Measured again on 2026-11-04 at `6b83e5f`: the same seven
+  files fail. One declared formatting commit at the head of the chain makes the
+  gate true for all nineteen PRs, and the write surface names every file the
+  command writes.
+
+**Q: Issue 23 — the plan's `XE-07` criterion names three removed arguments, and
+the test-spec row names two. Which document changes?**
+- Options considered:
+  - **A:** Add `show_eff_n = TRUE` to the `XE-07` row of the test-spec.
+  - **B:** Drop `show_eff_n` from the plan's criterion, and rely on the grep
+    that shows the argument is gone.
+- **Decision:** A.
+- **Rationale:** The tester reads only the test-spec. Option B leaves no test
+  that asserts a call passing `show_eff_n` gets an error.
+
+### Changes
+
+- Plan v4.2.0: PR 1 task 19 names the six extra files. The PR 1 write surface
+  and the file-by-file table list them. The header and the scenario-coverage
+  section cite test-spec v0.16.0.
+- Test-spec v0.16.0: the `XE-07` row, the removed-arguments paragraph and the
+  template-coverage row 9 name `show_eff_n`. The scenario count is unchanged.
+
+### Outcome
+
+Issues 22 and 23 are resolved. Suggestions 24 and 25 are open and do not block.
+The Pass 3 delta review gave PASS on 2026-11-04. Its two suggestions were
+applied: line 17 no longer cites a spec version, and task 19 says the
+formatting commit holds seven files. The plan is v4.3.0 at `PLAN_READY`.

@@ -1,8 +1,8 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.15.0
-**Date:** 2026-09-22
+**Version:** 0.16.0
+**Date:** 2026-11-04
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
 **Standards read:** `.claude/rules/testing.md`,
@@ -40,8 +40,9 @@ scenario and no withholding scenario is written against it.
 `export_crosstab()` rejects a `survey_collection`. No collection scenario is
 written against it.
 
-`pub_type` and `show_n` no longer exist on `export_crosstab()`. A call passing
-either must fail, and that is a scenario, not an assumption — `XE-07`.
+`pub_type`, `show_n` and `show_eff_n` no longer exist on `export_crosstab()`. A
+call passing any of them must fail, and that is a scenario, not an assumption —
+`XE-07`.
 
 ---
 
@@ -64,7 +65,7 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 | 6 | Self-banner — a variable used as its own banner | covered — `XX-09` |
 | 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XM-12` to `XM-15` for group survival, `XS-10` and `XC-07a` for single cells |
 | 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10` |
-| 9 | show_n and show_eff_n — the columns appear and disappear | covered, under the renamed arguments — `XS-05` for `show_ess`, `XS-08` for the removed `N` column, `XE-07` for a call still passing `show_n` |
+| 9 | show_n and show_eff_n — the columns appear and disappear | covered, under the renamed arguments — `XS-05` for `show_ess`, `XS-08` for the removed `N` column, `XE-07` for a call still passing `show_n` or `show_eff_n` |
 | 10 | Suppression — pub_type = "external" and "internal", warning class | **N/A.** `pub_type` is removed, so neither mode exists to test. `XE-07` asserts the unused-argument error on a call that still passes it, and the `XW` rows carry the single `min_eff_n` floor that replaces both modes |
 | 11 | Error paths — non-survey object, var not found, a collection | covered — `XE-10` (non-survey), `XE-08` (a collection), `XE-01` to `XE-15` for the rest, including `XE-12` to `XE-15` for a design column named in `vars` or in `banner`. The `var not found` case is unchanged by this work, and its existing block stays as it is |
 | 12 | Numerical accuracy — cell percentages match surveycore::get_freqs() | covered — `XN-01` to `XN-10` |
@@ -476,7 +477,7 @@ has a companion row that does run across all four.
 | XE-04 | `surveyreports_error_duplicate_value_label` | the duplicate-label fixture on a banner column | dual pattern. Assert the message names the column and the repeated label |
 | XE-05 | `surveyreports_error_multiple_unlabelled_codes` | the two-unlabelled-codes fixture on a banner column | dual pattern. Assert the message names both codes |
 | XE-06 | `surveyreports_error_interaction_not_in_banner` | `interactions` naming a column the role guard drops | dual pattern. This is the **re-validation** path: the same call passes the first check and must fail the second |
-| XE-07 | an unused-argument error | `pub_type = "external"`, then `show_n = FALSE` | `expect_error()`. Both arguments are gone, and a call passing either must not silently succeed |
+| XE-07 | an unused-argument error | `pub_type = "external"`, then `show_n = FALSE`, then `show_eff_n = TRUE` | `expect_error()`. All three arguments are gone, and a call passing any of them must not silently succeed |
 | XE-08 | `surveyreports_error_collection_not_supported_for_crosstab` | a `survey_collection` as `design` | `expect_error(class = )` only — the message is snapshotted elsewhere |
 | XE-09 | `surveyreports_error_empty_domain` | the domain column `FALSE` for every row | dual pattern |
 | XE-10 | `surveyreports_error_not_survey_object` | a plain data frame as `design` | `expect_error(class = )` only |

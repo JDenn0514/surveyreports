@@ -955,3 +955,239 @@ issue 1 fixed for the crosstab does not exist for `export_topline()`, because
 no PR moves any of its nine formals; what blocks the pass is one measurement
 the resolver did not take — `air format --check .` is already false on
 `develop` over seven files, six of which no PR declares.
+
+---
+
+## Plan Review: export-metadata — Pass 3, delta (2026-11-04)
+
+Plan under review: `plans/impl-export-metadata.md` v4.2.0, with
+`plans/test-spec-export-metadata.md` v0.16.0. Both are uncommitted edits on
+`develop` at `6b83e5f`. This is a delta pass. It checks issues 22 and 23, the
+lines the edit touched, and the four PARTIAL rows. It does not re-review the
+rest of the document.
+
+### Prior issues (Pass 1 and Pass 2)
+
+| # | Title | Status |
+|---|---|---|
+| 1 | The documentation deferral makes `check(): 0 warnings` unreachable | RESOLVED |
+| 2 | Four PRs remove arguments that committed tests still pass | RESOLVED |
+| 3 | `show_eff_n` is never removed from `export_crosstab()` | RESOLVED — the `XE-07` half landed with issue 23 |
+| 4 | No PR pins the final argument order of spec 3.1 | RESOLVED |
+| 5 | Fifteen helpers are defined 5 to 11 PRs before their first caller | RESOLVED |
+| 6 | Eight helper behaviors are tested by a task but pinned by no criterion | RESOLVED |
+| 7 | No numerical tolerance appears anywhere in the plan | PARTIAL — unchanged since Pass 2 |
+| 8 | PR 1 carries no `air` criterion and no coverage criterion | RESOLVED |
+| 9 | The coverage criterion is stricter than the gate the tester runs | RESOLVED |
+| 10 | Two PRs run `snapshot_review()` but list no snapshot file | RESOLVED |
+| 11 | PR 18's `na.rm` criterion names a call site outside its write surface | RESOLVED |
+| 12 | The About sheet's column widths and merged-cell rule reach no PR | RESOLVED |
+| 13 | PR 15's `100%` criterion is wider than the spec | RESOLVED |
+| 14 | Spec 3.19's unused factor level on the tabulated variable | RESOLVED |
+| 15 | Gate VIII's helper-inventory line reaches no criterion | RESOLVED (option B) |
+| 16 | The `variance = "se"` glossary entry reaches no PR | RESOLVED |
+| 17 | The Part A / Part B boundary is off by one | PARTIAL — unchanged since Pass 2 |
+| 18 | The standard gate criteria cite no source | RESOLVED |
+| 19 | "No exported function changes behavior" is not verifiable | RESOLVED |
+| 20 | Four criteria point at a source instead of stating the outcome | PARTIAL — unchanged since Pass 2 |
+| 21 | Five grep-checkable invariants are stated without the grep | RESOLVED |
+| 22 | `air format --check .` is already false on `develop`, six files outside every write surface | RESOLVED |
+| 23 | The plan's `XE-07` criterion names three arguments; the test-spec names two | RESOLVED |
+| 24 | Three criteria carry a spec section and no scenario id (suggestion) | OPEN — optional; no `TP` or `XX` row added |
+| 25 | `feature/cover-sheet` and `feature/base-notes-adoption` lack the snapshot guard (suggestion) | OPEN — optional; criterion not added |
+
+### What is still missing on the three PARTIAL rows
+
+None of the three changed. Each was measured again at `6b83e5f` with the
+working-tree edits applied.
+
+- **Issue 7.** `grep -n "1e-8" plans/spec-export-metadata.md` still returns
+  nothing. The plan carries the tolerance at
+  `plans/impl-export-metadata.md` lines 316 and 363, so the builder has the
+  number. As Pass 2 said, no change is needed unless the spec must stand alone.
+- **Issue 17.** `plans/impl-export-metadata.md` lines 1114-1115, in
+  `feature/crosstab-guards`, still read "This PR closes Part A." Line 2504
+  reads "PRs 6 to 9 precede PRs 10 to 18", so PR 10 is Part B. No execution
+  consequence.
+- **Issue 20.** `plans/impl-export-metadata.md` line 1567, in
+  `feature/crosstab-withheld-notices`, still reads "The three withholding
+  warnings fire with the dual pattern" and names no class. The scenario ids
+  `XV-03` to `XV-05` on line 1569 and the PR's tasks name the classes.
+
+### Job 1, issues 22 and 23 measured
+
+**Issue 22: resolved.** Measured 2026-11-04 at `6b83e5f` with `air 0.11.0`
+from `~/.local/bin/air`. `air format --check .` exits 1 and lists the same
+seven files as Pass 2:
+
+```
+Would reformat: data-raw\parse-nationscape-codebooks.R
+Would reformat: data-raw\prepare-anes-2024.R
+Would reformat: data-raw\prepare-gss-2024.R
+Would reformat: data-raw\prepare-nationscape-helpers.R
+Would reformat: data-raw\prepare-nationscape-phase1.R
+Would reformat: tests\testthat\helper-test-data.R
+Would reformat: tests\testthat\test-pool-pvals.R
+```
+
+All seven are now in PR 1's write surface, at
+`plans/impl-export-metadata.md` lines 255 and 259-267. Task 19, lines 214-219,
+names the seven by count, names `helper-test-data.R`, and names the six others
+by group. The file-by-file table at lines 2424-2427 lists all of them against
+PR 1 alone. No later PR claims any of the six. There is still no `air.toml`.
+
+The fix was also run, on a scratch copy of `git archive HEAD` outside the
+repo:
+
+- `air format .` changes the seven files and no others (615 insertions, 453
+  deletions).
+- `air format --check .` then exits 0. So one run makes the gate true, as
+  task 19 claims.
+- `testthat::test_file("tests/testthat/test-pool-pvals.R")` on the formatted
+  copy gives 110 passed, 0 failed, 11 skipped. The file holds 13
+  `expect_snapshot()` calls. `tests/testthat/_snaps/pool-pvals.md` shows no
+  content diff (`git diff --stat` is empty; the file differs in line endings
+  only). So "no other change" holds for `test-pool-pvals.R`.
+- Limit: the full suite was not run on the formatted copy, so
+  `helper-test-data.R` was checked by `air format --check .` only. `data-raw/`
+  is in `.Rbuildignore` (`^data-raw$`, line 8), so its reformat cannot reach
+  `R CMD check`.
+
+**Issue 23: resolved.** The test-spec and the plan now agree on all three
+arguments:
+
+- `plans/test-spec-export-metadata.md` line 480: the `XE-07` row reads
+  "`pub_type = "external"`, then `show_n = FALSE`, then `show_eff_n = TRUE`"
+  and "All three arguments are gone".
+- Test-spec lines 43-45 name all three, and the template row 9 at line 68
+  names `show_n` or `show_eff_n`.
+- Test-spec line 69 (template row 10) and line 315 (`XS-08`) still cite
+  `XE-07` for one argument each. Both are true under the three-argument row.
+- `plans/impl-export-metadata.md` task 23 (line 1692), the criterion at lines
+  1765-1766, the owned list at line 1787 and the coverage table at line 2469
+  all cite `XE-07` for `feature/crosstab-label-cols-and-sizes`, and the two
+  prose lines name all three arguments.
+- `plans/spec-export-metadata.md` does not cite `XE-07`.
+
+**Version citations.** The test-spec header (line 4) reads 0.16.0, dated
+2026-11-04. The plan cites v0.16.0 at line 8 and line 2451, and nowhere cites
+v0.15.0. The spec does not cite a test-spec version. The decisions entry at
+`plans/decisions-export-metadata.md` lines 1063-1067 matches the diff.
+
+### Job 2, what the edit could have broken
+
+- **Scenario count.** No row was added or removed. The test-spec still holds
+  178 ids, and the plan's coverage table and family check at lines 2454-2480
+  are unchanged and still total 178.
+- **"Six PRs own no scenario"** (line 2482). Still true. Reformatting adds no
+  behavior a scenario describes. The sentence "PR 1 changes a fixture and a
+  manifest" does not list the formatting commit, but it does not claim to be
+  exhaustive.
+- **PR 1's other criteria.** The coverage criterion at lines 241-242 reads
+  `covr::zero_coverage()`, which reports files in `R/`. PR 1 touches no file in
+  `R/`, so the six new files do not change it.
+- **Line-number citations.** No file in `plans/` cites a line number in any of
+  the seven reformatted files, so the reformat moves no citation.
+
+---
+
+### New issues
+
+#### Section: Overview
+
+**Issue 26: the Overview cites spec v0.20.0; the header cites v0.21.0**
+Severity: SUGGESTION
+Breaks citation hygiene. Not introduced by this edit: commit `6b83e5f` (#15)
+raised the header to v0.21.0 and left the Overview line.
+
+`plans/impl-export-metadata.md` line 7 reads "**Source spec:**
+`plans/spec-export-metadata.md` v0.21.0". Line 17 reads "This plan turns spec
+v0.20.0 into nineteen pull requests." The spec header
+(`plans/spec-export-metadata.md` line 4) reads 0.21.0. Line 17 is now the only
+stale version string in the plan.
+
+Options:
+- **A** Change line 17 to "spec v0.21.0" — Effort: low, Risk: low, Impact: the
+  plan cites one spec version.
+- **B** Drop the version from line 17, and leave the header as the one
+  citation — Effort: low, Risk: low, Impact: the next spec bump cannot make
+  line 17 stale.
+- **C** Do nothing — a reader sees two spec versions and has to check which one
+  the plan follows.
+
+**Recommendation: B** — one version string in the header is one place to keep
+current.
+
+---
+
+#### Section: PR 1 — task 19
+
+**Issue 27: task 19 counts seven reformatted files, then says the formatting commit holds "those six files"**
+Severity: SUGGESTION
+Clarity of a task the builder follows literally.
+
+`plans/impl-export-metadata.md` lines 214-218 read: "this reformats seven
+files: `tests/testthat/helper-test-data.R`, which this PR already changes, and
+six files that this feature does not otherwise touch … The formatting commit
+holds those six files and nothing else of substance."
+
+`air format .` also rewrites `helper-test-data.R` (74 lines changed on the
+scratch copy). So the formatting commit holds seven files, unless the builder
+formats `helper-test-data.R` in an earlier commit. A builder who reads "those
+six files" literally may try to keep `helper-test-data.R` out of the commit,
+which `air format .` does not allow. "Nothing else of substance" probably
+means to allow it, but the task does not say so.
+
+Options:
+- **A** Change the sentence to "The formatting commit holds the seven files and
+  no change other than formatting." — Effort: low, Risk: low, Impact: the task
+  says what the command writes.
+- **B** Do nothing — the result is the same either way, and a careful builder
+  reads "of substance" as the allowance.
+
+**Recommendation: A** — one sentence, and the count then agrees with itself.
+
+---
+
+#### Section: PR 1 — write surface and criteria
+
+No new issues found.
+
+#### Section: PR 14 — `feature/crosstab-label-cols-and-sizes` (`XE-07`)
+
+No new issues found.
+
+#### Section: Write surface, file by file
+
+No new issues found.
+
+#### Section: Scenario coverage
+
+No new issues found.
+
+#### Section: test-spec v0.16.0
+
+No new issues found.
+
+---
+
+## Summary (Pass 3)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 0 |
+| SUGGESTION | 2 |
+
+**Total issues:** 2 (issues 26 and 27).
+
+**Prior issues:** 20 RESOLVED, 3 PARTIAL (7, 17, 20, none with an execution
+consequence), 2 OPEN suggestions (24, 25), 0 REGRESSED.
+
+**Verdict: PASS.**
+
+**Overall assessment:** Both fixes measure true — the seven files `air` lists
+at `6b83e5f` are all in PR 1's surface, one `air format .` run makes the gate
+pass with the `test-pool-pvals.R` tests and snapshots unchanged, and `XE-07`
+now carries all three removed arguments in both documents — and what remains is
+two wording suggestions and three PARTIAL rows that change no PR.

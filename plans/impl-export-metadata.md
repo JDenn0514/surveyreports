@@ -1,20 +1,21 @@
 # Implementation plan — export-metadata
 
-**Status:** PLAN_DRAFT
-**Version:** 4.1.0
+**Status:** PLAN_READY
+**Version:** 4.3.0
 **Date:** 2026-11-04
 **Id:** `export-metadata`
 **Source spec:** `plans/spec-export-metadata.md` v0.21.0
-**Source test-spec:** `plans/test-spec-export-metadata.md` v0.15.0
+**Source test-spec:** `plans/test-spec-export-metadata.md` v0.16.0
 **Review applied:** `plans/plan-review-export-metadata.md` Pass 1 — 21 issues, all
-resolved
+resolved; Pass 2 — issues 22 and 23 resolved, suggestions 24 and 25 open;
+Pass 3 — PASS, suggestions 26 and 27 applied
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
 
 ## Overview
 
-This plan turns spec v0.20.0 into nineteen pull requests. The first five build
+This plan turns the spec into nineteen pull requests. The first five build
 shared helpers. The next four land Part A — the metadata integration. The
 following nine rebuild `export_crosstab()` output. The last one writes the
 documentation prose.
@@ -211,7 +212,13 @@ because a check that finds a gap must close it there and nowhere later.
 17. Remove the "Gap to close" note under **Cross-design testing** in
     `.claude/rules/testing.md`.
 18. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-19. Run `air format .`, in its own commit.
+19. Run `air format .`, in its own commit. On `develop` at `6b83e5f` this
+    reformats seven files: `tests/testthat/helper-test-data.R`, which this PR
+    already changes, and six files that this feature does not otherwise touch
+    (five `data-raw/` scripts and `tests/testthat/test-pool-pvals.R`). The
+    formatting commit holds the seven files and no change other than
+    formatting.
+    `air format --check .` then passes for every later PR of the chain.
 20. Run `devtools::check()`.
 21. Write `changelog/chore-export-metadata-infra.md`.
 22. Open the PR.
@@ -251,6 +258,15 @@ existing suite.
 - `tests/testthat/test-export-topline.R` — modified
 - `tests/testthat/test-export-crosstab.R` — modified
 - `.claude/rules/testing.md` — modified
+- `data-raw/parse-nationscape-codebooks.R` — reformatted by `air`; no other
+  change
+- `data-raw/prepare-anes-2024.R` — reformatted by `air`; no other change
+- `data-raw/prepare-gss-2024.R` — reformatted by `air`; no other change
+- `data-raw/prepare-nationscape-helpers.R` — reformatted by `air`; no other
+  change
+- `data-raw/prepare-nationscape-phase1.R` — reformatted by `air`; no other
+  change
+- `tests/testthat/test-pool-pvals.R` — reformatted by `air`; no other change
 - `changelog/chore-export-metadata-infra.md` — created
 
 ---
@@ -2409,6 +2425,8 @@ across the chain.
 | `plans/error-messages.md` | 1 |
 | `.claude/rules/testing.md` | 1 |
 | `tests/testthat/helper-test-data.R` | 1 |
+| `data-raw/` — five scripts, `air` reformat only | 1 |
+| `tests/testthat/test-pool-pvals.R` — `air` reformat only | 1 |
 | `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 18 |
 | `R/export-topline.R` | 6, 7, 8, 9, 19 |
 | `R/export-crosstab.R` | 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 |
@@ -2432,7 +2450,7 @@ unchanged each time, because this work adds no export.
 
 ## Scenario coverage
 
-Each of the 178 scenario ids in `plans/test-spec-export-metadata.md` v0.15.0 is
+Each of the 178 scenario ids in `plans/test-spec-export-metadata.md` v0.16.0 is
 assigned to exactly one PR.
 
 | PR | Branch | Count | Scenario ids |
