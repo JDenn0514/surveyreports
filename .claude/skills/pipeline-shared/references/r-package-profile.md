@@ -116,9 +116,11 @@ The tester validates against `.claude/rules/package-conventions.md`:
 - **Authors@R**: `person()` format; no deprecated `Author`/`Maintainer`
 - **Imports versions**: lower-bound pins `(>= x.y.z)` on all entries; no exact
   pins (`==`)
-- **`Remotes:` entry for surveycore is present.** surveycore is not on CRAN.
-  A PR that removes the `Remotes: JDenn0514/surveycore` line, or moves
-  surveycore from `Imports` to `Suggests`, is a BLOCK. See `CLAUDE.md`.
+- **surveycore is in `Imports` with a CRAN floor.** surveycore is on CRAN.
+  A PR that moves surveycore from `Imports` to `Suggests` is a BLOCK. A PR
+  into `develop` or `main` that carries a `Remotes: JDenn0514/surveycore`
+  line is a BLOCK: a `Remotes:` pin is for the life of a branch only. See
+  `CLAUDE.md`.
 - **No `@importFrom`**: grep `^#' @importFrom` across `R/` — any hit is a BLOCK
 
 ## Error class registry check

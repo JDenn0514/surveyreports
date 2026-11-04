@@ -13,9 +13,11 @@ Exported functions: `export_topline()`, `export_crosstab()`, `pool_pvals()`.
 
 ## surveycore Dependency
 
-surveycore is **not on CRAN** — it is installed via `Remotes: JDenn0514/surveycore`
-in DESCRIPTION. It lives in `Imports`, not `Suggests`. Do **not** move it to
-`Suggests` and do **not** remove the `Remotes:` entry.
+surveycore is on CRAN (1.2.0, published 2026-11-03). It lives in `Imports`,
+not `Suggests`, with a minimum version (`surveycore (>= 1.2.0)`). Do **not**
+move it to `Suggests`. DESCRIPTION has no `Remotes:` entry. Add a
+`Remotes: JDenn0514/surveycore@<branch>` line only on a branch that needs
+unreleased surveycore code, and remove it before that branch merges.
 
 ---
 
