@@ -28,16 +28,6 @@
       i Check for typos or use `names()` on the design data.
       v Remove or rename the missing variable before calling this function.
 
-# export_topline() errors when domain has zero rows
-
-    Code
-      export_topline(d_empty, vars = q1, file_name = out)
-    Condition
-      Error in `.validate_export_inputs()`:
-      x The design contains zero rows.
-      i No data is available to compute frequencies.
-      v Supply a design with at least one observation.
-
 # export_topline() errors when file_name does not end in .xlsx
 
     Code

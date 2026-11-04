@@ -66,6 +66,13 @@
 
   # 4. Domain has at least one row
   if (nrow(data_for_check) == 0L) {
+    # nocov start
+    # Defensive: surveycore >= 1.2.0 rejects zero-row @data in its S7
+    # validator. An empty filter() domain keeps every row, so it does not
+    # reach this check. The check stays because DESCRIPTION still allows
+    # surveycore < 1.2.0. The export-metadata work
+    # (plans/spec-export-metadata.md) plans to raise this class for an
+    # all-FALSE domain; remove these markers then.
     cli::cli_abort(
       c(
         "x" = "The design contains zero rows.",
@@ -74,6 +81,7 @@
       ),
       class = "surveyreports_error_empty_domain"
     )
+    # nocov end
   }
 
   # 5. file_name ends in .xlsx
