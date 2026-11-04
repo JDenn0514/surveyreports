@@ -980,3 +980,44 @@ The spec is v0.20.0 and the test-spec is v0.15.0, both dated 2026-09-22. Both
 stay at `SPEC_READY`; the edits removed stale text and added no contract. The
 spec still holds no tolerance value, no `expect_` call and no test id, and the
 test-spec still holds no `R/` path and no dot-prefixed helper name.
+
+---
+
+## [2026-11-04] — surveycore 1.2.0 on CRAN; the `@develop` pin removed
+
+### Context
+
+surveycore 1.2.0 was published on CRAN on 2026-11-03. PR #13 dropped the
+`Remotes:` line from `DESCRIPTION` and set the floor to
+`surveycore (>= 1.2.0)`. Spec section IX still required a
+`Remotes: JDenn0514/surveycore@develop` pin and a `>= 1.1.0.9000` floor, and
+PR 1 of the plan still carried the tasks to set them. No judgment call was
+involved, so this entry records facts.
+
+### Facts
+
+- Measured 2026-11-04: the CRAN 1.2.0 build exports `get_effective_n()`,
+  `extract_universe()`, `extract_var_extra()`, `extract_dataset_metadata()`,
+  `classify_question_type()`, `as_survey_nonprob()` and
+  `SURVEYCORE_DOMAIN_COL`. These are every surveycore name the plan calls.
+- The spec's measured facts were taken against `1.1.0.9000`. They were not
+  measured again against 1.2.0. One known difference is that 1.2.0 rejects a
+  zero-row design when it is built. PR #14 removed the four tests that built
+  one.
+
+### Changes
+
+- Spec section IX now requires a floor of `surveycore (>= 1.2.0)` or higher
+  and no `Remotes:` line. The section 8 checklist item matches.
+- Plan PR 1 keeps its branch name and its task numbers. Tasks 5 to 8 now check
+  `DESCRIPTION` and the installed surveycore, and edit nothing. Task 22 no
+  longer asks the PR description to explain a pin. `DESCRIPTION` moved from
+  the write surface's "modified" list to "checked; not modified".
+- The plan's "Two facts a PR description must carry" section keeps one fact,
+  the three helpers in the shared file.
+
+### Outcome
+
+The spec is v0.21.0, dated 2026-11-04, and stays at `SPEC_READY`. The plan is
+v4.1.0 and stays at `PLAN_DRAFT`. The test-spec did not mention the pin and is
+unchanged at v0.15.0.
