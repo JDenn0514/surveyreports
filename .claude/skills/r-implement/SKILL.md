@@ -54,25 +54,24 @@ git branch --show-current
 
 ### Step 2: Check surveycore version
 
-`surveycore` is the core ecosystem dependency installed from GitHub. Implementing
+`surveycore` is the core ecosystem dependency, installed from CRAN. Implementing
 against a stale version risks calling the wrong API or class definitions.
 
 Run both:
 
 ```bash
-gh release view --repo JDenn0514/surveycore --json tagName,publishedAt,body \
-  --template '{{.tagName}} ({{.publishedAt}})\n{{.body}}'
+Rscript -e "cat(available.packages(repos = 'https://cloud.r-project.org')['surveycore', 'Version'], '\n')"
 Rscript -e "cat(as.character(packageVersion('surveycore')), '\n')"
 ```
 
-Compare the installed version against the latest release tag.
+Compare the installed version against the CRAN version.
 
 **If installed version is behind the latest release:** Stop and tell the user:
 
 > "surveycore `<installed>` is installed but `<latest>` is available.
 > Update before implementing to avoid working against a stale API:
 > ```r
-> pak::pak('JDenn0514/surveycore')
+> pak::pak('surveycore')
 > ```
 > Re-invoke `/r-implement` after updating."
 

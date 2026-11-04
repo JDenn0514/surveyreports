@@ -300,9 +300,13 @@ Read DESCRIPTION for its current contents. Two of its lines carry a reason the
 file itself does not state, and both must stay:
 
 - `LazyData: true` — the package ships four datasets, and they load lazily.
-- `Remotes: JDenn0514/surveycore` — surveycore is not on CRAN. It belongs in
-  `Imports`, never in `Suggests`. Moving it to `Suggests`, or dropping the
-  `Remotes:` line, breaks installation.
+- `surveycore (>= 1.2.0)` under `Imports` — surveycore is on CRAN. It belongs
+  in `Imports`, never in `Suggests`. Raise the floor when surveyreports starts
+  to use a function from a newer surveycore release.
+
+DESCRIPTION has no `Remotes:` line. A branch that needs unreleased surveycore
+code may add `Remotes: JDenn0514/surveycore@<branch>` for its life. Remove that
+line, and set the floor to the released version, before the branch merges.
 
 Package-level documentation (`R/surveyreports-package.R`):
 
