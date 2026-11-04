@@ -1,8 +1,8 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.20.0
-**Date:** 2026-09-22
+**Version:** 0.21.0
+**Date:** 2026-11-04
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
 **Target version:** 0.1.0.9000
@@ -2104,8 +2104,8 @@ without running the suite. The suite gates live with the scenarios.
       it for `About`; do the same on `man/export_topline.Rd` and grep for both
       `Topline` and `About`. An unchanged `@returns` is one line, names no
       sheet, and fails this check — sections 7.2 and 7.3
-- [ ] `DESCRIPTION` pins `Remotes: JDenn0514/surveycore@develop` and raises the
-      `surveycore` floor — section IX
+- [ ] `DESCRIPTION` reads `surveycore (>= 1.2.0)` or higher under `Imports:`
+      and has no `Remotes:` line — section IX
 
 ### 8.1 Invariants
 
@@ -2144,26 +2144,25 @@ without reading the spec twice:
 
 ## IX. Dependency sequencing
 
-This spec depends on unreleased surveycore.
+This spec depends on surveycore 1.2.0 or later, from CRAN.
 
-1. `Remotes: JDenn0514/surveycore` resolves to the GitHub default branch, `main`.
-   `main` is 82 commits behind `develop` and has none of the metadata API this
-   spec reads.
-2. CI installs surveycore from that `Remotes:` line, so CI would test against the
-   wrong version.
+surveycore 1.2.0 was published on CRAN on 2026-11-03. `develop` already reads
+`surveycore (>= 1.2.0)` under `Imports:` and has no `Remotes:` line (PR #13).
+CI installs surveycore from CRAN.
 
-A1 raises the stakes: `get_effective_n()` is not on `main`, so an unpinned CI run
-fails at load rather than at a subtle numeric assertion.
+Measured 2026-11-04 against the CRAN 1.2.0 build: it exports
+`get_effective_n()`, `extract_universe()`, `extract_var_extra()`,
+`extract_dataset_metadata()`, `classify_question_type()`,
+`as_survey_nonprob()` and `SURVEYCORE_DOMAIN_COL`. A1 needs
+`get_effective_n()`, so a build below 1.2.0 fails at load.
 
-Required: pin `Remotes: JDenn0514/surveycore@develop` for the life of this
-branch, and raise the `Imports:` floor to `surveycore (>= 1.1.0.9000)`. The
-`Remotes:` entry itself must stay — `CLAUDE.md` forbids removing it or moving
-surveycore to `Suggests`.
+Required: keep the `Imports:` floor at `surveycore (>= 1.2.0)` or higher, and
+add no `Remotes:` line. Raise the floor only if this work comes to need a
+surveycore function released after 1.2.0.
 
-This is a development-version floor, not a permanent one. **The PR description
-must say so**, so the `@develop` pin is not merged and forgotten. When surveycore
-releases to `main`, drop `@develop` and set the floor to the released version in
-one commit.
+The facts in this spec were measured against surveycore `1.1.0.9000`. They
+were not measured again against 1.2.0. One known difference: 1.2.0 rejects a
+zero-row design when it is built (PR #14).
 
 **Within Part B, one ordering is forced.** `.write_crosstab_headers()` gains
 `label_cols`, and the battery route adopts it, **before**
