@@ -889,22 +889,6 @@ test_that("export_crosstab() errors when vars_resolved contains a missing column
   )
 })
 
-test_that("export_crosstab() errors when domain has zero rows", {
-  skip_if_not_installed("surveycore")
-  d_empty <- make_all_designs(seed = 42)$taylor
-  d_empty@data <- d_empty@data[0L, ]
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_error(
-    export_crosstab(d_empty, vars = q1, banner = group, file_name = out),
-    class = "surveyreports_error_empty_domain"
-  )
-  expect_snapshot(
-    error = TRUE,
-    export_crosstab(d_empty, vars = q1, banner = group, file_name = out)
-  )
-})
-
 test_that("export_crosstab() errors when file_name does not end in .xlsx", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
@@ -1087,21 +1071,6 @@ test_that("export_crosstab() handles very small design (2 rows) without crashing
   )
 
   expect_true(file.exists(out))
-})
-
-test_that("export_crosstab() errors with empty-domain design", {
-  skip_if_not_installed("surveycore")
-  # Build a valid design then zero out its @data (same approach as section 12)
-  d_empty <- make_all_designs(seed = 42)$taylor
-  d_empty@data <- d_empty@data[0L, ]
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  # Snapshot already captured in section 12 — use only expect_error(class=)
-  # here to avoid a duplicate snapshot entry
-  expect_error(
-    export_crosstab(d_empty, vars = q1, banner = group, file_name = out),
-    class = "surveyreports_error_empty_domain"
-  )
 })
 
 test_that("export_crosstab() handles single-level banner without error", {

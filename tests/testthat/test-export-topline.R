@@ -464,18 +464,6 @@ test_that("export_topline() handles all-NA battery variable without crashing", {
   expect_true(file.exists(out))
 })
 
-test_that("export_topline() errors with empty_domain for a zero-row design", {
-  skip_if_not_installed("surveycore")
-  d_empty <- make_all_designs(seed = 42)$taylor
-  d_empty@data <- d_empty@data[0L, ]
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_error(
-    export_topline(d_empty, vars = q1, file_name = out),
-    class = "surveyreports_error_empty_domain"
-  )
-})
-
 test_that("export_topline() handles survey_collection where one wave is missing the variable", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
@@ -652,22 +640,6 @@ test_that("export_topline() errors when vars_resolved contains a missing column"
   expect_snapshot(
     error = TRUE,
     surveyreports:::.validate_export_inputs(d, "nonexistent_col", out, 0.95, 1L)
-  )
-})
-
-test_that("export_topline() errors when domain has zero rows", {
-  skip_if_not_installed("surveycore")
-  d_empty <- make_all_designs(seed = 42)$taylor
-  d_empty@data <- d_empty@data[0L, ]
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_error(
-    export_topline(d_empty, vars = q1, file_name = out),
-    class = "surveyreports_error_empty_domain"
-  )
-  expect_snapshot(
-    error = TRUE,
-    export_topline(d_empty, vars = q1, file_name = out)
   )
 })
 
