@@ -1191,3 +1191,352 @@ at `6b83e5f` are all in PR 1's surface, one `air format .` run makes the gate
 pass with the `test-pool-pvals.R` tests and snapshots unchanged, and `XE-07`
 now carries all three removed arguments in both documents — and what remains is
 two wording suggestions and three PARTIAL rows that change no PR.
+
+---
+
+## Plan Review: export-metadata — Pass 4, delta (2026-11-05)
+
+Plan under review: `plans/impl-export-metadata.md` v4.4.0, with
+`plans/spec-export-metadata.md` v0.22.0 and
+`plans/test-spec-export-metadata.md` v0.17.0. All three are uncommitted edits
+on `docs/export-metadata-plan-pass-3` at `2728b60`. This is a delta pass. It
+checks the three variance rules of spec 3.16, the rows `XB-05` to `XB-10`, the
+PR 17 changes and the counts. It does not re-review the rest of the documents.
+
+Measurements are at `2728b60`, with R 4.6.1 and openxlsx2 1.28, from a scratch
+script outside the repo.
+
+### Prior issues (Passes 1 to 3)
+
+| # | Title | Status |
+|---|---|---|
+| 1 | The documentation deferral makes `check(): 0 warnings` unreachable | RESOLVED |
+| 2 | Four PRs remove arguments that committed tests still pass | RESOLVED |
+| 3 | `show_eff_n` is never removed from `export_crosstab()` | RESOLVED |
+| 4 | No PR pins the final argument order of spec 3.1 | RESOLVED |
+| 5 | Fifteen helpers are defined 5 to 11 PRs before their first caller | RESOLVED |
+| 6 | Eight helper behaviors are tested by a task but pinned by no criterion | RESOLVED |
+| 7 | No numerical tolerance appears anywhere in the plan | PARTIAL — not changed by this delta |
+| 8 | PR 1 carries no `air` criterion and no coverage criterion | RESOLVED |
+| 9 | The coverage criterion is stricter than the gate the tester runs | RESOLVED |
+| 10 | Two PRs run `snapshot_review()` but list no snapshot file | RESOLVED |
+| 11 | PR 18's `na.rm` criterion names a call site outside its write surface | RESOLVED |
+| 12 | The About sheet's column widths and merged-cell rule reach no PR | RESOLVED |
+| 13 | PR 15's `100%` criterion is wider than the spec | RESOLVED |
+| 14 | Spec 3.19's unused factor level on the tabulated variable | RESOLVED |
+| 15 | Gate VIII's helper-inventory line reaches no criterion | RESOLVED (option B) |
+| 16 | The `variance = "se"` glossary entry reaches no PR | RESOLVED |
+| 17 | The Part A / Part B boundary is off by one | PARTIAL — not changed by this delta |
+| 18 | The standard gate criteria cite no source | RESOLVED |
+| 19 | "No exported function changes behavior" is not verifiable | RESOLVED |
+| 20 | Four criteria point at a source instead of stating the outcome | PARTIAL — not changed by this delta |
+| 21 | Five grep-checkable invariants are stated without the grep | RESOLVED |
+| 22 | `air format --check .` is already false on `develop` | RESOLVED |
+| 23 | The plan's `XE-07` criterion names three arguments; the test-spec names two | RESOLVED |
+| 24 | Three criteria carry a spec section and no scenario id (suggestion) | OPEN — not changed by this delta |
+| 25 | `feature/cover-sheet` and `feature/base-notes-adoption` lack the snapshot guard (suggestion) | OPEN — not changed by this delta |
+| 26 | The Overview cites spec v0.20.0; the header cites v0.21.0 (suggestion) | RESOLVED — applied |
+| 27 | Task 19 counts seven files, then says "those six files" (suggestion) | RESOLVED — applied |
+
+### What the delta did to the open rows
+
+- **Issue 7.** `grep -n "1e-8" plans/spec-export-metadata.md` still returns
+  nothing. The plan carries the tolerance at lines 321 and 368. The delta adds
+  no tolerance.
+- **Issue 17.** Plan lines 1118-1120 still read "This PR closes Part A." Line
+  2552 still reads "PRs 6 to 9 precede PRs 10 to 18". The line numbers moved,
+  and the text did not change.
+- **Issue 20.** Plan line 1572 still reads "The three withholding warnings
+  fire with the dual pattern" and names no class.
+- **Issue 24.** The four new PR 17 criteria, plan lines 2140-2151, each cite a
+  scenario id. The delta adds no criterion of the kind issue 24 names.
+- **Issue 25.** No snapshot guard was added to either PR.
+- **Issues 26 and 27.** Still applied. Plan line 20 cites no spec version.
+  Line 222 says the formatting commit holds "the seven files".
+
+### The delta, check by check
+
+**1. The width formula.** The formula holds for `decimals` 0, 1 and 2 inside
+the range spec line 1764 states. Measured with `nchar()`:
+
+| String | Characters |
+|---|---|
+| `(-10.5% – 100.4%)` | 17 |
+| `(-10.53% – 100.47%)` | 19 |
+| `(-10% – 100%)` | 13 |
+| `(-100% – 1000%)` | 15 |
+
+- The floor and ceiling strings of spec 3.3, line 795-796, are 3 and 4
+  characters at `decimals = 0`, 5 and 6 at 1, and 6 and 7 at 2. None is longer
+  than the `5 + decimals` bound of spec line 1756. So a floor or ceiling string
+  inside an interval cannot push it past the width.
+- At `decimals = 0`, `round(-99.6)` is `-100` and `round(999.6)` is `1000`.
+  Both values are inside the stated range, and both print 5 characters. The
+  worst string is then `(-100% – 1000%)`, 15 characters. It fits with 0
+  characters spare, not 2. Issue 31.
+- No string the formatter writes under `"ci"` exceeds the width inside the
+  stated range. Outside it (a lower bound at or below `-100%`, an upper bound
+  at or above `1000%`) a string can. Spec line 1764 states that limit.
+- Limit: this counts characters, not Excel width units. No workbook was opened
+  in Excel.
+
+**2. The six test-spec rows.** Lines 410-415 have the 8 cells of their
+neighbours. The 184 ids hold no duplicate. Each input is reachable when PR 17
+runs: `min_eff_n` lands in PR 11, `variance_display` at PR 17 task 4, and
+`XH-16` already runs `variance = "ci"` on all four designs. Each oracle states
+an exact value. The readback is feasible on openxlsx2 1.28, measured after
+`wb_save()` and `wb_load()`:
+
+- openxlsx2 exports no width getter. The width is in
+  `wb$worksheets[[i]]$cols_attr`, as `width="17.711"` for a width set to 17.
+- A row height is in `wb$worksheets[[i]]$sheet_data$row_attr`: `ht` is `"30"`
+  and `customHeight` is `"1"` for a set row, and `ht` is `""` for a row with no
+  height of its own. So "carries no height of its own" is testable.
+- `wb_get_cell_style()` returns the style id, and
+  `wb$styles_mgr$styles$cellXfs` holds `<alignment wrapText="1"/>` for it.
+
+The width oracle has one defect, which `XB-01` shares. Issue 28.
+
+**3. PR placement.** PR 17 is the right owner, though one reason it gives is
+wrong (issue 30). At `2728b60`, `R/export-crosstab.R` holds no `se`, `ci_low`
+or `ci_high`. `variance` reaches only the `get_freqs()` call at line 187. So
+before PR 17 a `"ci"` call writes no interval, and the width of 12 between PR 15
+and PR 17 hides nothing. No PR 15 or PR 16 criterion is false at its own merge.
+`XB-03` (test-spec line 408) runs at `variance = NULL`, so its "an estimate
+cell … resolves to a non-wrapping one" stays true after PR 17.
+
+TDD granularity holds. Each new row gets a write, run, implement and run step.
+`XB-07` and `XB-10` are guards that pass on first run, and tasks 35 and 42 say
+so. No cross-reference is stale. The only "task N" citations outside a PR,
+plan lines 2557 and 2562, name PR 10 task 34 and PR 18 task 45. Neither PR was
+renumbered.
+
+**4. Write surface.** The author's flag is a real gap. Issue 29.
+
+**5. Counts and citations.** All true:
+
+- The test-spec holds 184 ids: XB 10, XC 11, XS 10, XW 13, XH 24, XD 1, XR 2,
+  XA 14, XM 17, XE 15, XV 13, XX 12, XN 10, TP 14, TC 8, TE 4, TW 2, TN 4.
+- The coverage table, plan lines 2503-2523, sums to 184. A scripted diff of
+  its ids against the test-spec ids is empty.
+- PR 17 owns 15 at plan line 2168 and at line 2520.
+- Spec line 4 reads 0.22.0. Test-spec line 4 reads 0.17.0. Plan line 4 reads
+  4.4.0, lines 7-8 cite 0.22.0 and 0.17.0, and line 2499 cites v0.17.0.
+- `grep` for `0.21.0`, `0.16.0`, `4.3.0` and `178` finds nothing in the three
+  documents. The `184.98` hits at spec lines 155-158 and 1142 and test-spec
+  line 723 are effective-N values.
+
+**6. Other notes, not issues.**
+
+- Spec line 1471 is 89 characters, the one prose line in the delta past 80.
+- `plans/decisions-export-metadata.md` line 1122 says 3.16 "changes the Column
+  widths and Wrapping rows, adds an Estimate row height row". The diff also
+  adds a sentence to the Heading row height row (spec line 1749). The decisions
+  file is history, so this review does not ask for an edit.
+
+---
+
+### New issues
+
+#### Section: test-spec v0.17.0 — sheet properties
+
+**Issue 28: "rounded to the nearest whole number" turns a correct width of 17 into 18**
+Severity: REQUIRED
+A stated oracle fails on correct code. The defect predates the delta in
+`XB-01`, and the delta copies it into three rows.
+
+`plans/test-spec-export-metadata.md` lines 410-412 (`XB-05`, `XB-06`,
+`XB-07`) give the tolerance "rounded to the nearest whole number", as `XB-01`
+does at line 406. The plan repeats it: task 8 (line 1832, "rounds to 44") and
+task 30 (line 2094, "rounds to `15 + 2 * decimals`").
+
+Measured on openxlsx2 1.28: `wb_set_col_widths()` with widths 44, 15 and 17
+writes `width="44.711"`, `"15.711"` and `"17.711"`, and `wb_load()` reads the
+same back. `round()` gives 45, 16 and 18. So a tester who follows the rows
+reads 18 for a correct 17 and blocks the PR. `XB-01` fails the same way in PR
+15 (45 for 44, 13 for 12). `XB-02` compares two workbooks, so it is not
+affected.
+
+Options:
+- **A** Change the tolerance on `XB-01`, `XB-05`, `XB-06` and `XB-07` to "the
+  integer part, `floor()`, of the stored width", and say that openxlsx2 1.28
+  stores the set width plus 0.711. Change plan tasks 8 and 30 from "rounds to"
+  to "has the integer part". — Effort: low, Risk: low, Impact: the oracle
+  passes correct code and still tells 15, 17 and 19 apart.
+- **B** State the stored value: "the stored width is the set width plus
+  `0.711`, compared at `1e-6`". — Effort: low, Risk: medium, Impact: exact, but
+  a future openxlsx2 that changes the padding breaks every row.
+- **C** Do nothing — the tester blocks PR 15 on `XB-01` and PR 17 on `XB-05`
+  to `XB-07`, or improvises a rule the test-spec does not state.
+
+**Recommendation: A** — `floor()` holds whether or not openxlsx2 keeps its
+0.711 padding, and the rows stay 2 characters apart.
+
+---
+
+#### Section: PR 15 and PR 17 — write surface
+
+**Issue 29: no PR names the file that holds the width code, and PR 15's surface points the wrong way**
+Severity: REQUIRED
+Lens 5, file completeness. A builder must guess a file, and one guess stops
+PR 17 at the shipper's write-surface check.
+
+- PR 17 task 32 (plan lines 2097-2099) edits the width "at the site where PR
+  15 sets the fixed widths". PR 17's surface (lines 2171-2178) lists
+  `R/export-crosstab.R` and not `R/export-utils.R`.
+- PR 15 task 10 (lines 1835-1836), task 16 (line 1845), task 17 (line 1846)
+  and task 21 (line 1852) name no file or function.
+- PR 15's surface lists `R/export-utils.R` (line 1928), and the file table
+  lists PR 15 against it (line 2476). No PR 15 task names a change in that
+  file. Tasks 23 to 36 only write tests and confirm they pass. So the only PR 15
+  code that could go in `R/export-utils.R` is the sheet-property code.
+- If PR 15 puts the widths or the freeze pane there, for example inside
+  `.write_sample_size_rows()`, which knows the last sample-size row, then PR
+  17 task 32 is outside PR 17's surface.
+
+The likely site is `R/export-crosstab.R`. The question sheets are added there
+(lines 209, 231, 253, 274), and the three routes that write the estimate cells
+are there. Spec 2.1 lists every new helper and names no width helper, so the
+code goes into an existing function. But the plan does not say so.
+
+Options:
+- **A** Name the site in PR 15 task 10, task 16, task 17 and task 21, for
+  example "in `R/export-crosstab.R`, after each sheet is added in
+  `export_crosstab()`". Name the same file in PR 17 task 32. Then drop
+  `R/export-utils.R` from PR 15's surface and from PR 15 on line 2476, or
+  state the change that needs it. — Effort: low, Risk: low, Impact: both
+  surfaces agree with the tasks.
+- **B** Add `R/export-utils.R` to PR 17's surface and the file table. —
+  Effort: low, Risk: low, Impact: the gate cannot stop PR 17, but the site
+  stays unnamed and PR 17's surface is wider than its tasks.
+- **C** Do nothing — the result depends on where the PR 15 builder puts the
+  code.
+
+**Recommendation: A** — one named site removes the guess in both PRs and the
+unexplained `R/export-utils.R` entry in PR 15.
+
+---
+
+#### Section: PR 17 — the boundary note
+
+**Issue 30: the PR 17 note says the `"ci"` width depends on `variance_display`; it does not**
+Severity: SUGGESTION
+A stated reason does not match the spec.
+
+Plan lines 2048-2050 read: "All three depend on `variance_display`, which this
+PR adds, so none can land in PR 15." Spec line 1747 says the width rule
+"holds under both `variance_display` values", and `XB-05` (test-spec line 410)
+tests that. The width depends on `variance` and `decimals`, and both exist at
+`2728b60` (`R/export-crosstab.R` line 79). The placement is still right, for a
+different reason: PR 17 is the first PR that writes an interval.
+
+PR 15's criterion at plan line 1889 reads "The column widths are fixed at 44
+and 12". After PR 17 that is true only away from `"ci"`. PR 16 carries a lag
+note for a similar case (line 1946).
+
+Options:
+- **A** Change lines 2048-2050 to say that the wrap and the row height depend
+  on `variance_display`, and that the width lands here because this PR first
+  writes the interval it makes room for. Add "at `variance = NULL`" to the PR
+  15 criterion at line 1889. — Effort: low, Risk: low, Impact: the reason is
+  true and the PR 15 criterion matches spec 3.16.
+- **B** Do nothing — the placement is right, and a reader who checks the
+  reason against spec 3.16 finds it false.
+
+**Recommendation: A** — two short edits, and both texts then match spec 3.16.
+
+---
+
+#### Section: spec v0.22.0 — section 3.16
+
+**Issue 31: the derivation says 2 characters are spare at `decimals = 0`, and the `"se"` claim is checked at one `decimals` value**
+Severity: SUGGESTION
+A worked bound in the spec is not exact. No string exceeds the width.
+
+- Spec lines 1760-1762 say a bound at `decimals = 0` "prints at most 4
+  characters", and that the formula "leaves 2 characters spare". Inside the
+  range line 1764 states, `round(-99.6)` prints `-100%` and `round(999.6)`
+  prints `1000%`, 5 characters each. The worst string,
+  `(-100% – 1000%)`, is 15 characters, so 0 are spare. The formula still
+  holds.
+- Spec lines 1766-1768 justify the width of 12 under `"se"` at
+  `decimals = 1` only. `(100.00%)` at `decimals = 2` is 9 characters, so the
+  rule holds there too, but the text does not say so. It holds up to
+  `decimals = 5` (`(100.00000%)`, 12 characters).
+
+Options:
+- **A** Change "at most 4 characters" to "at most 5, as in `-100%`", and
+  "2 characters spare" to "the worst string, `(-100% – 1000%)`, fills it
+  exactly". Add "and `(100.00%)`, 9 characters, at `decimals = 2`" to the
+  `"se"` paragraph. — Effort: low, Risk: low, Impact: the derivation is exact.
+- **B** Do nothing — the width rule is correct, and only its explanation is
+  off at an edge no real interval reaches.
+
+**Recommendation: A** — the derivation exists to be checked, so it should
+check.
+
+---
+
+#### Section: PR 17 — tasks 38 and 39
+
+**Issue 32: the wrap and the row height are written three times, one copy per route**
+Severity: SUGGESTION
+`CLAUDE.md` engineering principle 1 (DRY) asks for repetition to be raised in
+review.
+
+Task 38 (plan lines 2108-2110) sets the wrap "in all three render routes".
+Task 39 (lines 2111-2112) sets the row height "under the same condition" and
+names no site. So the condition `!is.null(variance) && variance_display ==
+"cell"` and two openxlsx2 calls go into three functions. The same PR splits
+the `.fmt_variance()` calls into one task per route (tasks 7 to 9). Spec 2.1
+closes the helper list, so a new helper is not an option without a spec edit.
+
+Options:
+- **A** Keep the three copies, and split tasks 38 and 39 into one task per
+  route, as tasks 7 to 9 do. — Effort: low, Risk: low, Impact: each edit is one
+  2-5 minute step, and the repetition is a stated choice.
+- **B** Set both properties once per block, where the estimate row range is
+  known after the route returns, and say where in task 38. — Effort: medium,
+  Risk: low, Impact: one copy of the condition, but the route must return the
+  range.
+- **C** Do nothing — three copies of the condition, and one task that covers
+  three edits.
+
+**Recommendation: A** — it matches tasks 7 to 9 and needs no spec change.
+
+---
+
+#### Section: PR 17 — acceptance criteria and owned scenarios
+
+No new issues found.
+
+#### Section: Scenario coverage
+
+No new issues found.
+
+#### Section: Write surface, file by file
+
+No new issue beyond issue 29.
+
+---
+
+## Summary (Pass 4)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 2 |
+| SUGGESTION | 3 |
+
+**Total issues:** 5 (issues 28 to 32).
+
+**Prior issues:** 22 RESOLVED, 3 PARTIAL (7, 17, 20), 2 OPEN suggestions (24,
+25), 0 REGRESSED. The delta changed none of the open rows.
+
+**Verdict: BLOCK.**
+
+**Overall assessment:** The width formula, the counts and the PR 17 placement
+are correct, but the width oracle fails correct code on openxlsx2 1.28
+(`round(17.711)` is 18) and no PR names the file that holds the width code, so
+both REQUIRED issues need a short edit before the plan returns to
+`PLAN_READY`.

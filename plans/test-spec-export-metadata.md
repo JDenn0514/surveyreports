@@ -1,8 +1,8 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.16.0
-**Date:** 2026-11-04
+**Version:** 0.17.0
+**Date:** 2026-11-05
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
 **Standards read:** `.claude/rules/testing.md`,
@@ -64,7 +64,7 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 | 5 | Interactions — crossed banner variables | covered — `XH-03`, `XH-04`, `XH-05`, `XW-06`, `XW-07`, `XN-08` |
 | 6 | Self-banner — a variable used as its own banner | covered — `XX-09` |
 | 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XM-12` to `XM-15` for group survival, `XS-10` and `XC-07a` for single cells |
-| 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10` |
+| 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10`, and `XB-05` to `XB-10` for the column width, wrapping and row height each option sets |
 | 9 | show_n and show_eff_n — the columns appear and disappear | covered, under the renamed arguments — `XS-05` for `show_ess`, `XS-08` for the removed `N` column, `XE-07` for a call still passing `show_n` or `show_eff_n` |
 | 10 | Suppression — pub_type = "external" and "internal", warning class | **N/A.** `pub_type` is removed, so neither mode exists to test. `XE-07` asserts the unused-argument error on a call that still passes it, and the `XW` rows carry the single `min_eff_n` floor that replaces both modes |
 | 11 | Error paths — non-survey object, var not found, a collection | covered — `XE-10` (non-survey), `XE-08` (a collection), `XE-01` to `XE-15` for the rest, including `XE-12` to `XE-15` for a design column named in `vars` or in `banner`. The `var not found` case is unchanged by this work, and its existing block stays as it is |
@@ -403,10 +403,16 @@ contrasting cell.
 
 | Id | Scenario | Designs | Input | Expected observable result | Tolerance |
 |---|---|---|---|---|---|
-| XB-01 | the column widths are the stated ones | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0` | the stored width of the label column is `44` and the stored width of every data column is `12`. **Compare on a rounded value.** A stored width carries a fractional offset: a width set to 44 reads back a little above it, so an exact integer comparison fails on correct code | rounded to the nearest whole number |
+| XB-01 | the column widths are the stated ones | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0` | the stored width of the label column is `44` and the stored width of every data column is `12`. **Compare the integer part.** openxlsx2 1.28 adds `0.711` to a set width: a width set to `44` is stored and read back as `44.711`, and `12` as `12.711`. An exact comparison fails on correct code, and so does `round()`, which reads `45` and `13` | the integer part, `floor()`, of the stored width |
 | XB-02 | the widths do not follow the label text | all four | two calls on the same design, one with short response labels and one with labels several times longer; nothing else differs | the two workbooks give the **same** column widths, compared column by column. This is the claim the fixed-width rule rests on: a width that followed the text would move with the labels and every committed snapshot would move with it. An auto-fit implementation fails this row and passes `XB-01` | rounded to the nearest whole number |
 | XB-03 | the label column and the heading row wrap, and the heading row is taller | all four | the same call | the label column's cells and the heading row's cells resolve to a wrapping alignment; an estimate cell in the same block resolves to a non-wrapping one. The heading row's stored height is `30`; a data row in the same block carries no height of its own | n/a |
 | XB-04 | the freeze pane follows `sample_size_display` | all four | `sample_size_display = "top"`, then `"bottom"` | under `"top"` the sheet carries a freeze pane, and its horizontal split sits below the last sample-size row, so the question text, the spanner, the heading row and both count rows stay in view. Under `"bottom"` the sheet carries **no** freeze pane. Assert the absence, not only the presence | n/a |
+| XB-05 | an interval widens every data column at the default `decimals` | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0`, `variance = "ci"`, default `decimals`; once with `variance_display = "cell"` and once with `"row"` | under both displays the stored width of every data column is `17`, which is `15 + 2 * 1`, and the label column stays `44`. The `"row"` call is the half that fails an implementation keying the width on the display rather than on `variance` | the integer part, `floor()`, of the stored width, as in `XB-01` |
+| XB-06 | the interval width follows `decimals` | all four | the `XB-05` call under `variance_display = "cell"`, once with `decimals = 0L` and once with `decimals = 2L` | the stored width of every data column is `15` at `decimals = 0L` and `19` at `decimals = 2L`. The two calls give different widths, so an implementation that fixes the width at 17 fails | the integer part, `floor()`, of the stored width, as in `XB-01` |
+| XB-07 | a standard error keeps the width of 12 | all four | the `XB-05` call with `variance = "se"`, under `variance_display = "cell"` and then `"row"` | under both displays the stored width of every data column is `12` | the integer part, `floor()`, of the stored width, as in `XB-01` |
+| XB-08 | an estimate cell wraps when the variance shares its cell | all four | the `XB-05` call under `variance_display = "cell"`, then the same call with `variance = "se"` | under both `variance` values, every data cell of every estimate row resolves to a wrapping alignment. A data cell of a sample-size row in the same block resolves to a non-wrapping one, which is the contrast the row rests on. Read the resolved alignment, not the cell text — `XA-12` and `XS-02` give the pattern. Assert every estimate row, so a run that wraps the first row and no other fails | n/a |
+| XB-09 | an estimate row is 30 points tall when the variance shares its cell | all four | the two calls of `XB-08` | under both `variance` values, the stored height of every estimate row is `30`. A sample-size row in the same block carries no height of its own. Assert every estimate row | n/a |
+| XB-10 | no wrap and no estimate-row height without a second line | all four | the `XB-05` call with `variance = NULL` and `variance_display = "cell"` stated, then the `XB-05` call with `variance = "ci"` and `variance_display = "row"` | in both calls, every data cell of an estimate row resolves to a non-wrapping alignment, and no estimate row carries a height of its own. In the `"row"` call the variance rows carry no height either. `variance_display = "cell"` alone does not switch the rules on — `variance` must be set too | n/a |
 
 #### Happy path — the cover sheet
 

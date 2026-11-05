@@ -1,8 +1,8 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.21.0
-**Date:** 2026-11-04
+**Version:** 0.22.0
+**Date:** 2026-11-05
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
 **Target version:** 0.1.0.9000
@@ -1465,6 +1465,12 @@ it.
 | `"cell"` | a second line inside the estimate cell, written with `openxlsx2::fmt_txt()` at a smaller size and a lighter colour. The default |
 | `"row"` | its own row directly under each estimate row, with the label columns blank |
 
+**The sheet must make room for the variance.** Section 3.16 sets three rules
+that depend on these two arguments. Under `variance = "ci"`, each data column
+is `15 + 2 * decimals` characters wide, under both displays. When `variance`
+is set and `variance_display = "cell"`, wrapping is on for every data cell of
+an estimate row, and every estimate row is fixed at 30 points.
+
 **A legend row is written under the question title whenever `variance` is set**,
 and only then:
 
@@ -1738,10 +1744,35 @@ rows and the withheld lines are the only things below the data rows.
 
 | Sheet property | Rule |
 |---|---|
-| Column widths | fixed: 44 characters for the label column, 12 for each data column. **Not auto-fit** — openxlsx2 estimates width from character counts, so an auto-fit workbook shifts whenever a label changes and every snapshot moves with it |
-| Wrapping | on for the label column and the heading row |
-| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed |
+| Column widths | fixed: 44 characters for the label column. Each data column is **12 characters**, except under `variance = "ci"`, where each data column is **`15 + 2 * decimals` characters** — 17 at the default `decimals = 1L`, 15 at 0, 19 at 2. The `"ci"` rule holds under both `variance_display` values, because under `"row"` the interval sits in the same column. The width depends on the arguments only, never on cell content. **Not auto-fit** — openxlsx2 estimates width from character counts, so an auto-fit workbook shifts whenever a label changes and every snapshot moves with it |
+| Wrapping | on for the label column and the heading row. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line |
+| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed |
+| Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height |
 | Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"` |
+
+**Where `15 + 2 * decimals` comes from.** An interval string is `(`, a bound,
+` – `, a bound and `)`, so it is 5 characters plus the two bounds. Section 3.12
+does not clip the bounds. At `decimals >= 1`, a bound prints at most
+`5 + decimals` characters: a sign and two integer digits, as in `-10.5%`, or
+three integer digits, as in `100.4%`. Then `2 * (5 + decimals) + 5` is
+`15 + 2 * decimals`. The worst string at `decimals = 1` is `(-10.5% – 100.4%)`,
+17 characters, and at `decimals = 2` it is `(-10.53% – 100.47%)`, 19
+characters. At `decimals = 0` a bound has no decimal point and prints at most 5
+characters, as in `-100%`: `round(-99.6)` prints `-100%` and `round(999.6)`
+prints `1000%`. The formula gives 15 there, and the worst string,
+`(-100% – 1000%)`, fills it exactly. One formula for every `decimals` value is
+kept, because a second case adds a branch. The count limits the bound as
+printed, after rounding. At `decimals >= 1` it holds a lower bound down to
+`-99.9%` (`-99.99%` at 2) and an upper bound up to `999.9%`. A lower bound that
+prints `-100.0%` or lower is 7 characters, and the string no longer fits. At
+95 percent confidence that bound needs a standard error above 51 percentage
+points, so it is not expected. If it occurs, the cell text is not fully
+visible. The workbook is still written, and no error or warning is raised.
+
+**`variance = "se"` keeps the width of 12.** The widest standard error string
+at `decimals = 1` is `(100.0%)`, 8 characters, and at `decimals = 2` it is
+`(100.00%)`, 9 characters. `(2.9%)` and `(<0.1%)` are shorter. The width of 12
+holds up to `decimals = 5`, where `(100.00000%)` is 12 characters.
 
 ### 3.17 Errors
 

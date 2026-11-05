@@ -1,14 +1,16 @@
 # Implementation plan — export-metadata
 
-**Status:** PLAN_READY
-**Version:** 4.3.0
-**Date:** 2026-11-04
+**Status:** PLAN_DRAFT
+**Version:** 4.4.0
+**Date:** 2026-11-05
 **Id:** `export-metadata`
-**Source spec:** `plans/spec-export-metadata.md` v0.21.0
-**Source test-spec:** `plans/test-spec-export-metadata.md` v0.16.0
+**Source spec:** `plans/spec-export-metadata.md` v0.22.0
+**Source test-spec:** `plans/test-spec-export-metadata.md` v0.17.0
 **Review applied:** `plans/plan-review-export-metadata.md` Pass 1 — 21 issues, all
 resolved; Pass 2 — issues 22 and 23 resolved, suggestions 24 and 25 open;
-Pass 3 — PASS, suggestions 26 and 27 applied
+Pass 3 — PASS, suggestions 26 and 27 applied. A post-review spec change, the
+variance cell layout of spec 3.16 (v0.22.0), changed PR 17; Pass 4, a delta
+review of that change — issues 28 to 32 applied
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
@@ -98,7 +100,8 @@ stands.** Only the formal arguments come forward.
 - [ ] PR 16: `feature/crosstab-percent-cells` — a percentage cell becomes a
       string.
 - [ ] PR 17: `feature/crosstab-variance-strings` — `variance_display`, the
-      variance strings and the legend row.
+      variance strings, the legend row, and the column width, wrapping and
+      row height that a variance needs.
 - [ ] PR 18: `feature/crosstab-total-and-missing` — the Total column, the
       missing-value rows, the glossary and the block row order.
 - [ ] PR 19: `docs/export-metadata` — the documentation prose and
@@ -1814,6 +1817,15 @@ argument changes, so no `man/` file moves here.
 it. Both files hold a single-response route, so task 4 names
 `.render_crosstab_single()` and no other.
 
+**The sheet-property code goes in `R/export-crosstab.R`, at two sites.**
+`export_crosstab()` adds every question sheet and holds `variance` and
+`decimals`, so it sets the column widths and the label-column wrap, once per
+sheet. PR 17 task 32 changes the data width at the same site.
+`.render_block_preamble()`, from PR 14, writes the heading row, holds the
+`sample_size_display` branch and returns the first data row. So it sets the
+heading-row wrap, the heading row height and the freeze pane. No task in this
+PR changes `R/export-utils.R`.
+
 **Tasks** (2–5 minutes each):
 
 1. Cut `feature/crosstab-sheet-properties` from `develop`.
@@ -1826,11 +1838,12 @@ it. Both files hold a single-response route, so task 4 names
 6. Write the test that `export_topline()` still writes its `Total` row of
    `100%` cells.
 7. Run it. Confirm it passes.
-8. Write the failing test `XB-01`: the label column's stored width rounds to
-   44, and each data column's rounds to 12.
+8. Write the failing test `XB-01`: the label column's stored width has the
+   integer part 44, and each data column's has the integer part 12.
 9. Run it. Confirm it fails.
-10. Set fixed column widths with `openxlsx2::wb_set_col_widths()`. Do not
-    auto-fit.
+10. In `export_crosstab()`, set fixed column widths with
+    `openxlsx2::wb_set_col_widths()`, once per sheet, after the sheet's render
+    calls return. Do not auto-fit.
 11. Run the test from task 8. Confirm it passes.
 12. Write the failing test `XB-02`: two calls with labels of different length
     give the same widths, column by column.
@@ -1839,14 +1852,17 @@ it. Both files hold a single-response route, so task 4 names
     resolve to a wrapping alignment, an estimate cell does not, and the heading
     row's stored height is 30.
 15. Run it. Confirm it fails.
-16. Set the wrapping alignment on the label column and on the heading row.
-17. Set the heading row height to 30 points with
-    `openxlsx2::wb_set_row_heights()`. Do not auto-fit.
+16. Set the wrapping alignment on the label column in `export_crosstab()`,
+    beside the widths of task 10. Set it on the heading row in
+    `.render_block_preamble()`, after its `.write_crosstab_headers()` call.
+17. In `.render_block_preamble()`, set the heading row height to 30 points
+    with `openxlsx2::wb_set_row_heights()`. Do not auto-fit.
 18. Run the test from task 14. Confirm it passes.
 19. Write the failing test `XB-04`: a freeze pane under `"top"`, and none under
     `"bottom"`.
 20. Run it. Confirm it fails.
-21. Add the freeze pane, split below the last sample-size row, and skip it when
+21. In `.render_block_preamble()`, add the freeze pane, split at the first
+    data row it returns, which is below the last sample-size row. Skip it when
     `sample_size_display == "bottom"`.
 22. Run the test from task 19. Confirm it passes.
 23. Write the numerical tests `XN-01`, `XN-02` and `XN-03`, each tagged
@@ -1883,7 +1899,8 @@ it. Both files hold a single-response route, so task 4 names
       (test-spec XH-10; spec 3.9, spec 3.16).
 - [ ] `export_topline()` still writes its `Total` row of `100%` cells
       (spec 4.2).
-- [ ] The column widths are fixed at 44 and 12 (test-spec XB-01; spec 3.16).
+- [ ] At `variance = NULL`, the column widths are fixed at 44 and 12
+      (test-spec XB-01; spec 3.16).
 - [ ] The widths do not follow the label text (test-spec XB-02; spec 3.16).
 - [ ] The label column and the heading row wrap, and the heading row's height
       is 30 points (test-spec XB-03; spec 3.16).
@@ -1922,7 +1939,6 @@ XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12.
 **Files touched** — the exact write surface:
 
 - `R/export-crosstab.R` — modified
-- `R/export-utils.R` — modified
 - `tests/testthat/test-export-crosstab.R` — modified
 - `tests/testthat/test-export-topline.R` — modified
 - `tests/testthat/_snaps/export-crosstab.md` — regenerated
@@ -2042,6 +2058,15 @@ XC-06, XC-07, XC-07a, XC-08.
 **This PR adds a formal argument, so it owns its own roxygen.** It writes
 `@param variance_display` and runs `devtools::document()`.
 
+**This PR also owns the three variance rules of spec 3.16**: the `"ci"` column
+width, the wrapping on estimate cells and the estimate row height. The wrap
+and the row height depend on `variance_display`, which this PR adds. The
+`"ci"` width does not: it depends on `variance` and `decimals` only, under both
+displays (spec 3.16). It lands here because this PR is the first to write the
+interval it makes room for. So none of the three can land in PR 15. PR 15 sets
+the fixed widths, the wrapping and the heading row height; this PR changes
+those values only under `variance`.
+
 **Tasks** (2–5 minutes each):
 
 1. Cut `feature/crosstab-variance-strings` from `develop`.
@@ -2081,12 +2106,43 @@ XC-06, XC-07, XC-07a, XC-08.
 27. Run it. Confirm it passes.
 28. Write the numerical test `XN-10`, tagged `[numerical]`.
 29. Run it. Confirm it passes, with the en-dash asserted.
-30. Run `devtools::test()`. Review every moved snapshot with
+30. Write the failing tests `XB-05` and `XB-06`: under `variance = "ci"`,
+    each data column's stored width has the integer part `15 + 2 * decimals`,
+    under both displays.
+31. Run them. Confirm they fail.
+32. Compute the data column width from `variance` and `decimals` in
+    `export_crosstab()` in `R/export-crosstab.R`, where PR 15 task 10 sets the
+    fixed widths: `15 + 2 * decimals` under `"ci"`, 12 otherwise. Do not read
+    cell content.
+33. Run the tests from task 30. Confirm they pass.
+34. Write the test `XB-07`: under `variance = "se"`, each data column's width
+    stays 12.
+35. Run it. Confirm it passes.
+36. Write the failing tests `XB-08` and `XB-09`: under
+    `variance_display = "cell"`, each estimate data cell wraps and each
+    estimate row is 30 points.
+37. Run them. Confirm they fail.
+38. In `.render_crosstab_single()`, set the wrapping alignment on every data
+    cell of an estimate row when `variance` is not `NULL` and
+    `variance_display == "cell"`.
+39. Do the same in `.render_crosstab_sata()`.
+40. Do the same in `.render_crosstab_battery()`.
+41. In `.render_crosstab_single()`, under the same condition, set every
+    estimate row height to 30 points with `openxlsx2::wb_set_row_heights()`.
+    Do not auto-fit.
+42. Do the same in `.render_crosstab_sata()`.
+43. Do the same in `.render_crosstab_battery()`.
+44. Run the tests from task 36. Confirm they pass.
+45. Write the test `XB-10`: under `variance = NULL`, and under
+    `variance_display = "row"`, no estimate cell wraps and no estimate row
+    carries a height.
+46. Run it. Confirm it passes.
+47. Run `devtools::test()`. Review every moved snapshot with
     `testthat::snapshot_review()`.
-31. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-32. Run `air format .`, in its own commit.
-33. Run `devtools::check()`.
-34. Write `changelog/feature-crosstab-variance-strings.md`.
+48. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+49. Run `air format .`, in its own commit.
+50. Run `devtools::check()`.
+51. Write `changelog/feature-crosstab-variance-strings.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -2103,6 +2159,18 @@ XC-06, XC-07, XC-07a, XC-08.
       spec 3.12).
 - [ ] A legend row appears only under `variance`, and names a non-default
       `conf_level` (test-spec XH-18, XH-19; spec 3.12, spec 3.16).
+- [ ] Under `variance = "ci"`, each data column is `15 + 2 * decimals`
+      characters wide under both displays: 17 at the default, 15 at
+      `decimals = 0L`, 19 at `decimals = 2L` (test-spec XB-05, XB-06; spec
+      3.16).
+- [ ] Under `variance = "se"`, each data column stays 12 characters wide
+      (test-spec XB-07; spec 3.16).
+- [ ] When `variance` is set and `variance_display = "cell"`, every data cell
+      of an estimate row wraps, and every estimate row is fixed at 30 points
+      (test-spec XB-08, XB-09; spec 3.16).
+- [ ] Under `variance = NULL`, and under `variance_display = "row"`, no
+      estimate cell wraps and no estimate row carries a height of its own
+      (test-spec XB-10; spec 3.16).
 - [ ] `variance_display` sits immediately after `variance` and before
       `conf_level` in `names(formals(export_crosstab))` (spec 3.1).
 - [ ] `devtools::document()` run; `NAMESPACE` and `man/` in sync (test-spec
@@ -2119,8 +2187,8 @@ XC-06, XC-07, XC-07a, XC-08.
 - [ ] `changelog/feature-crosstab-variance-strings.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (9):** XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20,
-XN-09, XN-10.
+**Scenarios owned (15):** XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20,
+XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10.
 
 **Files touched** — the exact write surface:
 
@@ -2427,7 +2495,7 @@ across the chain.
 | `tests/testthat/helper-test-data.R` | 1 |
 | `data-raw/` — five scripts, `air` reformat only | 1 |
 | `tests/testthat/test-pool-pvals.R` — `air` reformat only | 1 |
-| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 18 |
+| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 18 |
 | `R/export-topline.R` | 6, 7, 8, 9, 19 |
 | `R/export-crosstab.R` | 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 |
 | `tests/testthat/test-export-topline.R` | 1, 6, 7, 8, 9, 15 |
@@ -2450,7 +2518,7 @@ unchanged each time, because this work adds no export.
 
 ## Scenario coverage
 
-Each of the 178 scenario ids in `plans/test-spec-export-metadata.md` v0.16.0 is
+Each of the 184 scenario ids in `plans/test-spec-export-metadata.md` v0.17.0 is
 assigned to exactly one PR.
 
 | PR | Branch | Count | Scenario ids |
@@ -2471,14 +2539,14 @@ assigned to exactly one PR.
 | 14 | `feature/crosstab-label-cols-and-sizes` | 12 | XD-01, XS-01, XS-02, XS-03, XS-04, XS-05, XS-06, XS-07, XS-08, XS-09, XS-10, XE-07 |
 | 15 | `feature/crosstab-sheet-properties` | 15 | XH-10, XB-01, XB-02, XB-03, XB-04, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12 |
 | 16 | `feature/crosstab-percent-cells` | 11 | XC-01, XC-02, XC-03, XC-04, XC-05, XC-05a, XC-05b, XC-06, XC-07, XC-07a, XC-08 |
-| 17 | `feature/crosstab-variance-strings` | 9 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10 |
+| 17 | `feature/crosstab-variance-strings` | 15 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10 |
 | 18 | `feature/crosstab-total-and-missing` | 17 | XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12, XH-13, XH-14, XX-13, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08 |
 | 19 | `docs/export-metadata` | 0 | — |
-| | **Total** | **178** | |
+| | **Total** | **184** | |
 
-**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 4, XA 14,
-XM 17, XE 15, XV 13, XX 12, XN 10 — 146 for `export_crosstab()`. TP 14, TC 8,
-TE 4, TW 2, TN 4 — 32 for `export_topline()`. 146 plus 32 is 178. The id
+**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 10, XA 14,
+XM 17, XE 15, XV 13, XX 12, XN 10 — 152 for `export_crosstab()`. TP 14, TC 8,
+TE 4, TW 2, TN 4 — 32 for `export_topline()`. 152 plus 32 is 184. The id
 `XX-05` is retired in the test-spec and is not counted.
 
 **Six PRs own no scenario.** PRs 1 to 5 and PR 19. PR 1 changes a fixture and a

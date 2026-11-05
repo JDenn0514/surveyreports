@@ -1072,3 +1072,104 @@ Issues 22 and 23 are resolved. Suggestions 24 and 25 are open and do not block.
 The Pass 3 delta review gave PASS on 2026-11-04. Its two suggestions were
 applied: line 17 no longer cites a spec version, and task 19 says the
 formatting commit holds seven files. The plan is v4.3.0 at `PLAN_READY`.
+
+## [2026-11-05] — Variance cells: width, wrapping and row height
+
+### Context
+
+A mockup review of the rebuilt crosstab showed a gap in spec v0.21.0. Under
+`variance_display = "cell"`, section 3.12 puts the variance on a second line
+inside the estimate cell. Section 3.16 turned wrapping on only for the label
+column and the heading row, and set a height only for the heading row. Excel
+shows a line break in a cell without wrapping on one line, as
+`35.6%(32.6% – 38.6%)`. With wrapping and the default 15-point height, the
+second line is hidden.
+
+Section 3.16 also fixed each data column at 12 characters. An interval string
+at `decimals = 1` is 15 characters, as in `(10.3% – 14.5%)`, and up to 17 with
+a negative or a three-digit bound, as in `(-10.5% – 100.4%)`. Section 3.12 does
+not clip the bounds. Under `variance_display = "row"` the interval sits in the
+same column, so the gap exists under both displays.
+
+### Questions & Decisions
+
+**Q: How should a two-line variance cell and a 15-character interval fit a
+12-character column?**
+- Options considered:
+  - **A:** Three rules. Under `variance = "ci"`, each data column is
+    `15 + 2 * decimals` characters wide, under both displays. When `variance`
+    is set and `variance_display = "cell"`, every data cell of an estimate row
+    wraps, and every estimate row is fixed at 30 points. In every other case
+    the width stays 12 and the old wrapping and height rules stand.
+  - **B:** Keep the width at 12, and let the interval wrap onto a third line.
+    The cell then needs a third line of height, and one interval reads across
+    two lines.
+  - **C:** Do nothing. The cell shows both lines run together, and the
+    interval is cut off at the column edge.
+- **Decision:** A, chosen by the user after the mockup review showed the gap.
+- **Rationale:** the width depends on the arguments only, never on cell
+  content, so it stays fixed and snapshots stay stable, for the reason section
+  3.16 already gives. At `decimals >= 1` a bound prints at most
+  `5 + decimals` characters, and the parentheses and the separator add 5, so
+  the widest interval is `15 + 2 * decimals`: 17 at `decimals = 1`, 19 at
+  `decimals = 2`. At `decimals = 0` the widest interval, `(-10% – 100%)`, is 13
+  characters, and the formula gives 15. One formula is kept for every
+  `decimals` value. A standard error needs no change: `(100.0%)` is 8
+  characters at `decimals = 1`.
+
+### Changes
+
+- Spec v0.22.0: section 3.16 changes the Column widths and Wrapping rows, adds
+  an Estimate row height row, and adds the derivation of `15 + 2 * decimals`.
+  The Heading row height row gains one sentence: a wider data column holds the
+  same heading in two lines or fewer. Section 3.12 cites the three rules.
+- Test-spec v0.17.0: six new rows, `XB-05` to `XB-10`. Template-coverage row 8
+  cites them. The scenario count goes from 178 to 184.
+- Plan v4.4.0: PR 17, `feature/crosstab-variance-strings`, owns the three
+  rules, because all three depend on `variance_display`, which PR 17 adds. It
+  gains 13 tasks, four acceptance criteria and the six scenario ids. The
+  scenario-coverage table and the family check give 184. The status returns
+  to `PLAN_DRAFT`.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.4.0 at `PLAN_DRAFT` and needs a delta review of PR 17 before it returns to
+`PLAN_READY`.
+
+### Pass 4 fixes
+
+The delta review, `plans/plan-review-export-metadata.md` Pass 4, gave a BLOCK
+with issues 28 to 32. The user chose the recommended option, A, for all five.
+The versions stay at spec 0.22.0, test-spec 0.17.0 and plan 4.4.0.
+
+- **28.** `XB-01` and `XB-05` to `XB-07` compare `floor()` of the stored
+  width, and `XB-01` states that openxlsx2 1.28 adds `0.711` to a set width.
+  PR 15 task 8 and PR 17 task 30 say "has the integer part".
+- **29.** PR 15 names two sites in `R/export-crosstab.R`: `export_crosstab()`
+  for the widths and the label-column wrap, and `.render_block_preamble()`
+  for the heading wrap, the heading height and the freeze pane. PR 17 task 32
+  names `export_crosstab()`. `R/export-utils.R` leaves PR 15's write surface
+  and its row in the file table, because no PR 15 task changes it.
+- **30.** The PR 17 note says that the `"ci"` width depends on `variance` and
+  `decimals` only, and that it lands in PR 17 because PR 17 first writes the
+  interval. This corrects the reason in the Changes list above. The PR 15
+  width criterion gains "at `variance = NULL`".
+- **31.** Spec 3.16 says a bound prints at most 5 characters at
+  `decimals = 0`, and that `(-100% – 1000%)`, 15 characters, fills the width
+  exactly. The `"se"` paragraph adds `(100.00%)` at `decimals = 2` and says the
+  width of 12 holds up to `decimals = 5`.
+- **32.** PR 17 tasks 38 and 39 become tasks 38 to 43, one per render route,
+  as tasks 7 to 9 are. Each later task number goes up by 4, so PR 17 has 51
+  tasks.
+- Review notes: spec 3.12's line of 89 characters is rewrapped, and the
+  Changes list above names the Heading row height sentence.
+- **Found while applying 31.** The derivation's range sentence read as a limit
+  before rounding. `round(-99.96, 1)` prints `-100.0%`, 7 characters, and the
+  worst string is then 19 characters against 17. The sentence now limits the
+  bound as printed: `-99.9%` to `999.9%` at `decimals >= 1`. It states that a
+  wider string is not fully visible, and that the export raises no condition.
+- **Open: the freeze pane on the stacked sheet.** The spec does not say where
+  the pane goes on the `"Crosstab"` sheet. With the pane set in
+  `.render_block_preamble()`, each block resets it and the last block wins.
+  The user has not decided this yet.
