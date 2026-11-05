@@ -1,7 +1,7 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.18.0
+**Version:** 0.20.0
 **Date:** 2026-11-05
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
@@ -59,12 +59,12 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 |---|---|---|
 | 1 | Happy paths — a non-empty file with the expected sheet, all design types | covered — `XC-01`, `XS-01`, `XA-01`, `XA-13`, `XR-01`, `XR-02`, and the **Result structure** list |
 | 2 | Multiple variables — every variable name appears in the workbook | covered — `XA-08`, `XW-09`, `XX-11` |
-| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11`, and `XB-11` for the freeze pane on the stacked sheet |
+| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11`, `XB-11` and `XB-12` for the freeze pane on the stacked sheet, and `XB-13` for the width of column B on a stacked sheet that holds a battery |
 | 4 | Banner columns — one column group per banner level, plus Total | covered — `XH-01`, `XH-02`, `XH-06`, `XH-08`, `XH-08a`, `XH-08b`, `XH-09`, `XH-09a` |
 | 5 | Interactions — crossed banner variables | covered — `XH-03`, `XH-04`, `XH-05`, `XW-06`, `XW-07`, `XN-08` |
 | 6 | Self-banner — a variable used as its own banner | covered — `XX-09` |
-| 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XM-12` to `XM-15` for group survival, `XS-10` and `XC-07a` for single cells |
-| 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10`, and `XB-05` to `XB-10` for the column width, wrapping and row height each option sets |
+| 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XB-01` and `XB-13` for the battery's second label column, `XM-12` to `XM-15` for group survival, `XS-10` and `XC-07a` for single cells |
+| 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10`, and `XB-05` to `XB-10` and `XB-14` for the column width, wrapping and row height each option sets |
 | 9 | show_n and show_eff_n — the columns appear and disappear | covered, under the renamed arguments — `XS-05` for `show_ess`, `XS-08` for the removed `N` column, `XE-07` for a call still passing `show_n` or `show_eff_n` |
 | 10 | Suppression — pub_type = "external" and "internal", warning class | **N/A.** `pub_type` is removed, so neither mode exists to test. `XE-07` asserts the unused-argument error on a call that still passes it, and the `XW` rows carry the single `min_eff_n` floor that replaces both modes |
 | 11 | Error paths — non-survey object, var not found, a collection | covered — `XE-10` (non-survey), `XE-08` (a collection), `XE-01` to `XE-15` for the rest, including `XE-12` to `XE-15` for a design column named in `vars` or in `banner`. The `var not found` case is unchanged by this work, and its existing block stays as it is |
@@ -80,12 +80,12 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 | 4 | var_type dispatch — SATA and battery blocks | covered — `TP-13` for the SATA shape, `TP-03` and `TP-04` for a battery group |
 | 5 | Variance options — variance = NULL, "se", "ci" | **N/A.** This work gives `export_topline()` no presentation change, so `variance` renders exactly as it does today and no row here may assert otherwise. `TP-09` to `TP-12` hold that scope line, and `TP-06a` runs `variance = "ci"` for the one thing that does change — the glossary entry |
 | 6 | show_n and show_eff_n — the columns appear and disappear | covered — `TP-10`, `TP-11` |
-| 7 | Missing metadata warning — one warning listing every affected variable | **N/A.** `XV-06` covers the class and its message. This work extends the trigger to banner columns only, and `export_topline()` has no `banner` argument, so its own trigger is untouched |
+| 7 | Missing metadata warning — one warning listing every affected variable | covered — `TW-03` for a column whose frequency frame has no rows, `TW-04` for the muffled surveycore warning. The check now reads the design, and the helper is shared, so the topline trigger changes too. `XV-06` holds the snapshot of the message |
 | 8 | Error paths — non-survey object, var not found | covered — `TE-01`, `TE-02`, `TE-03`, `TE-04`. The `var not found` case is unchanged, as in crosstab section 11 |
 | 9 | Edge cases — all-NA variable, single-row data, single-value variable | covered by the shared edge-case table — `XX-01` (single-row), `XX-03` (all-NA) and `XX-04` (single-value) each run against `export_topline()` too. The note under that table names which rows are shared and which are crosstab-only |
 | 10 | Numerical accuracy — the frequency frame matches surveycore::get_freqs() | covered — `TN-01` to `TN-04` |
 
-**Totals: 22 sections, 19 covered, 3 N/A.** Two entries a reader might expect to
+**Totals: 22 sections, 20 covered, 2 N/A.** Two entries a reader might expect to
 be N/A are not: crosstab section 7 and topline section 4 both gained a new
 scenario, because no prior row asserted a block shape.
 
@@ -116,22 +116,26 @@ Every scenario below traces to one of these.
 6. Naming a column the design itself names — a weight, a cluster id, a stratum,
    an FPC, a replicate weight, or a twophase subset column — in `vars` or in
    `banner` is now an error. It wrote a table of design values before.
+7. The missing-label warning reads the design, so it also names a column whose
+   frequency frame has no rows, such as an all-NA column.
+8. surveycore's all-NA warning, `surveycore_warning_all_na_freqs`, no longer
+   reaches the caller.
 
 **`export_crosstab()` only**
 
-7. A percentage cell is a string carrying `%`, under a three-way rounding rule.
-8. Two italic sample-size rows replace the per-response `N` column.
-9. Every subgroup — banner level, interaction cell, missing-value level — is
-   withheld when its effective N falls below `min_eff_n`.
-10. Withheld subgroups are listed once, on the cover sheet.
-11. Banner spanners read the variable label.
-12. The Total column takes a caller-supplied heading, has no spanner, and the
+9. A percentage cell is a string carrying `%`, under a three-way rounding rule.
+10. Two italic sample-size rows replace the per-response `N` column.
+11. Every subgroup — banner level, interaction cell, missing-value level — is
+    withheld when its effective N falls below `min_eff_n`.
+12. Withheld subgroups are listed once, on the cover sheet.
+13. Banner spanners read the variable label.
+14. The Total column takes a caller-supplied heading, has no spanner, and the
     `100%` row is gone. With no heading supplied, the default follows the
     design: `Total` when it is restricted to a domain, `Full Sample`
     otherwise.
-13. `na.rm = FALSE` adds a missing-value response row and a missing-value banner
+15. `na.rm = FALSE` adds a missing-value response row and a missing-value banner
     column.
-14. `variance` renders in the estimate cell or on its own row, under a legend.
+16. `variance` renders in the estimate cell or on its own row, under a legend.
 
 ---
 
@@ -403,8 +407,8 @@ contrasting cell.
 
 | Id | Scenario | Designs | Input | Expected observable result | Tolerance |
 |---|---|---|---|---|---|
-| XB-01 | the column widths are the stated ones | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0` | the stored width of the label column is `44` and the stored width of every data column is `12`. **Compare the integer part.** openxlsx2 1.28 adds `0.711` to a set width: a width set to `44` is stored and read back as `44.711`, and `12` as `12.711`. An exact comparison fails on correct code, and so does `round()`, which reads `45` and `13` | the integer part, `floor()`, of the stored width |
-| XB-02 | the widths do not follow the label text | all four | two calls on the same design, one with short response labels and one with labels several times longer; nothing else differs | the two workbooks give the **same** column widths, compared column by column. This is the claim the fixed-width rule rests on: a width that followed the text would move with the labels and every committed snapshot would move with it. An auto-fit implementation fails this row and passes `XB-01` | rounded to the nearest whole number |
+| XB-01 | the column widths are the stated ones | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0`; then the same call with `vars = c(bat_1, bat_2, bat_3)` | the stored width of the label column is `44` and the stored width of every data column is `12`. On the battery sheet, column A is `44`, column B, the `Response` label column, is `20`, and every data column is `12`. The battery call is the half that fails an implementation that sets column B to `44` or to `12`. **Compare the integer part.** openxlsx2 1.28 adds `0.711` to a set width: a width set to `44` is stored and read back as `44.711`, and `12` as `12.711`. An exact comparison fails on correct code, and so does `round()`, which reads `45` and `13` | the integer part, `floor()`, of the stored width |
+| XB-02 | the widths do not follow the label text | all four | two calls on the same design, one with short response labels and one with labels several times longer; nothing else differs | the two workbooks give the **same** column widths, compared column by column. This is the claim the fixed-width rule rests on: a width that followed the text would move with the labels and every committed snapshot would move with it. An auto-fit implementation fails this row and passes `XB-01` | the integer part, `floor()`, of the stored width, as in `XB-01`. Both workbooks store `w + 0.711`, so the stored values are also equal |
 | XB-03 | the label column and the heading row wrap, and the heading row is taller | all four | the same call | the label column's cells and the heading row's cells resolve to a wrapping alignment; an estimate cell in the same block resolves to a non-wrapping one. The heading row's stored height is `30`; a data row in the same block carries no height of its own | n/a |
 | XB-04 | the freeze pane follows `sample_size_display` | all four | `sample_size_display = "top"`, then `"bottom"` | under `"top"` the sheet carries a freeze pane, and its horizontal split sits below the last sample-size row, so the question text, the spanner, the heading row and both count rows stay in view. Under `"bottom"` the sheet carries **no** freeze pane. Assert the absence, not only the presence | n/a |
 | XB-05 | an interval widens every data column at the default `decimals` | all four | `vars = q1`, `banner = gen`, `min_eff_n = 0`, `variance = "ci"`, default `decimals`; once with `variance_display = "cell"` and once with `"row"` | under both displays the stored width of every data column is `17`, which is `15 + 2 * 1`, and the label column stays `44`. The `"row"` call is the half that fails an implementation keying the width on the display rather than on `variance` | the integer part, `floor()`, of the stored width, as in `XB-01` |
@@ -414,6 +418,9 @@ contrasting cell.
 | XB-09 | an estimate row is 30 points tall when the variance shares its cell | all four | the two calls of `XB-08` | under both `variance` values, the stored height of every estimate row is `30`. A sample-size row in the same block carries no height of its own. Assert every estimate row | n/a |
 | XB-10 | no wrap and no estimate-row height without a second line | all four | the `XB-05` call with `variance = NULL` and `variance_display = "cell"` stated, then the `XB-05` call with `variance = "ci"` and `variance_display = "row"` | in both calls, every data cell of an estimate row resolves to a non-wrapping alignment, and no estimate row carries a height of its own. In the `"row"` call the variance rows carry no height either. `variance_display = "cell"` alone does not switch the rules on — `variance` must be set too | n/a |
 | XB-11 | the stacked sheet takes its freeze pane from its first block | all four | `layout = "stacked"`, `vars = c(q1, q2)`, `banner = gen`, `min_eff_n = 0`, `base_notes = c(q1 = "Base: all adults", q2 = "Base: all adults")`, `variance = NULL`, `sample_size_display = "top"`, `show_ess = TRUE`. The first block then holds the question text in row 1, the base note in row 2, the spanner in row 3, the heading row in row 4, and the two sample-size rows in rows 5 and 6 | the `"Crosstab"` sheet carries one freeze pane, with its top-left cell at **`A7`**, the first data row of the first block. It is **not** at the first data row of the second block, which is where the pane falls when each block resets it. Read it after `openxlsx2::wb_load()` with `wb$worksheets[[match("Crosstab", wb$get_sheet_names())]]$freezePane`. Measured on openxlsx2 1.28: that field holds the `<pane>` XML as one string, `""` when the sheet has no pane, and a second `wb_freeze_pane()` call on the same sheet replaces the first. Assert that the string holds `topLeftCell="A7"` and `ySplit="6"` | exact string |
+| XB-12 | the stacked sheet keeps its pane when the first question has no data rows | all four | the `XB-11` call with `vars = c(all_na_var, q1)` and `base_notes = c(all_na_var = "Base: all adults", q1 = "Base: all adults")`. The fixture sets no label on `all_na_var`, so its question text is the column name | the first block is written although its frequency frame has no rows. Column A holds `all_na_var` in row 1, the base note in row 2, a blank spanner cell in row 3, `Response` in row 4, and the two sample-size labels in rows 5 and 6. Row 7 holds no cell, and the `q1` question text sits in row 8. The first block's sample-size cells equal the `q1` block's, column by column, so the empty block has the same column groups. The `"Crosstab"` sheet carries one freeze pane: read it as `XB-11` does, and assert that the string holds `topLeftCell="A7"` and `ySplit="6"`. An implementation that keeps the early return on a zero-row frame writes no first block and no pane, and fails | exact string |
+| XB-13 | a stacked sheet that holds a battery widens column B | all four | `layout = "stacked"`, `vars = c(q1, bat_1, bat_2, bat_3)`, `banner = gen`, `min_eff_n = 0`, `variance = NULL` | on the `"Crosstab"` sheet, column A is `44`, column B is `20`, and every column to the right of B that holds data is `12`. Column B is a data column of the `q1` block and the `Response` label column of the battery block, and it takes the larger width. The battery block's `Response` label cells in column B resolve to a wrapping alignment. The `q1` block's estimate cells in column B resolve to a non-wrapping one | the integer part, `floor()`, of the stored width, as in `XB-01`; n/a for the alignment |
+| XB-14 | column B takes the interval width when that is larger | all four | the `XB-13` call with `variance = "ci"` and `variance_display = "cell"`, once with `decimals = 1L` and once with `decimals = 3L`; then a per-question call with `vars = c(bat_1, bat_2, bat_3)`, `variance = "ci"` and `decimals = 3L` | on the stacked sheet, column B is `20` and every other data column `17` at `decimals = 1L`. At `decimals = 3L` column B and every other data column are `21`, which is `15 + 2 * 3`. On the per-question battery sheet column B is a label column only, so it is `20`, and every data column is `21` | the integer part, `floor()`, of the stored width, as in `XB-01` |
 
 #### Happy path — the cover sheet
 
@@ -541,6 +548,8 @@ row on the same class asserts the class alone.
 | XV-11 | warning order is fixed | a call raising a role drop, a missing label and a withholding at once | the conditions arrive in the contract's order: role dropped, unknown role, missing label, subgroup withheld, banner all withheld, full sample below minimum. Collect the classes in order and compare as a character vector |
 | XV-12 | none raised | a design with `role` unset everywhere and every subgroup above the floor | neither role warning nor any withholding warning fires |
 | XV-13 | none raised | a design whose weights put one group's effective N below 30 | no `surveycore_warning_small_cell` reaches the caller. Use `expect_no_warning()` on that class |
+| XV-14 | `surveyreports_warning_missing_variable_label` on a column with no data rows | `vars = c(all_na_var, q1)`, `banner = group`, `min_eff_n = 0`. Set a variable label on `q1` and on `group` with `surveycore::set_var_label()`; `all_na_var` keeps none | one warning, whose message names `all_na_var` and names neither `q1` nor `group`. The check reads the design, so a column whose frequency frame has no rows is named. Keep the condition that `expect_warning(class = )` returns, and assert on its `conditionMessage()`. Class alone: `XV-06` snapshots this class, and the message names no argument, so the text does not change with the trigger. The file is written |
+| XV-15 | none raised | the call of `XV-14`, with a variable label on `all_na_var` as well | no `surveycore_warning_all_na_freqs` reaches the caller. Use `expect_no_warning()` on that class. Every column carries a label and nothing is withheld, so no other warning is due either. The file is written |
 
 #### Edge cases
 
@@ -548,7 +557,7 @@ row on the same class asserts the class alone.
 |---|---|---|---|
 | XX-01 | single-row design | a design built from one row; `min_eff_n = 0` | the call succeeds; the unweighted sample size is `1` |
 | XX-02 | single-row design at the default floor | the same design, default `min_eff_n` | every subgroup is withheld; `banner_all_withheld` and `full_sample_below_min` both fire; the file is written |
-| XX-03 | all-NA variable | `vars = all_na_var`, `min_eff_n = 0` | the call succeeds; the sample-size rows report the design's in-scope rows, not `0` |
+| XX-03 | all-NA variable | `vars = all_na_var`, `min_eff_n = 0`; `banner = gen` for `export_crosstab()` | the call succeeds and returns the path, in both functions. In `export_crosstab()` the `all_na_var` sheet holds a block although the frequency frame has no rows: the question text in row 1, the spanner and heading rows, and the two sample-size rows, with no response row below them. The sample-size rows report the design's in-scope rows, not `0`, and their cells equal those of the same call with `vars = q1`, column by column. `export_topline()` keeps its own early return — spec 3.16 — so its half asserts the call and the path only |
 | XX-04 | single-value variable | `d@data$constant <- "Agree"` | one response row; the sample-size rows are unchanged against another variable on the same design |
 | XX-06 | unused factor level on the banner | a factor banner with a level held by no row | no column for that level, and no withheld-list entry for it — surveycore drops it before the floor applies |
 | XX-07 | unobserved value label on the banner | `Other = 3` with no row holding code 3 | no column, no withheld entry, no mention anywhere |
@@ -679,6 +688,8 @@ regression in every trend workbook into a test failure.
 | TE-04 | `surveyreports_error_design_variable_selected` | the design's weight column named in `vars` — `vars = c(q1, wt)` | `expect_error(class = )` only; `XE-12` snapshots this class for the `vars` wording, and both functions raise the same text for the same argument. Assert no file is written. Runs against every design the generator returns. This row is the one that proves the error reaches `export_topline()`: the function takes `vars`, so the check applies to it |
 | TW-01 | `surveyreports_warning_role_dropped` | `role = "free_text"` on `q2` | `expect_warning(class = )` only; the file is still written. `XV-01` snapshots this class. Both functions run the same guard on `vars`, so the two messages are the same text and a second snapshot adds a file without adding coverage |
 | TW-02 | `surveyreports_warning_unknown_role` | `role = "curiosity"` on `q2` | `expect_warning(class = )` only; the block is present. `XV-07` snapshots this class, for the reason `TW-01` gives |
+| TW-03 | `surveyreports_warning_missing_variable_label` | `vars = c(all_na_var, q1)`, with a variable label on `q1` set by `surveycore::set_var_label()` | `expect_warning(class = )` only. Keep the returned condition, and assert that its message names `all_na_var` and not `q1`. The topline counterpart of `XV-14`: the helper is shared, so topline now names a column whose frequency frame has no rows. Topline writes no block for that column — spec 3.16 — so assert the call returns the path and the `q1` block is present. `XV-06` snapshots this class |
+| TW-04 | none raised | the call of `TW-03`, with a variable label on `all_na_var` as well | no `surveycore_warning_all_na_freqs` reaches the caller. Use `expect_no_warning()` on that class. The topline counterpart of `XV-15`. The file is written |
 
 #### Numerical accuracy
 

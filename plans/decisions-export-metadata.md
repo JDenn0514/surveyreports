@@ -1232,3 +1232,232 @@ above logged this as open.
 The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
 v4.5.0 at `PLAN_DRAFT` and needs a delta review of PR 15 before it returns to
 `PLAN_READY`.
+
+---
+
+## [2026-11-05] — Plan review Pass 5: issues 33 to 36
+
+### Context
+
+Pass 5 of `plans/plan-review-export-metadata.md` is a delta review of
+`886cee4` and `b3c73a0`, against plan v4.5.0, spec v0.23.0 and test-spec
+v0.18.0. Its verdict is BLOCK. It raises two REQUIRED issues, 33 and 34, and
+two suggestions, 35 and 36. It also notes that the tolerance column of `XB-02`
+says "rounded" where `XB-01` uses `floor()`.
+
+### Questions & Decisions
+
+**Q (issue 33): What does a question write when its frequency frame has no
+rows?**
+- Context: each render route returns early on a zero-row frame and writes
+  nothing (`R/export-crosstab.R:506-508`, `:661-663`, `:781-783`). Pass 5
+  measured it on the fixture's `all_na_var`. So `XX-03` fails in PR 15, and a
+  stacked sheet whose first question is all-NA has no block at row 1 and gets
+  no freeze pane.
+- Options considered:
+  - **A:** Write the block with no response rows, and take the question text
+    from the design.
+  - **B:** Keep the return, and advance the stacked row cursor only after a
+    block that wrote a row. `XX-03` still fails.
+  - **C:** Do nothing.
+- **Decision:** A, chosen by the user.
+- **Rationale:** one change makes `XX-03` pass, and the first block on every
+  sheet starts at row 1, so the stacked pane rule stands.
+- **Mechanism:** the block keeps the title, the base note and the legend when
+  present, the spanner and heading rows, and the sample-size rows. It has no
+  response row. The withheld lines under `withheld_note = "every"` follow as
+  usual. The question text comes from the design, in the order
+  `.extract_var_meta()` uses (`R/export-utils.R:172-188`): the variable
+  label, then the question preface, then the column name. The column groups
+  cannot come from the frame: `.build_col_groups()` reads its levels from the
+  frequency frame (`R/export-crosstab.R:358-398`), so an empty frame gives
+  none. They come from the kept levels of spec 3.5, which the caller already
+  holds: the `.resolve_eff_n()` levels of each banner column and interaction,
+  less the withheld ones. The counts ignore the tabulated variable (spec 3.4),
+  so the sample-size cells are the same as for any other question.
+  `export_topline()` keeps its own early return (spec 4.1).
+
+**Q (issue 34): How wide is the second label column of a battery block?**
+- Context: spec 3.16 set 44 for "the label column" and 12 for each data
+  column. A battery block has two label columns, `Item` and `Response`. No
+  rule named the width or the wrap of the second, and no scenario ran a
+  battery.
+- Options considered:
+  - **A:** State the width and the wrap, and a rule for a stacked sheet.
+  - **B:** Give it the data width, with no wrap.
+  - **C:** Do nothing.
+- **Decision:** A, at **20 characters**, with wrapping on for its cells. The
+  assistant proposed the width of 20. It is applied pending the user's
+  objection.
+- **Rationale:** 12 cuts off a long response label, which is the risk the
+  review names for option B. 44 doubles the label area of every battery
+  block. With the wrap on, a label longer than 20 characters goes onto a
+  second line.
+- **Mechanism:** a width is set per column. On a per-question battery sheet,
+  column B is a label column only and is 20. On a stacked sheet that holds a
+  battery block, column B is a label column in the battery block and a data
+  column in other blocks. So it takes the larger of 20 and the data-column
+  width in force: 12, or `15 + 2 * decimals` under `variance = "ci"`. That is
+  20 up to `decimals = 2` and `15 + 2 * decimals` from 3. The wrap is set on
+  the battery's `Response` cells by `.render_crosstab_battery()`, not on the
+  whole column.
+
+**Q (issue 35): Is the stated reason for the stacked pane true?**
+- Context: the entry above, "Freeze pane on the stacked sheet", gives the
+  reason "every block on the stacked sheet uses the same banner columns". The
+  banner levels are the same in every block. Their positions are not: a
+  battery block is one column wider. The frozen title also names the first
+  question only.
+- Options considered: **A** keep the rule and reword the reason; **B** change
+  the rule; **C** do nothing.
+- **Decision:** A. The rule does not change.
+- **Rewording:** the frozen rows show the first block's title and headings.
+  The floor ignores the tabulated variable, so every block withholds the same
+  banner levels. Above a battery block, which is one column wider, the frozen
+  headings sit one column to the left of its data. The frozen title names the
+  first question only. The rule is kept with these limits. This replaces the
+  rationale of the entry above, which is not edited.
+
+**Q (issue 36): Is the width range sentence of spec 3.16 exact?**
+- Context: it was exact at `decimals = 1` only.
+- Options considered: **A** rewrite it with the limits at 0, 1 and 2; **B** do
+  nothing.
+- **Decision:** A, with one correction to the review's wording. The review
+  proposed "a standard error of at least 51 percentage points". Rechecked in
+  R 4.6.1: the threshold at `decimals = 1` and an estimate of 0 is
+  `99.95 / qnorm(0.975)`, which is 50.996. A standard error between 50.996 and
+  51 also breaks the width, so "at least 51" is not exact. The spec states
+  50.996, and 51.019 at `decimals = 2` and 509.958 at `decimals = 0`.
+- **Measured:** the widest strings inside the limits, `(-999% – 9999%)`,
+  `(-99.9% – 999.9%)` and `(-99.99% – 999.99%)`, are 15, 17 and 19
+  characters. The first strings outside, `(-1000% – 9999%)`,
+  `(-100.0% – 999.9%)` and `(-100.00% – 999.99%)`, are 16, 18 and 20.
+
+**Q: Where does the stacked all-NA case go, `XB-11` or a new row?**
+- **Decision:** a new row, `XB-12`. `XB-11` tests that a later block sets no
+  pane. `XB-12` tests that a first block with no data rows is still written
+  and sets the pane. A failure of either id then names its cause, and each
+  maps to its own tasks.
+
+**Q: Which PR owns `XX-03`?**
+- **Decision:** PR 14, `feature/crosstab-label-cols-and-sizes`. The fix lands
+  there, before tasks 35 to 37 adopt `.render_block_preamble()`, so the test
+  that fails without it lands there too. `XX-03` runs against
+  `export_topline()` as well, so PR 14's write surface gains
+  `tests/testthat/test-export-topline.R`.
+
+### Changes
+
+- Spec v0.24.0, section 3.16: a paragraph on the zero-row frame states the
+  block, the question-text source and the column-group source. Rows 8…k and
+  k+2 of the row table name their conditions. The Column widths row adds the
+  battery's `Response` column at 20 and the stacked larger-of rule. The
+  Wrapping row adds the battery's `Response` cells. The Freeze pane row
+  carries the reworded reason and cites `XB-12`. The range sentence is
+  rewritten. Section 2.2's `.render_block_preamble()` comment and the all-NA
+  row of section 3.19 cite the zero-row rule.
+- Test-spec v0.19.0: `XB-01` gains a per-question battery call. `XB-02`'s
+  tolerance reads `floor()`, as `XB-01`. `XX-03` expects the written block, the
+  sample-size cells of a `q1` call, and the topline half as call and path only.
+  New rows `XB-12`, `XB-13` and `XB-14`. Template-coverage rows 3, 7 and 8 cite
+  them. The XB family goes from 11 to 14, and the scenario count from 185 to
+  188.
+- Plan v4.6.0: PR 14 gains tasks 28 to 34, one note, two criteria, `XX-03`
+  and `tests/testthat/test-export-topline.R`. It has 56 tasks and owns 13
+  scenarios. PR 15 gains tasks 27 to 32, two criteria, `XB-12` and `XB-13`,
+  and changes tasks 8 and 10, its site note and its `XB-01` criterion. It
+  loses `XX-03`. It has 51 tasks and owns 17 scenarios. PR 17 gains tasks 36
+  and 37, one criterion and `XB-14`. It has 53 tasks and owns 16 scenarios.
+  The coverage table gives 188, and the family check 156 plus 32.
+
+### Open
+
+- **The missing-label warning reads the frame.** Spec 3.18 triggers
+  `surveyreports_warning_missing_variable_label` on a `vars` column with no
+  variable label. The code tests the frame (`.emit_missing_label_warning()`,
+  `R/export-utils.R:574-590`, called from `.build_freq_frame()`). A column
+  with a zero-row frame is never tested. `all_na_var` has no label, so its
+  block title is the column name and no warning names it. The helper is
+  shared with `export_topline()`, so a fix changes topline output as well.
+  Not resolved here.
+- **surveycore's "Returning 0 rows" warning.** Pass 5 saw it raised from
+  `.build_freq_frame()` on `all_na_var`. No spec section says whether it
+  reaches the caller. Not resolved here.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.6.0 at `PLAN_DRAFT` and needs a delta review of PRs 14, 15 and 17 before it
+returns to `PLAN_READY`.
+
+### Open items decided
+
+The user decided both items of **Open** above on 2026-11-05, as the assistant
+recommended.
+
+**Q: What does the missing-label warning check?**
+- **Decision:** the design, not the frequency frame. The warning checks each
+  resolved `vars` column and each `banner` column. It still raises one
+  warning per call, listing every affected column.
+- **Mechanism:** `.emit_missing_label_warning(design, vars, banner = NULL)`,
+  called once from `.build_freq_frame()`. A `vars` column is named when
+  `surveycore::extract_var_label()` gives no label and
+  `surveycore::extract_question_preface()` gives no preface. A `banner`
+  column is named when `.banner_heading()` falls back. On a collection the
+  helper reads each member, and a column is named when it falls back in any
+  member.
+- **Measured** (surveycore 1.2.0, `make_all_designs(seed = 42)`):
+  - Today's check names `q1` and not the SATA or battery members. Those
+    members carry a preface and no label. The new rule keeps that result.
+  - Both extractors abort on a `survey_collection` with
+    `surveycore_error_not_survey_or_df`.
+  - On a two-wave collection, today's check names `q1` when `q1` has a label
+    in one wave only. The any-member rule keeps that result.
+  - `extract_var_label(d, col)`, with `col` a character variable, raises
+    `lifecycle_warning_deprecated`. `tidyselect::all_of(col)` raises nothing.
+- **Effect on `export_topline()`:** the helper is shared, so a topline call on
+  `all_na_var` now names it. No cell moves and no line of
+  `R/export-topline.R` changes. This is a deliberate change (spec 4.1).
+
+**Q: Does surveycore's "Returning 0 rows" warning reach the caller?**
+- **Decision:** no. The three frequency helpers muffle it by class, beside
+  `surveycore_warning_small_cell`. The crosstab block with no response row
+  shows that the question has no data.
+- **Measured class:** `surveycore_warning_all_na_freqs`, then
+  `rlang_warning`, `warning`, `condition`. The message reads "All values of
+  all_na_var are `NA` with `na.rm = TRUE`. Returning 0 rows." The class is the
+  same on the taylor, replicate and twophase designs, with and without
+  `group`. The fixture has no nonprob design yet.
+- **Cost:** `export_topline()` keeps its early return, so it writes no block
+  for an all-NA column. A labelled all-NA column then leaves no sign in a
+  topline call (spec VI).
+
+**Found while measuring, not decided here.** `export_topline()` on a
+two-wave collection with `vars = c(q1, q2, all_na_var)` aborts today:
+"subscript out of bounds" at `first$question_text[[1L]]`
+(`R/export-utils.R:344`). Spec 3.19 says an all-NA call succeeds.
+
+### Changes for the open items
+
+- Spec v0.25.0: section 2.1 adds the changed helpers. Section 2.2 corrects
+  "two frequency helpers" to three in the `.resolve_eff_n()` comment, and the
+  `.banner_heading()` comment names the warning helper. Section 2.3 gives the
+  new `.emit_missing_label_warning()` signature and the muffle. Section 3.16
+  points to 3.18. Section 3.18 extends the missing-label row and adds a table
+  of the two muffled surveycore classes. The all-NA row of section 3.19 states
+  both warnings. Section 4.1 gains a row, and its count goes from three to
+  five. Section V states that the change is not breaking. Section VI gains a
+  row for the topline cost.
+- Test-spec v0.20.0: new rows `XV-14`, `XV-15`, `TW-03` and `TW-04`. Topline
+  template section 7 is covered, so the totals read 20 covered and 2 N/A. The
+  behavior list gains items 7 and 8, and the crosstab items become 9 to 16.
+  The XV family goes from 13 to 15, TW from 2 to 4, and the scenario count
+  from 188 to 192.
+- Plan v4.7.0: PR 12 gains tasks 2 to 9 and a rewritten task 13. The old
+  tasks 2 to 29 become 10 to 37. It gains three criteria, `XV-14`, `XV-15`,
+  `TW-03`, `TW-04` and `tests/testthat/test-export-topline.R`. It has 37 tasks
+  and owns 14 scenarios. The coverage table gives 192, and the family check
+  158 plus 34.
+
+The plan stays at `PLAN_DRAFT`. The next delta review covers PR 12 as well as
+PRs 14, 15 and 17.
