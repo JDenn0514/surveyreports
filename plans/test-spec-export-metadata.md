@@ -1,7 +1,7 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.20.0
+**Version:** 0.21.0
 **Date:** 2026-11-05
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
@@ -58,16 +58,16 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 | # | Template section | Status |
 |---|---|---|
 | 1 | Happy paths — a non-empty file with the expected sheet, all design types | covered — `XC-01`, `XS-01`, `XA-01`, `XA-13`, `XR-01`, `XR-02`, and the **Result structure** list |
-| 2 | Multiple variables — every variable name appears in the workbook | covered — `XA-08`, `XW-09`, `XX-11` |
-| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11`, `XB-11` and `XB-12` for the freeze pane on the stacked sheet, and `XB-13` for the width of column B on a stacked sheet that holds a battery |
+| 2 | Multiple variables — every variable name appears in the workbook | covered — `XA-08`, `XW-09`, `XX-11`, and `XV-14` for several variables dropped at once |
+| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11`, `XB-11` for the freeze pane on the stacked sheet, `XB-12` for the pane when the first variable is dropped, and `XB-13` for the width of column B on a stacked sheet that holds a battery |
 | 4 | Banner columns — one column group per banner level, plus Total | covered — `XH-01`, `XH-02`, `XH-06`, `XH-08`, `XH-08a`, `XH-08b`, `XH-09`, `XH-09a` |
 | 5 | Interactions — crossed banner variables | covered — `XH-03`, `XH-04`, `XH-05`, `XW-06`, `XW-07`, `XN-08` |
 | 6 | Self-banner — a variable used as its own banner | covered — `XX-09` |
-| 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XB-01` and `XB-13` for the battery's second label column, `XM-12` to `XM-15` for group survival, `XS-10` and `XC-07a` for single cells |
+| 7 | var_type dispatch — SATA and battery blocks | covered — `XD-01` for the two block shapes, `XB-01` and `XB-13` for the battery's second label column, `XM-12` to `XM-15` for group survival under the role guard, `XX-14` and `XX-15` for group survival under the all-NA drop, `XS-10` and `XC-07a` for single cells |
 | 8 | Variance options — variance = NULL, "se", "ci" | covered — `XH-15` to `XH-20`, `XN-09`, `XN-10`, and `XB-05` to `XB-10` and `XB-14` for the column width, wrapping and row height each option sets |
 | 9 | show_n and show_eff_n — the columns appear and disappear | covered, under the renamed arguments — `XS-05` for `show_ess`, `XS-08` for the removed `N` column, `XE-07` for a call still passing `show_n` or `show_eff_n` |
 | 10 | Suppression — pub_type = "external" and "internal", warning class | **N/A.** `pub_type` is removed, so neither mode exists to test. `XE-07` asserts the unused-argument error on a call that still passes it, and the `XW` rows carry the single `min_eff_n` floor that replaces both modes |
-| 11 | Error paths — non-survey object, var not found, a collection | covered — `XE-10` (non-survey), `XE-08` (a collection), `XE-01` to `XE-15` for the rest, including `XE-12` to `XE-15` for a design column named in `vars` or in `banner`. The `var not found` case is unchanged by this work, and its existing block stays as it is |
+| 11 | Error paths — non-survey object, var not found, a collection | covered — `XE-10` (non-survey), `XE-08` (a collection), `XE-01` to `XE-16` for the rest, including `XE-12` to `XE-15` for a design column named in `vars` or in `banner` and `XE-16` for a call whose every variable is all-NA. The `var not found` case is unchanged by this work, and its existing block stays as it is |
 | 12 | Numerical accuracy — cell percentages match surveycore::get_freqs() | covered — `XN-01` to `XN-10` |
 
 ### `test-export-topline.R`
@@ -76,16 +76,16 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 |---|---|---|
 | 1 | Happy paths — a non-empty file with the expected sheet, all design types | covered — `TP-06`, `TP-09`, and the **Result structure** list |
 | 2 | Multiple variables — every variable name appears in the workbook | covered — `TP-05`, `TP-08` |
-| 3 | survey_collection wave columns — one column per wave | covered — `TC-01` to `TC-08` |
+| 3 | survey_collection wave columns — one column per wave | covered — `TC-01` to `TC-08`, and `TC-09` and `TC-10` for a variable all-NA in some waves or in every wave |
 | 4 | var_type dispatch — SATA and battery blocks | covered — `TP-13` for the SATA shape, `TP-03` and `TP-04` for a battery group |
 | 5 | Variance options — variance = NULL, "se", "ci" | **N/A.** This work gives `export_topline()` no presentation change, so `variance` renders exactly as it does today and no row here may assert otherwise. `TP-09` to `TP-12` hold that scope line, and `TP-06a` runs `variance = "ci"` for the one thing that does change — the glossary entry |
 | 6 | show_n and show_eff_n — the columns appear and disappear | covered — `TP-10`, `TP-11` |
-| 7 | Missing metadata warning — one warning listing every affected variable | covered — `TW-03` for a column whose frequency frame has no rows, `TW-04` for the muffled surveycore warning. The check now reads the design, and the helper is shared, so the topline trigger changes too. `XV-06` holds the snapshot of the message |
-| 8 | Error paths — non-survey object, var not found | covered — `TE-01`, `TE-02`, `TE-03`, `TE-04`. The `var not found` case is unchanged, as in crosstab section 11 |
-| 9 | Edge cases — all-NA variable, single-row data, single-value variable | covered by the shared edge-case table — `XX-01` (single-row), `XX-03` (all-NA) and `XX-04` (single-value) each run against `export_topline()` too. The note under that table names which rows are shared and which are crosstab-only |
+| 7 | Missing metadata warning — one warning listing every affected variable | **N/A.** `XV-06` covers the class and its message. This work extends the trigger to banner columns only, and `export_topline()` has no `banner` argument, so its own trigger is untouched. The check still reads the frequency frame, so a dropped all-NA variable is not named — `TW-03` asserts that |
+| 8 | Error paths — non-survey object, var not found | covered — `TE-01` to `TE-05`. The `var not found` case is unchanged, as in crosstab section 11 |
+| 9 | Edge cases — all-NA variable, single-row data, single-value variable | covered by the shared edge-case table — `XX-01` (single-row), `XX-03` (all-NA), `XX-04` (single-value), and `XX-14` to `XX-16` (an all-NA group item, an all-NA group, all-NA inside the domain) each run against `export_topline()` too. `TW-03` and `TW-04` carry the topline warnings of the all-NA drop. The note under that table names which rows are shared and which are crosstab-only |
 | 10 | Numerical accuracy — the frequency frame matches surveycore::get_freqs() | covered — `TN-01` to `TN-04` |
 
-**Totals: 22 sections, 20 covered, 2 N/A.** Two entries a reader might expect to
+**Totals: 22 sections, 19 covered, 3 N/A.** Two entries a reader might expect to
 be N/A are not: crosstab section 7 and topline section 4 both gained a new
 scenario, because no prior row asserted a block shape.
 
@@ -116,8 +116,11 @@ Every scenario below traces to one of these.
 6. Naming a column the design itself names — a weight, a cluster id, a stratum,
    an FPC, a replicate weight, or a twophase subset column — in `vars` or in
    `banner` is now an error. It wrote a table of design values before.
-7. The missing-label warning reads the design, so it also names a column whose
-   frequency frame has no rows, such as an all-NA column.
+7. A variable with no non-missing value — an all-NA variable — is dropped from
+   the output, and one warning, `surveyreports_warning_all_na_dropped`, names
+   every dropped variable. A call whose every variable is all-NA aborts with
+   `surveyreports_error_vars_all_na`. Before, such a variable wrote no block in
+   `export_topline()` and an empty per-question sheet in `export_crosstab()`.
 8. surveycore's all-NA warning, `surveycore_warning_all_na_freqs`, no longer
    reaches the caller.
 
@@ -261,6 +264,24 @@ d@data$rare <- c(rep("Agree", 199), "Prefer not to say")
 
 # A domain-restricted design.
 d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d@data$group == "A"
+
+# All-NA columns, for the all-NA drop. The fixture already holds
+# all_na_var, all-NA everywhere. A second one, for the several-variable rows:
+d@data$all_na_2 <- NA_character_
+# A SATA item and a battery item with no non-missing value. The group
+# metadata of the generator stays on the column.
+d@data$sata_a <- NA_integer_
+d@data$bat_1 <- NA_integer_
+# A column all-NA inside the domain only. Apply the domain snippet as well.
+d@data$dom_na <- ifelse(d@data$group == "A", NA_character_, d@data$q1)
+
+# A two-wave collection, for export_topline(). q3 is all-NA in one wave.
+w_val <- make_all_designs(seed = 42)$taylor
+w_val@data$q3 <- sample(c("Yes", "No"), nrow(w_val@data), replace = TRUE)
+w_na <- make_all_designs(seed = 7)$taylor
+w_na@data$q3 <- NA_character_
+coll_na_first <- surveycore::as_survey_collection(w1 = w_na, w2 = w_val)
+coll_na_second <- surveycore::as_survey_collection(w1 = w_val, w2 = w_na)
 
 # Universe, role and dataset metadata.
 d <- surveycore::set_universe(d, q1 = "Asked of all respondents")
@@ -418,7 +439,7 @@ contrasting cell.
 | XB-09 | an estimate row is 30 points tall when the variance shares its cell | all four | the two calls of `XB-08` | under both `variance` values, the stored height of every estimate row is `30`. A sample-size row in the same block carries no height of its own. Assert every estimate row | n/a |
 | XB-10 | no wrap and no estimate-row height without a second line | all four | the `XB-05` call with `variance = NULL` and `variance_display = "cell"` stated, then the `XB-05` call with `variance = "ci"` and `variance_display = "row"` | in both calls, every data cell of an estimate row resolves to a non-wrapping alignment, and no estimate row carries a height of its own. In the `"row"` call the variance rows carry no height either. `variance_display = "cell"` alone does not switch the rules on — `variance` must be set too | n/a |
 | XB-11 | the stacked sheet takes its freeze pane from its first block | all four | `layout = "stacked"`, `vars = c(q1, q2)`, `banner = gen`, `min_eff_n = 0`, `base_notes = c(q1 = "Base: all adults", q2 = "Base: all adults")`, `variance = NULL`, `sample_size_display = "top"`, `show_ess = TRUE`. The first block then holds the question text in row 1, the base note in row 2, the spanner in row 3, the heading row in row 4, and the two sample-size rows in rows 5 and 6 | the `"Crosstab"` sheet carries one freeze pane, with its top-left cell at **`A7`**, the first data row of the first block. It is **not** at the first data row of the second block, which is where the pane falls when each block resets it. Read it after `openxlsx2::wb_load()` with `wb$worksheets[[match("Crosstab", wb$get_sheet_names())]]$freezePane`. Measured on openxlsx2 1.28: that field holds the `<pane>` XML as one string, `""` when the sheet has no pane, and a second `wb_freeze_pane()` call on the same sheet replaces the first. Assert that the string holds `topLeftCell="A7"` and `ySplit="6"` | exact string |
-| XB-12 | the stacked sheet keeps its pane when the first question has no data rows | all four | the `XB-11` call with `vars = c(all_na_var, q1)` and `base_notes = c(all_na_var = "Base: all adults", q1 = "Base: all adults")`. The fixture sets no label on `all_na_var`, so its question text is the column name | the first block is written although its frequency frame has no rows. Column A holds `all_na_var` in row 1, the base note in row 2, a blank spanner cell in row 3, `Response` in row 4, and the two sample-size labels in rows 5 and 6. Row 7 holds no cell, and the `q1` question text sits in row 8. The first block's sample-size cells equal the `q1` block's, column by column, so the empty block has the same column groups. The `"Crosstab"` sheet carries one freeze pane: read it as `XB-11` does, and assert that the string holds `topLeftCell="A7"` and `ySplit="6"`. An implementation that keeps the early return on a zero-row frame writes no first block and no pane, and fails | exact string |
+| XB-12 | the stacked sheet keeps its pane when the first variable is dropped | all four | the `XB-11` call with `vars = c(all_na_var, q1)` and `base_notes = c(q1 = "Base: all adults")` | `surveyreports_warning_all_na_dropped` fires once and names `all_na_var`; assert the class alone, because `XV-14` snapshots it. The dropped variable writes nothing: no cell of the `"Crosstab"` sheet holds `all_na_var`. The `q1` block starts at row 1, with its question text in row 1, the base note in row 2, the spanner in row 3, the heading row in row 4 and the two sample-size rows in rows 5 and 6. The sheet carries one freeze pane, at the position `XB-11` gives for a first block of this shape: read it as `XB-11` does, and assert that the string holds `topLeftCell="A7"` and `ySplit="6"`. An implementation that keeps `all_na_var` in the render loop moves the cursor past row 1 before the `q1` block, so `q1` sets no pane, and the row fails | exact string |
 | XB-13 | a stacked sheet that holds a battery widens column B | all four | `layout = "stacked"`, `vars = c(q1, bat_1, bat_2, bat_3)`, `banner = gen`, `min_eff_n = 0`, `variance = NULL` | on the `"Crosstab"` sheet, column A is `44`, column B is `20`, and every column to the right of B that holds data is `12`. Column B is a data column of the `q1` block and the `Response` label column of the battery block, and it takes the larger width. The battery block's `Response` label cells in column B resolve to a wrapping alignment. The `q1` block's estimate cells in column B resolve to a non-wrapping one | the integer part, `floor()`, of the stored width, as in `XB-01`; n/a for the alignment |
 | XB-14 | column B takes the interval width when that is larger | all four | the `XB-13` call with `variance = "ci"` and `variance_display = "cell"`, once with `decimals = 1L` and once with `decimals = 3L`; then a per-question call with `vars = c(bat_1, bat_2, bat_3)`, `variance = "ci"` and `decimals = 3L` | on the stacked sheet, column B is `20` and every other data column `17` at `decimals = 1L`. At `decimals = 3L` column B and every other data column are `21`, which is `15 + 2 * 3`. On the per-question battery sheet column B is a label column only, so it is `20`, and every data column is `21` | the integer part, `floor()`, of the stored width, as in `XB-01` |
 
@@ -501,6 +522,7 @@ has a companion row that does run across all four.
 | XE-13 | `surveyreports_error_design_variable_selected` | the design's stratum column, then its cluster id column, named in `vars` — one run each | `expect_error(class = )` only; `XE-12` snapshots the `vars` wording. Runs on the taylor design, which is the design that sets both |
 | XE-14 | `surveyreports_error_design_variable_selected` on `banner` | the design's weight column named in `banner` | `expect_error(class = )` and `expect_snapshot(error = TRUE)`. **Its own snapshot**, on the rule under **Assertion conventions** for a class whose message names the argument it was raised for: the `banner` wording is different text from the `vars` wording `XE-12` pins. Runs against every design the generator returns |
 | XE-15 | `surveyreports_error_design_variable_selected` on a subclass-only slot | one of the replicate design's ten replicate-weight columns named in `vars`; then the twophase design's subset column named in `vars` | `expect_error(class = )` only, one run per design. These are the two cases the broad scope adds: neither column is a weight, a stratum or a cluster id, and a reader that takes `@variables` as a flat list of column names finds neither |
+| XE-16 | `surveyreports_error_vars_all_na` | `vars = c(all_na_var, all_na_2)`, `banner = group`, `min_eff_n = 0` — every selected variable all-NA | `expect_error(class = )` and `expect_snapshot(error = TRUE)`. Assert the message names `all_na_var` and `all_na_2`. Assert no file is written. The snapshot records the error alone, with no `surveyreports_warning_all_na_dropped` before it — spec 3.17. Assert the condition does not inherit `surveyreports_error_vars_all_dropped`. **Runs against every design the generator returns** |
 
 **`XE-12` to `XE-15` are the design-variable rows, and they run before the role
 guard.** A column may be a design column and also carry `role = "weight"`; the
@@ -545,11 +567,11 @@ row on the same class asserts the class alone.
 | XV-08 | `surveyreports_warning_unknown_role` | `role = c("item", "demographic")` on `q2` | one warning; no abort; the block is present |
 | XV-09 | `surveyreports_warning_unknown_role` | `role = 3L` on `q2` | one warning; no abort; the block is present |
 | XV-10 | `surveyreports_warning_subgroup_suppressed` no longer exists | the withholding call of `XV-03` | assert the raised condition does **not** inherit the old class. The rename must be complete |
-| XV-11 | warning order is fixed | a call raising a role drop, a missing label and a withholding at once | the conditions arrive in the contract's order: role dropped, unknown role, missing label, subgroup withheld, banner all withheld, full sample below minimum. Collect the classes in order and compare as a character vector |
+| XV-11 | warning order is fixed | a call raising a role drop, a missing label, an all-NA drop and a withholding at once. Add `all_na_var` to `vars` for the all-NA drop | the conditions arrive in the contract's order: role dropped, unknown role, missing label, all-NA dropped, subgroup withheld, banner all withheld, full sample below minimum. Collect the classes in order and compare as a character vector |
 | XV-12 | none raised | a design with `role` unset everywhere and every subgroup above the floor | neither role warning nor any withholding warning fires |
 | XV-13 | none raised | a design whose weights put one group's effective N below 30 | no `surveycore_warning_small_cell` reaches the caller. Use `expect_no_warning()` on that class |
-| XV-14 | `surveyreports_warning_missing_variable_label` on a column with no data rows | `vars = c(all_na_var, q1)`, `banner = group`, `min_eff_n = 0`. Set a variable label on `q1` and on `group` with `surveycore::set_var_label()`; `all_na_var` keeps none | one warning, whose message names `all_na_var` and names neither `q1` nor `group`. The check reads the design, so a column whose frequency frame has no rows is named. Keep the condition that `expect_warning(class = )` returns, and assert on its `conditionMessage()`. Class alone: `XV-06` snapshots this class, and the message names no argument, so the text does not change with the trigger. The file is written |
-| XV-15 | none raised | the call of `XV-14`, with a variable label on `all_na_var` as well | no `surveycore_warning_all_na_freqs` reaches the caller. Use `expect_no_warning()` on that class. Every column carries a label and nothing is withheld, so no other warning is due either. The file is written |
+| XV-14 | `surveyreports_warning_all_na_dropped` lists several dropped variables in one warning | `vars = c(q1, all_na_var, q2, all_na_2)`, `banner = group`, `min_eff_n = 0`, the default per-question layout | **one** warning of this class, not two, whose message names `all_na_var` and `all_na_2` in that order and names neither `q1` nor `q2`. Dual pattern — the class is new, so the snapshot is its first. `surveyreports_warning_missing_variable_label` fires too, because `q1` and `q2` carry no label. Its message names `q1` and `q2` and neither dropped variable, because it reads the frequency frame — spec 3.18. The workbook holds the `"About"` sheet and the sheets `q1` and `q2` only; no sheet is named for a dropped variable. The file is written |
+| XV-15 | the muffled surveycore warning, with the new warning in its place | `vars = c(all_na_var, q1)`, `banner = group`, `min_eff_n = 0`. Set a variable label on `all_na_var`, `q1` and `group` with `surveycore::set_var_label()`, so no missing-label warning is due | `surveyreports_warning_all_na_dropped` fires once and names `all_na_var`; assert the class alone, because `XV-14` snapshots it. No `surveycore_warning_all_na_freqs` reaches the caller: wrap the `expect_warning()` call in `expect_no_warning(class = "surveycore_warning_all_na_freqs")`. Nothing is withheld, so no other warning is due. The file is written |
 
 #### Edge cases
 
@@ -557,7 +579,7 @@ row on the same class asserts the class alone.
 |---|---|---|---|
 | XX-01 | single-row design | a design built from one row; `min_eff_n = 0` | the call succeeds; the unweighted sample size is `1` |
 | XX-02 | single-row design at the default floor | the same design, default `min_eff_n` | every subgroup is withheld; `banner_all_withheld` and `full_sample_below_min` both fire; the file is written |
-| XX-03 | all-NA variable | `vars = all_na_var`, `min_eff_n = 0`; `banner = gen` for `export_crosstab()` | the call succeeds and returns the path, in both functions. In `export_crosstab()` the `all_na_var` sheet holds a block although the frequency frame has no rows: the question text in row 1, the spanner and heading rows, and the two sample-size rows, with no response row below them. The sample-size rows report the design's in-scope rows, not `0`, and their cells equal those of the same call with `vars = q1`, column by column. `export_topline()` keeps its own early return — spec 3.16 — so its half asserts the call and the path only |
+| XX-03 | all-NA variable | `vars = c(q1, all_na_var)`, `min_eff_n = 0`; `banner = group` for `export_crosstab()`. All four designs | the call succeeds and returns the path, in both functions. `surveyreports_warning_all_na_dropped` fires once and names `all_na_var`; assert the class alone, because `XV-14` snapshots it. The variable is dropped: in `export_crosstab()` the workbook holds the `"About"` sheet and the `q1` sheet only, and in `export_topline()` no cell of the `"Topline"` sheet holds `all_na_var`. The `q1` block is unchanged against the same call with `vars = q1`, cell by cell, so its sample-size rows report the design's in-scope rows |
 | XX-04 | single-value variable | `d@data$constant <- "Agree"` | one response row; the sample-size rows are unchanged against another variable on the same design |
 | XX-06 | unused factor level on the banner | a factor banner with a level held by no row | no column for that level, and no withheld-list entry for it — surveycore drops it before the floor applies |
 | XX-07 | unobserved value label on the banner | `Other = 3` with no row holding code 3 | no column, no withheld entry, no mention anywhere |
@@ -567,12 +589,17 @@ row on the same class asserts the class alone.
 | XX-11 | `stacked` layout | `layout = "stacked"`, `vars = c(q1, q2)` | one `Crosstab` sheet plus the cover sheet; the two blocks are separated by one blank row; the second block's sample-size rows sit under its own heading row |
 | XX-12 | a variable with missing values | 60 of 200 rows missing on `q1` | the response rows total less than the sample size above them, and the call raises no warning about it. The stated contract |
 | XX-13 | zero data columns | `show_total = FALSE` with `min_eff_n` above every subgroup's effective N | the block holds **no data column**. Assert three things. First, no cell to the right of the label column holds a value, on every written row. Second, column A holds, in order: the question text, a blank cell for the spanner row, `Response`, `Unweighted sample size`, `Effective sample size`, then one response label per value of `q1` — the default `sample_size_display = "top"`, with no base note and no variance legend, so rows 2 and 3 of the block are absent. Third, the file opens and the return value is the path. Two warnings fire, and both are true: `banner_all_withheld`, and `subgroup_withheld` because subgroups fell below the floor. Assert both classes. Assert that no third warning arrives, since no class describes the empty block itself |
+| XX-14 | a group with one all-NA item keeps the group | the all-NA `sata_a` and `bat_1` snippets; `vars = c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3)`, `min_eff_n = 0`; `banner = group` for `export_crosstab()`. Then a second call with `bat_2` all-NA as well. All four designs | `surveyreports_warning_all_na_dropped` fires once and names `sata_a` and `bat_1`, in that order; class alone. In `export_crosstab()` the SATA block holds the items `sata_b` and `sata_c`, on a sheet named `sata_b`, and the battery block holds `bat_2` and `bat_3`, on a sheet named `bat_2`. Each block keeps its group preface as its title. No cell of either sheet names `sata_a` or `bat_1`. In `export_topline()` the SATA and battery blocks hold the same surviving items, and no cell holds `sata_a` or `bat_1`. In the second call the warning names `bat_1` and `bat_2`, and the battery block holds `bat_3` alone, still under the group preface, on a sheet named `bat_3` — spec 3.19 and spec VI |
+| XX-15 | a group whose every item is all-NA is dropped | `bat_1`, `bat_2` and `bat_3` all set to `NA_integer_`; `vars = c(q1, bat_1, bat_2, bat_3)`, `min_eff_n = 0`; `banner = group` for `export_crosstab()`. All four designs | the call succeeds. `surveyreports_warning_all_na_dropped` fires once and names `bat_1`, `bat_2` and `bat_3`; class alone. In `export_crosstab()` the workbook holds the `"About"` sheet and the `q1` sheet only. In `export_topline()` no cell holds the battery preface or any `bat_*` name. No error fires, because `q1` survives |
+| XX-16 | a variable all-NA inside the domain only | the domain snippet and the `dom_na` snippet; `vars = c(q1, dom_na)`, `min_eff_n = 0`; `banner = gen` for `export_crosstab()`, with the labelled `gen` fixture. Then the same call without the domain column. All four designs | on the restricted design `dom_na` is dropped: `surveyreports_warning_all_na_dropped` fires once and names it, and no block or sheet is written for it. Without the domain column `dom_na` holds values outside group `A`, so it keeps its block and no all-NA warning fires. Run both calls, so an implementation that reads the column across every row fails the first half |
 
-**Three of these rows run against both functions.** `XX-01` (a single-row
-design), `XX-03` (an all-NA variable) and `XX-04` (a single-value variable) turn
-on the design and the variable, not on a banner, so each one runs against
-`export_topline()` as well as `export_crosstab()`. Loop the two functions, or
-write the block twice, and label each assertion with the function name.
+**Six of these rows run against both functions.** `XX-01` (a single-row
+design), `XX-03` (an all-NA variable), `XX-04` (a single-value variable),
+`XX-14` (an all-NA group item), `XX-15` (an all-NA group) and `XX-16` (all-NA
+inside the domain) turn on the design and the variable, not on a banner, so
+each one runs against `export_topline()` as well as `export_crosstab()`. Loop
+the two functions, or write the block twice, and label each assertion with the
+function name.
 
 The rest belong to `export_crosstab()` alone: `XX-02`, `XX-06`, `XX-07`,
 `XX-08`, `XX-09`, `XX-11` and `XX-13` are banner, withholding or layout cases,
@@ -672,6 +699,8 @@ and `make_all_designs(seed = 7)`.
 | TC-06 | a wave with no keys still gets a heading | metadata in wave 1 only | the wave 2 heading is present, bold, with no rows under it |
 | TC-07 | a collection with no metadata still gets the sheet | no metadata written | the `About` sheet exists and carries the glossary. **Changed from v0.3.0**, where no sheet was written |
 | TC-08 | `show_eff_n` on a collection does not abort | `show_eff_n = TRUE` | the call returns the path and the file exists. The per-wave effective N is computed on a different join from the single-design one, so a missing branch aborts here and nowhere else. No workbook cell reports that value, which is what `TN-03` asserts, so this row asserts the call and not a cell |
+| TC-09 | a variable all-NA in one wave only keeps its block | the `coll_na_first` and `coll_na_second` snippets, one call each; `vars = c(q1, q3)` | both calls return the path, and no `surveyreports_warning_all_na_dropped` fires. The `q3` block is present in both. Its headings are `Total` and the wave with values only — `w2` for `coll_na_first`, `w1` for `coll_na_second` — and its block title is `q3`. The all-NA wave writes no column in the block, as today — spec 3.19. `coll_na_first` is the half that fails today: measured 2026-11-05, it aborts with "subscript out of bounds" at `R/export-utils.R:344`, because the pooled `Total` reads its question text from wave 1 — spec 2.3 |
+| TC-10 | a variable all-NA in every wave is dropped | the two-wave collection of this section; `vars = c(q1, q2, all_na_var)`. `all_na_var` is all-NA in both waves | the call returns the path. Today it aborts with "subscript out of bounds" at `R/export-utils.R:344` — measured 2026-11-05. `surveyreports_warning_all_na_dropped` fires once and names `all_na_var`; class alone. The `q1` and `q2` blocks are present, and no cell of the `"Topline"` sheet holds `all_na_var` |
 
 **TC-01, TC-03 and TC-05 are the three highest-value rows in this document.
 Write them first.** Each gates a metadata read that aborts on a collection. A
@@ -686,10 +715,11 @@ regression in every trend workbook into a test failure.
 | TE-02 | `surveyreports_error_not_survey_object` | a plain data frame | `expect_error(class = )` only |
 | TE-03 | `surveyreports_error_empty_domain` | the domain `FALSE` for every row **and** `role = "free_text"` on one `vars` column | dual pattern. **No role warning is raised first** — the domain check always wins. The topline companion to `XX-10` |
 | TE-04 | `surveyreports_error_design_variable_selected` | the design's weight column named in `vars` — `vars = c(q1, wt)` | `expect_error(class = )` only; `XE-12` snapshots this class for the `vars` wording, and both functions raise the same text for the same argument. Assert no file is written. Runs against every design the generator returns. This row is the one that proves the error reaches `export_topline()`: the function takes `vars`, so the check applies to it |
+| TE-05 | `surveyreports_error_vars_all_na` | `vars = c(all_na_var, all_na_2)` — every selected variable all-NA | `expect_error(class = )` only; `XE-16` snapshots this class, and both functions raise the same text for the same `vars`. Assert no file is written. Today the call writes a `"Topline"` sheet with no data — spec V. Runs against every design the generator returns |
 | TW-01 | `surveyreports_warning_role_dropped` | `role = "free_text"` on `q2` | `expect_warning(class = )` only; the file is still written. `XV-01` snapshots this class. Both functions run the same guard on `vars`, so the two messages are the same text and a second snapshot adds a file without adding coverage |
 | TW-02 | `surveyreports_warning_unknown_role` | `role = "curiosity"` on `q2` | `expect_warning(class = )` only; the block is present. `XV-07` snapshots this class, for the reason `TW-01` gives |
-| TW-03 | `surveyreports_warning_missing_variable_label` | `vars = c(all_na_var, q1)`, with a variable label on `q1` set by `surveycore::set_var_label()` | `expect_warning(class = )` only. Keep the returned condition, and assert that its message names `all_na_var` and not `q1`. The topline counterpart of `XV-14`: the helper is shared, so topline now names a column whose frequency frame has no rows. Topline writes no block for that column — spec 3.16 — so assert the call returns the path and the `q1` block is present. `XV-06` snapshots this class |
-| TW-04 | none raised | the call of `TW-03`, with a variable label on `all_na_var` as well | no `surveycore_warning_all_na_freqs` reaches the caller. Use `expect_no_warning()` on that class. The topline counterpart of `XV-15`. The file is written |
+| TW-03 | `surveyreports_warning_all_na_dropped` lists several dropped variables in one warning | `vars = c(q1, all_na_var, q2, all_na_2)` | `expect_warning(class = )` only; `XV-14` snapshots this class, and both functions raise the same text for the same `vars`. One warning of this class. Keep the returned condition, and assert that its message names `all_na_var` and `all_na_2` and neither `q1` nor `q2`. The `surveyreports_warning_missing_variable_label` that `q1` and `q2` raise names neither dropped variable, because it reads the frequency frame — spec 3.18. The call returns the path, and the `q1` and `q2` blocks are present. Runs against every design the generator returns. The topline counterpart of `XV-14` |
+| TW-04 | the muffled surveycore warning, with the new warning in its place | `vars = c(all_na_var, q1)`, with a variable label on `all_na_var` and `q1` set by `surveycore::set_var_label()` | `surveyreports_warning_all_na_dropped` fires once and names `all_na_var`; class alone. No `surveycore_warning_all_na_freqs` reaches the caller: wrap the call as `XV-15` does. The file is written. Runs against every design the generator returns. The topline counterpart of `XV-15` |
 
 #### Numerical accuracy
 

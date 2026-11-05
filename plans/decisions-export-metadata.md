@@ -1461,3 +1461,159 @@ two-wave collection with `vars = c(q1, q2, all_na_var)` aborts today:
 
 The plan stays at `PLAN_DRAFT`. The next delta review covers PR 12 as well as
 PRs 14, 15 and 17.
+
+---
+
+## [2026-11-05] — An all-NA variable is dropped, with a warning
+
+### Context
+
+The entry above, "Plan review Pass 5: issues 33 to 36", chose option A for
+issue 33: `export_crosstab()` writes a block with no response row for a
+question whose frequency frame has no rows. Its "Open items decided" made the
+missing-label warning read the design, and muffled
+`surveycore_warning_all_na_freqs`. Commit `bb84e8d` applied both, in spec
+v0.25.0, test-spec v0.20.0 and plan v4.7.0. The user then replaced the empty
+block. That entry is not edited.
+
+### Questions & Decisions
+
+**Q: What does the output hold for an all-NA variable?**
+- Options considered:
+  - **A:** An empty block, as `bb84e8d` wrote it: the title, the headings and
+    the sample-size rows, with no response row. The question text comes from
+    the design, and the column groups from the kept levels.
+  - **B:** Nothing. The variable is dropped from the output, and the caller
+    gets a warning.
+- **Decision:** B, chosen by the user. It applies to `export_topline()` and to
+  `export_crosstab()`.
+- **Effect:** every rendered block has at least one response row. The
+  preamble reads its question text and its column groups from the frame on
+  every call. The missing-label warning can read the frame again. The new
+  warning gives back the signal that the muffle takes away.
+
+**Q: What rules does the drop follow?**
+- **Decision:** five rules. The assistant recommended them, and the user
+  accepted them.
+  1. One classed warning per call, `surveyreports_warning_all_na_dropped`,
+     listing every dropped variable, with a `"!"` and an `"i"` bullet.
+  2. When no variable is left, the call aborts with
+     `surveyreports_error_vars_all_na`. The name follows
+     `surveyreports_error_vars_all_dropped`, the class the role guard raises
+     when it empties `vars` (spec 3.10).
+  3. A SATA or battery item is dropped only when that item is all-NA. The
+     group is dropped only when every item is. The warning names each dropped
+     item.
+  4. On a domain-restricted design, all-NA means inside the domain. On a
+     `survey_collection`, a variable is dropped only when it is all-NA in every
+     wave. A variable all-NA in some waves keeps its block, and those waves
+     follow the existing rule for a wave with no rows.
+  5. The muffle of `surveycore_warning_all_na_freqs` stays, so the caller gets
+     one warning, not two.
+
+**Q: Where in spec 3.11 does the drop run?**
+- **Decision:** a new step 15, after estimation (step 14) and before
+  withholding, the workbook build and rendering, which become steps 16 to 18.
+  In `export_topline()` it is step 9 of 11. The abort runs in the same step,
+  before the workbook build, so no file is written. The assistant chose the
+  step; it follows from the user's rule that the drop runs before the render
+  loop.
+- **Rationale:** the test reads the frequency frame. A variable is all-NA
+  when the frame holds no `"total"` row for it. So the test uses the row scope
+  and the `na.rm` value of `get_freqs()`, and it cannot disagree with the frame
+  a route would receive. A test on the design columns would need its own reader
+  for the domain, the twophase subset, each wave of a collection and `na.rm`.
+- **Before the render loop:** the variable leaves `vars` and `classify_out`,
+  so no block is written for it, the row cursor does not move, and no
+  per-question sheet is added. The first block of every sheet starts at row 1,
+  so the freeze pane rule of spec 3.16 (`start_row == 1L`) is unchanged.
+- **Three consequences, stated in the spec:**
+  - Under `na.rm = FALSE` an all-NA variable keeps its `na_label` row, so it
+    has a row and is not dropped (spec 2.2). This reading of rule 4 is the
+    assistant's and needs the user's check.
+  - Classification runs first, so a group cut to one item keeps its group
+    type, id and preface. A group cut to one item by the role guard does not
+    (spec 3.10). Spec VI records the difference.
+  - A dropped variable leaves a gap in the group ids. The render loop reads a
+    group id as a key only (`R/export-crosstab.R:200-345`).
+
+**Q: What happens to the `nrow(frame) == 0L` early returns?**
+- **Decision:** all six are deleted: `R/export-crosstab.R:506`, `:661` and
+  `:781`, and `R/export-topline.R:218`, `:482` and `:612`.
+- **Rationale:** after the drop no input reaches them. A variable that
+  survives has a `"total"` row. Withholding removes subgroup rows only, by
+  `subgroup_value` (`R/export-utils.R:498`), and `show_total = FALSE`
+  keeps every response row (spec 3.19). Decision 1 of 2026-09-16 deleted an
+  unreachable topline branch rather than mark it `# nocov`, because a marker
+  keeps the branch for the next reader to re-derive. The same rule applies.
+  The deletion is the sixth item of the `R/export-topline.R` write surface
+  (spec 4.1).
+
+**Q: What happens to the scenarios that `bb84e8d` added?**
+- `XB-12` is rewritten: `all_na_var` writes nothing, `q1` starts at row 1, the
+  pane sits at `A7`, and the warning fires.
+- `XV-14` and `TW-03` are repurposed for several variables dropped at once.
+  `bb84e8d` added both ids, and no code implements them, so none is retired.
+- `XV-15` and `TW-04` keep the muffle and also assert the new warning.
+- `XX-03` is rewritten for the drop and moves from PR 14 back to PR 12.
+
+**Measured** (2026-11-05, surveycore 1.2.0, R 4.6.1, `make_all_designs(seed =
+42)$taylor`):
+- `export_topline(d, vars = all_na_var)` writes a `"Topline"` sheet with no
+  data. `export_crosstab(d, vars = all_na_var, banner = group)` writes an empty
+  `all_na_var` sheet. Both calls now abort (spec V).
+- On a two-wave collection, `q3` all-NA in wave 1 and with values in wave 2
+  aborts `export_topline()` with "subscript out of bounds" at
+  `R/export-utils.R:344`. The reverse order returns the path, and the `q3`
+  block has the headings `Total` and `w1` only. So the drop alone does not
+  remove the crash: the pooled `Total` must take its question text from the
+  first wave with rows (spec 2.3).
+- `classify_question_type()` keeps `bat_1` in battery group 1 when `bat_1` is
+  all-NA.
+- `get_freqs()` on a column that is `NA` on every in-domain row and has values
+  outside the domain raises `surveycore_warning_all_na_freqs`.
+
+### What it reverts
+
+- Spec: the empty-block paragraph of 3.16, the condition on rows 8…k, the
+  question-text comment of `.render_block_preamble()` in 2.2, the all-NA row of
+  3.19 and the empty-block sentence of the Freeze pane row.
+- Spec: the design-reading missing-label rule — the
+  `.emit_missing_label_warning(design, vars, banner = NULL)` signature, the
+  rule on a column with no label and no preface, the 4.1 row, the paragraph of
+  V and the topline cost row of VI. The `banner` extension of 3.18 stays: it
+  was in spec v0.23.0, before `bb84e8d`.
+- Plan: PR 14 tasks 28 to 34, its two criteria, `XX-03` and
+  `tests/testthat/test-export-topline.R`. PR 12 tasks 2 to 5 and the rewritten
+  task 13.
+
+### Changes
+
+- Spec v0.26.0: section 1.2 names the drop as a behavior in neither part.
+  Section 2.1 adds `.apply_all_na_drop()`, the six deleted returns and the
+  `.build_freq_frame()` change, and counts 19 new helpers, 16 shared, 7 new
+  error classes and 5 new warning classes. Section 2.2 gives the new helper;
+  2.3 gives the collection change and the muffle. Section 3.11 adds step 15,
+  and its list grows to 18 steps, 11 for topline, and 7 warnings in order.
+  Sections 3.16 to 3.19 state the drop, the two classes and five edge-case
+  rows. Section 4.1 widens the topline write surface to six items. Section V
+  adds one breaking change. Section VI replaces one cost row with two. Section
+  VIII adds two checks and one invariant. Section XI records the replacement.
+- Test-spec v0.21.0: new `XE-16`, `XX-14`, `XX-15`, `XX-16`, `TC-09`, `TC-10`
+  and `TE-05`. `XB-12`, `XV-14`, `XV-15`, `XX-03`, `TW-03` and `TW-04` are
+  rewritten, and `XV-11` gains the new warning. Topline template section 7 is
+  N/A again: 19 covered, 3 N/A. XE goes from 15 to 16, XX from 12 to 15, TC
+  from 8 to 10, TE from 4 to 5, and the count from 192 to 199.
+- Plan v4.8.0: PR 1 tasks 2 to 4 add the two rows to
+  `plans/error-messages.md`. PR 12 lands the drop, with tasks 25 to 49; its
+  banner tasks return to 2 to 24. It has 53 tasks, owns 22 scenarios and
+  gains `R/export-topline.R`. PR 13 task 18 orders seven classes. PR 14 has 49
+  tasks and owns 12 scenarios. PR 15 rewrites tasks 27, 28 and 39 and the
+  `XB-12` criterion. The coverage table gives 199, and the family check 162
+  plus 37.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.8.0 at
+`PLAN_DRAFT`. The next delta review covers PRs 1, 12, 13, 14 and 15, and still
+PR 17.

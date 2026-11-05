@@ -1,7 +1,7 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.25.0
+**Version:** 0.26.0
 **Date:** 2026-11-05
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
@@ -72,6 +72,12 @@ reader who builds both workbooks from one script will see it.
 | A3 | `role` guard on `vars` and `banner` | New behavior |
 | A4 | Dataset metadata cover sheet | New behavior |
 | A5 | `all_of()` on the `classify_question_type()` call | Cleanup |
+
+**One behavior is in neither part and reaches both functions: the all-NA
+drop.** A variable with no non-missing value leaves the output, with one
+warning — section 3.11, step 15. It is not metadata and not presentation, so
+it carries no A or B number. Section 4.1 records how it reaches
+`export_topline()`. Decision 2026-11-05.
 
 **Part B — presentation, `export_crosstab()` only**
 
@@ -222,16 +228,16 @@ same PR. Leaving it would state a gap the repository no longer has.
 
 | File | Change |
 |---|---|
-| `R/export-utils.R` | new `.resolve_eff_n()`, `.banner_levels_labelled()`, `.banner_heading()`, `.unanimous_across()`, `.resolve_base_notes()`, `.resolve_roles()`, `.apply_role_guard()`, `.write_cover_sheet()`, `.fmt_pct()`, `.fmt_variance()`, `.write_sample_size_rows()`, `.build_withheld()`, `.format_withheld_lines()`, `.reject_design_vars()`, `.has_domain()`; **delete `.compute_eff_n()`**; change `.empty_suppressed()`; change `.total_col_group()`; rewrite the withholding loop; change `.build_freq_frame()`; change `.compute_interaction_freq()`; change `.compute_total_freq()` and `.compute_subgroup_freq()` to muffle one more surveycore class; change `.emit_missing_label_warning()` to read the design; change `.base_note_for()`; change `.build_workbook()`; delete the `show_eff_n` join block |
-| `R/export-crosstab.R` | the new signature; the design-variable check; the role guard; banner label validation; the rewritten render helpers; `label_cols` added to `.write_crosstab_headers()`, which the battery route now calls; new `.render_block_preamble()`, `.render_block_footer()` and `.unique_sheet_name()` below the exported function |
-| `R/export-topline.R` | `all_of()` fix; the design-variable check; role guard; threaded base notes; **delete the dead effective-N branch in the collection `Total` header** — section 2.3. Its two inline `round(pct * 100, decimals)` sites stay. **No presentation change**: the deleted branch never fires |
-| `plans/error-messages.md` | 6 new error classes, 4 new warning classes, 1 renamed warning class, 1 extended trigger. The edit lands **before** implementation, per `code-style.md` |
+| `R/export-utils.R` | new `.resolve_eff_n()`, `.banner_levels_labelled()`, `.banner_heading()`, `.unanimous_across()`, `.resolve_base_notes()`, `.resolve_roles()`, `.apply_role_guard()`, `.write_cover_sheet()`, `.fmt_pct()`, `.fmt_variance()`, `.write_sample_size_rows()`, `.build_withheld()`, `.format_withheld_lines()`, `.reject_design_vars()`, `.has_domain()`, `.apply_all_na_drop()`; **delete `.compute_eff_n()`**; change `.empty_suppressed()`; change `.total_col_group()`; rewrite the withholding loop; change `.build_freq_frame()`, including its collection path, which takes the question text from the first wave with rows; change `.compute_interaction_freq()`; change `.compute_total_freq()` and `.compute_subgroup_freq()` to muffle one more surveycore class; change `.base_note_for()`; change `.build_workbook()`; delete the `show_eff_n` join block |
+| `R/export-crosstab.R` | the new signature; the design-variable check; the role guard; banner label validation; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11; the rewritten render helpers; `label_cols` added to `.write_crosstab_headers()`, which the battery route now calls; new `.render_block_preamble()`, `.render_block_footer()` and `.unique_sheet_name()` below the exported function |
+| `R/export-topline.R` | `all_of()` fix; the design-variable check; role guard; threaded base notes; **delete the dead effective-N branch in the collection `Total` header** — section 2.3; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11. Its two inline `round(pct * 100, decimals)` sites stay. **No presentation change**: the deleted branch never fires, and a dropped variable wrote no block before — section 4.1 |
+| `plans/error-messages.md` | 7 new error classes, 5 new warning classes, 1 renamed warning class, 1 extended trigger. The edit lands **before** implementation, per `code-style.md` |
 | `tests/testthat/test-export-crosstab.R` | rewritten sections |
 | `tests/testthat/test-export-topline.R` | new and changed sections |
 | `tests/testthat/helper-test-data.R` | `make_all_designs()` gains a `survey_nonprob` design — section 1.6 |
 | `man/export_topline.Rd`, `man/export_crosstab.Rd` | regenerated from the roxygen changes of section VII |
 
-**This spec adds 18 new helpers: 15 in `R/export-utils.R` and 3 in
+**This spec adds 19 new helpers: 16 in `R/export-utils.R` and 3 in
 `R/export-crosstab.R`.** The table above is the list, and the counts in gate
 VIII read from it. `code-style.md` sends a helper used in 2 or more source files
 to `R/export-utils.R`.
@@ -248,7 +254,7 @@ conversation; placing them in the shared file now is neither. **The PR
 description must say this**, or a reviewer applying `code-style.md` literally
 will move them back.
 
-**Four more reach the shared file on the ordinary rule**, and not by the
+**Five more reach the shared file on the ordinary rule**, and not by the
 exception above. `.fmt_pct()` is called from the three crosstab render routes
 and from `.fmt_variance()`, which lives in `R/export-utils.R`.
 `.reject_design_vars()` is called from `R/export-topline.R` for `vars` and from
@@ -263,7 +269,9 @@ footer and the console warning. `.has_domain()` is called from
 places it and no exception is needed. Its predecessor already has two call-site files:
 `.write_suppression_footnote()` is defined in `R/export-utils.R` and called
 from six sites, three in `R/export-topline.R` and three in
-`R/export-crosstab.R`.
+`R/export-crosstab.R`. `.apply_all_na_drop()` is called once from
+`export_topline()` and once from `export_crosstab()`, at step 15 of section
+3.11 — two files.
 
 **Three helpers stay in `R/export-crosstab.R`, below the exported function.**
 `.render_block_preamble()` and `.render_block_footer()` each have three call
@@ -290,14 +298,14 @@ starts from, and that tibble carries a `pub_type` column. B3 removes
 `.write_suppression_footnote()` reads it and that writer stays in the tree —
 section 2.3. The helper has two call sites, both inside
 `.build_freq_frame()`. It is an existing helper, so it does not count toward
-the 18 new ones above.
+the 19 new ones above.
 
 **A second existing helper changes shape: `.total_col_group()`, in
 `R/export-utils.R`.** It holds the two strings section 3.9 changes — the
 `Total` heading and the `Total` spanner. It gains two arguments, `total_label`
 and `spanner`, both defaulting to the current strings, so an argument-free call
 returns exactly what it returns today. Section 2.3 carries the signature. It is
-an existing helper, so it does not count toward the 18 new ones above either.
+an existing helper, so it does not count toward the 19 new ones above either.
 
 Measured: the helper has **six call sites in three files**, not the four a
 reader would guess from the crosstab route alone. Three are in
@@ -352,9 +360,7 @@ is what satisfies section 5.2's snapshot gate.
 # surveycore::extract_var_label(), falling back to the column name.
 .banner_heading <- function(design, col)
 # -> list(heading = chr(1), fell_back = lgl(1))
-#    .emit_missing_label_warning() reads fell_back for each banner column
-#    and raises ONE warning for the vars and banner columns together —
-#    sections 2.3 and 3.18.
+#    The caller collects fell_back across columns and raises ONE warning.
 
 # Keys whose value is identical and non-missing across every member.
 .unanimous_across <- function(entries)
@@ -445,6 +451,31 @@ is what satisfies section 5.2's snapshot gate.
 #    from it — section 3.14.
 #    It reads the column name only. It never reads the column's values, so a
 #    domain that selects every row still counts as a restriction.
+
+# The all-NA drop. A variable with no non-missing value leaves the output
+# before any block is written — section 3.11, step 15.
+.apply_all_na_drop <- function(frame, vars, classify_out)
+# frame:        the .build_freq_frame() frame of step 14.
+# vars:         the resolved `vars` names that reached step 14, in input
+#               order.
+# classify_out: the classify_question_type() tibble of step 13.
+# -> list(vars = chr, classify_out = tibble): each one less the dropped
+#    variables, in input order.
+#    A variable is dropped when no row of `frame` has variable == it and
+#    subgroup_type == "total". The test reads the frame, so it uses the row
+#    scope and the na.rm value that get_freqs() used: on a domain-restricted
+#    design, the rows inside the domain. Under na.rm = FALSE an all-NA
+#    variable keeps its na_label row, so it has a row and is not dropped.
+#    On a survey_collection the pooled "total" rows are absent only when
+#    every wave frame is empty. So a variable is dropped only when it has no
+#    non-missing value in any wave — section 3.19.
+#    A SATA or battery item is dropped alone. The group keeps its type and
+#    its group id, because classification ran at step 13. The group leaves
+#    the output only when every item is dropped.
+#    Raises ONE surveyreports_warning_all_na_dropped, naming every dropped
+#    variable in input order. When no variable survives, it aborts with
+#    surveyreports_error_vars_all_na and raises no warning — sections 3.17
+#    and 3.18.
 
 # One percentage cell, as a string. The rule of section 3.3.
 .fmt_pct <- function(p, decimals, has_rows)
@@ -555,9 +586,6 @@ is what satisfies section 5.2's snapshot gate.
 #     columns, which is what .write_sample_size_rows() takes as its own
 #     label_cols argument.
 # counts: the counts frame of section 3.4.
-# question_text, col_groups: when the frequency frame has no rows, the
-#     route takes them from the design and from the kept levels of section
-#     3.5, not from the frame — section 3.16. The block is still written.
 # -> list(wb = , next_row = ), where next_row is the first data row.
 #    Calls .write_question_title(), .write_crosstab_headers() and
 #    .write_sample_size_rows(). The row order is the contract of
@@ -609,7 +637,7 @@ is what satisfies section 5.2's snapshot gate.
 # whenever `variance` is "ci". A topline call that set "ci" and reached the
 # NULL default would get a workbook whose glossary omits an entry the cells
 # need — section 4.1.
-# This helper runs after withholding, at step 16 of section 3.11, so
+# This helper runs after withholding, at step 17 of section 3.11, so
 # `withheld` is populated by then. The caller decides what to pass: the
 # withheld frame when `withheld_note == "once"`, and NULL otherwise.
 # .write_cover_sheet() never reads `withheld_note` and takes no such
@@ -643,31 +671,16 @@ is what satisfies section 5.2's snapshot gate.
 .write_crosstab_headers <- function(wb, sheet, spanner_row, header_row,
                                     col_groups, label_cols)
 
-# CHANGED. It reads the DESIGN, not the frequency frame, so a column whose
-# frame has no rows is checked too — section 3.18.
-# Before
-.emit_missing_label_warning <- function(frame)
-# After
-.emit_missing_label_warning <- function(design, vars, banner = NULL)
-# -> invisible(NULL). Raises at most ONE warning per call.
-#    .build_freq_frame() calls it ONCE, with its own design, vars_resolved
-#    and banner_resolved, in place of the two frame-based calls today. The
-#    call stays in the shared file, so no line of R/export-topline.R changes.
-#    A vars column is named when its question text falls back to the column
-#    name: no label from surveycore::extract_var_label() and no preface from
-#    surveycore::extract_question_preface(). That is the order of
-#    .extract_var_meta(), so a SATA or battery member with a preface is not
-#    named, as today.
-#    A banner column is named when .banner_heading() gives fell_back = TRUE.
-#    Both extractors abort on a survey_collection with
-#    surveycore_error_not_survey_or_df (measured 2026-11-05). On one, the
-#    helper reads each member, and a column is named when it falls back in
-#    ANY member. Measured on a two-wave collection: today's check names q1
-#    when q1 has a label in one wave only, so this keeps today's result.
-#    The message lists the columns in input order, vars before banner.
-#    Pass each name as tidyselect::all_of(col). Measured 2026-11-05:
-#    extract_var_label(d, col), with col a character variable, raises
-#    lifecycle_warning_deprecated; all_of(col) raises nothing.
+# CHANGED in its collection path. The pooled "total" rows of a variable
+# take question_text and var_label from the FIRST WAVE FRAME THAT HAS ROWS,
+# not from the first wave frame. Today the code reads
+# first$question_text[[1L]] with first <- wave_freq_list[[1L]]
+# (R/export-utils.R:333-344). Measured 2026-11-05 on a two-wave collection:
+# a variable with no non-missing value in wave 1 and values in wave 2
+# aborts there with "subscript out of bounds". The same variable with its
+# values in wave 1 and none in wave 2 returns the path. When no wave frame
+# has rows, the pooled frame has no rows, and step 15 drops the variable.
+.build_freq_frame <- function(design, vars_resolved, classify_out, ...)
 
 # CHANGED: one more muffled class. Signatures unchanged.
 .compute_total_freq <- function(design, var, ...)
@@ -680,7 +693,9 @@ is what satisfies section 5.2's snapshot gate.
 # 2026-11-05 on surveycore 1.2.0, the fixture's all_na_var, and the taylor,
 # replicate and twophase designs, with and without `group`. The class
 # vector is surveycore_warning_all_na_freqs, rlang_warning, warning,
-# condition. Every other warning still reaches the caller — section 3.18.
+# condition. Step 15 of section 3.11 then drops the variable and names it
+# in surveyreports_warning_all_na_dropped, so the caller gets one warning,
+# not two. Every other warning still reaches the caller — section 3.18.
 
 # KEPT, unchanged, and now inconsistent with the withheld wording of
 # section 3.14. Its text is "* %s: %s suppressed (n=%d, threshold=%d)": a
@@ -731,11 +746,11 @@ calling it. The helper stays unchanged for `export_topline()`.
 The three remaining sites stay because `.fmt_pct()` returns a string and an
 `export_topline()` cell is a number — section 4.2. Calling the formatter there
 would change the output that section 4.1 promises not to change. **So the
-presentation does not change.** Part A's write surface in
-`R/export-topline.R` is the five items section 2.1 lists: the `all_of()` fix,
-the design-variable check, the role guard, the threaded base notes and the
-deletion of the dead effective-N branch above. Section
-4.1 records the fourth as a widening.
+presentation does not change.** The write surface in
+`R/export-topline.R` is the six items section 2.1 lists: the `all_of()` fix,
+the design-variable check, the role guard, the threaded base notes, the
+deletion of the dead effective-N branch above, and the all-NA drop. Section
+4.1 records the widening.
 
 The cost is one rule with two implementations for the life of this branch.
 Section VI records it, section 4.2 lists it as a stated inconsistency, and the
@@ -1362,14 +1377,34 @@ checks would report the wrong condition if they ran out of turn.
 12. banner label validation — section 3.7
 13. `classify_question_type()`, with `tidyselect::all_of()` on the resolved vector
 14. estimation
-15. **withholding** — `.build_withheld()` returns the withheld frame
-16. **the workbook build** — `.build_workbook()`, which writes the `"About"`
+15. **the all-NA drop** — `.apply_all_na_drop()` removes each variable with no
+    non-missing value from `vars` and from `classify_out`, and raises
+    `surveyreports_warning_all_na_dropped`. When no variable survives, it
+    aborts with `surveyreports_error_vars_all_na` instead
+16. **withholding** — `.build_withheld()` returns the withheld frame
+17. **the workbook build** — `.build_workbook()`, which writes the `"About"`
     sheet
-17. rendering
+18. rendering
 
-**Steps 15 and 16 are in this order because `.build_workbook()` receives the
+**Steps 16 and 17 are in this order because `.build_workbook()` receives the
 withheld frame.** The build cannot run before withholding decides it. Section
 2.3 gives the signature and section 3.14 gives the sheet.
+
+**Step 15 runs after estimation and before any block is written.** After
+estimation, because the test reads the frequency frame: a variable is all-NA
+when the frame holds no `"total"` row for it — section 2.2. So the test sees
+the row scope and the `na.rm` value that `get_freqs()` used, and it cannot
+disagree with the frame a route would receive. Before rendering, because the
+dropped variable must leave the render loop: no block is written for it, the
+row cursor does not move for it, and no per-question sheet is added for it. A
+SATA or battery item leaves its group's membership in `classify_out`, so the
+group's sheet takes the name of its first surviving item, as section 3.10
+states for the role guard. A dropped variable was classified at step 13, so
+its group id leaves a gap in the numbering. The render loop reads a group id
+as a key only (`R/export-crosstab.R:200-345`), so the gap changes no block.
+The first block of every sheet therefore starts at row 1, and the Freeze pane
+rule of section 3.16 holds unchanged. The abort runs before step 17, so a call
+whose every variable is all-NA builds no workbook and writes no file.
 
 `min_eff_n` is validated in `.validate_export_inputs()`, beside the existing
 `conf_level` and `decimals` checks, and before the role guard. It is the sole
@@ -1392,9 +1427,11 @@ naming a design column in both reports `vars`.
 The empty-domain check precedes the role guard, so a design with an empty domain
 and a role-dropped column raises `surveyreports_error_empty_domain` and not a
 role warning. A dropped column must not reach classification, or it forms its own
-question group and shifts the group numbering of everything after it.
+question group and shifts the group numbering of everything after it. That
+rule is for a role-dropped column. An all-NA column is a column the caller
+asked for, so it is classified at step 13 and dropped at step 15.
 
-**`export_topline()` runs ten of the seventeen steps, in this order:**
+**`export_topline()` runs eleven of the eighteen steps, in this order:**
 
 1. the design class check
 2. the `vars` tidy-select resolution
@@ -1405,17 +1442,19 @@ question group and shifts the group numbering of everything after it.
 7. `classify_question_type()`, with `tidyselect::all_of()` on the resolved
    vector
 8. estimation
-9. the workbook build — `.build_workbook()`
-10. rendering
+9. **the all-NA drop** — `.apply_all_na_drop()`, as at crosstab step 15
+10. the workbook build — `.build_workbook()`
+11. rendering
 
 Its step 5 sits where the crosstab step 9 sits, and for the same two reasons:
-after the tidy-select resolution and before the role guard.
+after the tidy-select resolution and before the role guard. Its step 9 sits
+where the crosstab step 15 sits, for the reasons stated above for that step.
 
-Seven steps of the seventeen-step list do not apply, and they are its steps 1,
-5, 6, 8, 11, 12 and 15. `export_topline()` accepts a `survey_collection`, so
+Seven steps of the eighteen-step list do not apply, and they are its steps 1,
+5, 6, 8, 11, 12 and 16. `export_topline()` accepts a `survey_collection`, so
 its step 1 has nothing to reject. It has no `banner` argument, so its steps 5,
 6, 11 and 12 have nothing to validate. It has no `min_eff_n` argument, so its
-step 8 has nothing to check. It withholds nothing, so step 15 does not run —
+step 8 has nothing to check. It withholds nothing, so step 16 does not run —
 section 4.2. It therefore passes `withheld = NULL` to `.build_workbook()`, and
 the cover sheet carries no withheld block — section 3.14.
 
@@ -1427,18 +1466,19 @@ no role warning is raised first.
 **This paragraph prevents a guess. It does not correct shipped behavior.**
 `R/export-topline.R` already runs the design class check, then the `vars`
 resolution, then `.validate_export_inputs()`, then `.validate_base_notes()`,
-then `classify_question_type()`. That agrees with the order above. Neither the
-design-variable check nor the role guard exists in the file yet, and this spec
-adds both, so the list fixes where the two new steps land.
+then `classify_question_type()`. That agrees with the order above. The
+design-variable check, the role guard and the all-NA drop do not exist in the
+file yet, and this spec adds all three, so the list fixes where the three new
+steps land.
 
 Step 7's `all_of()` is a change to `R/export-topline.R`. The shipped call
 passes the resolved vector bare. Section 2.1 lists the `all_of()` fix as one of
-that file's five items, and section 4.1 counts the same five inside Part A's
-write surface, so the step is already in scope and section 4.1 stands.
+that file's six items, and section 4.1 counts the same six inside the write
+surface, so the step is already in scope and section 4.1 stands.
 
 **No shared helper owns the opening steps.** Extracting one would rewrite
-`R/export-topline.R`'s opening, and section 4.1 holds Part A's write surface in
-that file to five items. The two functions keep two implementations of one
+`R/export-topline.R`'s opening, and section 4.1 holds the write surface in
+that file to six items. The two functions keep two implementations of one
 order, and this section is the only statement of it.
 
 **Warning emission order is fixed** — selection, then metadata, then results:
@@ -1446,12 +1486,15 @@ order, and this section is the only statement of it.
 1. `surveyreports_warning_role_dropped`
 2. `surveyreports_warning_unknown_role`
 3. `surveyreports_warning_missing_variable_label`
-4. `surveyreports_warning_subgroup_withheld`
-5. `surveyreports_warning_banner_all_withheld`
-6. `surveyreports_warning_full_sample_below_min`
+4. `surveyreports_warning_all_na_dropped`
+5. `surveyreports_warning_subgroup_withheld`
+6. `surveyreports_warning_banner_all_withheld`
+7. `surveyreports_warning_full_sample_below_min`
 
 It is the order the caller can act in, and it is already the order the call
-sequence produces. Fixing it in writing makes the snapshots deterministic.
+sequence produces. The missing-label warning comes from estimation, at step
+14, and the all-NA warning from step 15, before withholding at step 16. Fixing
+it in writing makes the snapshots deterministic.
 
 ### 3.12 Variance
 
@@ -1574,7 +1617,7 @@ empty.
 any question sheet, and openxlsx2 orders sheets by insertion. There is no
 position argument: `wb_add_worksheet()` takes no index and no `after`, and no
 call in the package passes one. So sheet 1 is a property of position, and it
-holds even though `.build_workbook()` runs at step 16 of section 3.11, after
+holds even though `.build_workbook()` runs at step 17 of section 3.11, after
 estimation and withholding.
 
 | Block | Content | Present when |
@@ -1612,8 +1655,8 @@ floor ran and withheld nothing, and the block is written with its `None` row.
 **The caller owns the decision.** `.write_cover_sheet()` never reads
 `withheld_note` and takes no such argument. The caller passes `withheld = NULL`
 when `withheld_note` is not `"once"`, and passes the withheld frame otherwise.
-That choice is only possible because withholding runs at step 15 and the
-workbook build at step 16 — section 3.11. The frame exists by the time the
+That choice is only possible because withholding runs at step 16 and the
+workbook build at step 17 — section 3.11. The frame exists by the time the
 caller has to choose.
 
 The `NULL` reaches this sheet from the caller alone. `.build_withheld()` never
@@ -1759,7 +1802,7 @@ next free row, per `code-style.md`.
 | 5 | heading row: the label column(s), then one heading per level | always |
 | 6 | `Unweighted sample size` | `sample_size_display == "top"` |
 | 7 | `Effective sample size` | `sample_size_display == "top"` and `show_ess` |
-| 8…k | one row per response value (single, battery) or per item (SATA) | the frequency frame has rows. A frame with no rows writes none — below |
+| 8…k | one row per response value (single, battery) or per item (SATA) | always |
 | — | a variance row after each estimate row | `variance` set and `variance_display == "row"` |
 | k+1 | the two sample-size rows | `sample_size_display == "bottom"` |
 | k+2… | the withheld lines of `.format_withheld_lines()` — section 3.14 fixes the wording | `withheld_note == "every"` and the withheld frame of section 3.5 has rows |
@@ -1769,37 +1812,15 @@ The label column is `Response` for a single-response block, `Item` for SATA, and
 wider than the others, and its sample-size rows leave the second label column
 blank.
 
-**A question whose frequency frame has no rows still writes its block.** An
-all-NA variable gives such a frame. Pass 5 of the plan review measured it: the
-fixture's `all_na_var` returns zero rows from `.build_freq_frame()`. The block
-keeps rows 1 to 7 of the table above, under their usual conditions. It has no
-response row. The bottom sample-size rows and the withheld lines follow as
-usual. So the three render routes lose the `nrow(frame) == 0L` early return at
-`R/export-crosstab.R:506-508`, `:661-663` and `:781-783`. Two inputs of the
-preamble then cannot come from the frame:
-
-- **The question text comes from the design.** It follows the order of
-  `.extract_var_meta()` at `R/export-utils.R:172-188`: the variable label from
-  `surveycore::extract_var_label()`, then the question preface from
-  `surveycore::extract_question_preface()`, then the column name. A SATA or
-  battery group takes the group's preface first, as `.group_header_text()`
-  does at `R/export-utils.R:564-571`.
-- **The column groups come from the kept levels of section 3.5.**
-  `.build_col_groups()` reads its levels from the frequency frame
-  (`R/export-crosstab.R:358-398`), so an empty frame gives no group. The
-  caller already holds the kept levels: for each banner column and each
-  interaction, the `.resolve_eff_n()` levels less the withheld ones. Each
-  banner column or interaction with a kept level gives one column group, with
-  its levels in the order `.resolve_eff_n()` returned them. The Total group
-  leads under `show_total`, and a self-banner column is skipped, as section
-  3.19 states. The counts ignore the tabulated variable — section 3.4 — so
-  the sample-size cells hold each subgroup's in-scope rows.
-
-So the first block on a sheet starts at row 1 even when its frame is empty,
-and the Freeze pane row below rests on that. `export_topline()` keeps its own
-early return, because section 4.1 holds its presentation fixed. Section 3.18
-states the two warnings such a question raises or does not raise, in both
-functions.
+**Every rendered block has at least one response row.** An all-NA variable
+gives a frequency frame with no rows. Pass 5 of the plan review measured it:
+the fixture's `all_na_var` returns zero rows from `.build_freq_frame()`. Step
+15 of section 3.11 drops such a variable before rendering, so no route
+receives a frame with no rows. The `nrow(frame) == 0L` early returns at
+`R/export-crosstab.R:506-508`, `:661-663` and `:781-783` then cannot fire, and
+they are deleted, as section 4.1 states for the three in `R/export-topline.R`.
+A dropped variable writes no block and adds no sheet, so the first block on
+every sheet starts at row 1, and the Freeze pane row below rests on that.
 
 **Two helpers own the sequence.** `.render_block_preamble()` writes rows 1 to 7.
 `.render_block_footer()` writes row k+1 and after. Each one returns the next
@@ -1829,7 +1850,7 @@ rows and the withheld lines are the only things below the data rows.
 | Wrapping | on for the label column, for the `Response` label cells of a battery block, and for the heading row. On a stacked sheet the wrap of column B is set on the battery block's label cells only, so a data cell of another block in column B keeps the data-cell rule below. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line |
 | Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed |
 | Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height |
-| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. A block whose frequency frame has no rows still writes its rows, as stated above, so it holds row 1 when it comes first. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. The frozen rows are the first block's title and headings. The floor ignores the tabulated variable — section 3.5 — so every block withholds the same banner levels. But a battery block is one column wider, so above a battery block the frozen headings sit one column to the left of its data. The frozen title names the first question only. The rule is kept with these limits, because a pane set by a later block falls deep in the sheet, where the frozen rows can be taller than the window. A row added above the first block breaks this condition, and `XB-04`, `XB-11` and `XB-12` then fail |
+| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. A variable whose frequency frame has no rows leaves the output at step 15 of section 3.11, before rendering, so it never holds row 1 and the next block takes it. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. The frozen rows are the first block's title and headings. The floor ignores the tabulated variable — section 3.5 — so every block withholds the same banner levels. But a battery block is one column wider, so above a battery block the frozen headings sit one column to the left of its data. The frozen title names the first question only. The rule is kept with these limits, because a pane set by a later block falls deep in the sheet, where the frozen rows can be taller than the window. A row added above the first block breaks this condition, and `XB-04`, `XB-11` and `XB-12` then fail |
 
 **Where `15 + 2 * decimals` comes from.** An interval string is `(`, a bound,
 ` – `, a bound and `)`, so it is 5 characters plus the two bounds. Section 3.12
@@ -1877,6 +1898,7 @@ then an imperative `"v"`.
 | `surveyreports_error_multiple_unlabelled_codes` | a surviving `banner` column carries 2 or more observed codes with no value label. Names the column and the codes |
 | `surveyreports_error_design_variable_selected` | a `vars` or `banner` column is a column the design itself names — a weight, a cluster id, a stratum, an FPC, a replicate weight, or a twophase subset column. The `"x"` bullet names the column and the argument it appeared in; the `"i"` bullet names the design slot the column was found in; the `"v"` bullet points at removing the column from the selection. Raised in `.reject_design_vars()`, at step 9 of section 3.11 |
 | `surveyreports_error_invalid_min_eff_n` | `min_eff_n` is not a length-1, non-missing, finite, non-negative numeric. The `"i"` bullet reports what was received; the `"v"` bullet points at a single number at or above 0. Raised in `.validate_export_inputs()`, at step 8 of section 3.11 |
+| `surveyreports_error_vars_all_na` | every `vars` column that reached estimation has no non-missing value, so the all-NA drop leaves none. The `"x"` bullet states that no variable in `vars` has a non-missing value; the `"i"` bullet lists the variables; the `"v"` bullet points at selecting a variable with data. Raised in `.apply_all_na_drop()`, at step 15 of section 3.11, in both functions. The name follows `surveyreports_error_vars_all_dropped`, the role guard's empty class of section 3.10. It is a separate class because the role guard's `"i"` bullet lists roles and its `"v"` bullet points at clearing a role, and neither is true here. Decision 2026-11-05 |
 
 All existing error classes keep their triggers and their messages.
 
@@ -1889,7 +1911,8 @@ All existing error classes keep their triggers and their messages.
 | `surveyreports_warning_subgroup_withheld` | one or more subgroups fall below `min_eff_n`. Once per call. Its bullets are the lines of `.format_withheld_lines()`, so section 3.14 fixes the wording. **Renames `surveyreports_warning_subgroup_suppressed`**, whose trigger referenced `pub_type` |
 | `surveyreports_warning_banner_all_withheld` | every level of one or more banner column groups, or every cell of an interaction, falls below `min_eff_n`. Names each affected group |
 | `surveyreports_warning_full_sample_below_min` | the full sample's own effective N is below `min_eff_n`. The workbook is written in full |
-| `surveyreports_warning_missing_variable_label` | **trigger extended** — a `vars` column or a `banner` column has no variable label. Once per call, listing every affected column. **The check reads the design, not the frequency frame**, so a column whose frame has no rows is named too. A `vars` column with a question preface is not named, because its question text does not fall back to the column name. Section 2.3 gives the rule and the collection case. Decision 2026-11-05 |
+| `surveyreports_warning_missing_variable_label` | **trigger extended** — a `vars` column or a `banner` column has no variable label. Once per call, listing every affected column. The `vars` check reads the frequency frame, as today, so a variable dropped at step 15 of section 3.11 is not named here. `surveyreports_warning_all_na_dropped` names it |
+| `surveyreports_warning_all_na_dropped` | one or more `vars` columns have no non-missing value, and the all-NA drop removes them from the output. Once per call, listing every dropped column in input order, a SATA or battery item by its own name. The `"!"` bullet states how many variables were dropped and names them; the `"i"` bullet states that each has no non-missing value, inside the domain on a domain-restricted design and in every wave on a collection. Raised in `.apply_all_na_drop()`, at step 15 of section 3.11, in both functions. Not raised when every column is dropped: `surveyreports_error_vars_all_na` fires instead — section 3.17. Decision 2026-11-05 |
 
 `surveyreports_warning_subgroup_suppressed` is removed from
 `plans/error-messages.md` in the same edit that adds `_withheld`.
@@ -1903,7 +1926,7 @@ muffle each one by its class:
 | Class | Why it is muffled |
 |---|---|
 | `surveycore_warning_small_cell` | the floor of section 3.5 replaces it |
-| `surveycore_warning_all_na_freqs` | an all-NA variable gives a frequency frame with no rows. The crosstab workbook writes the block with no response row, which shows that the question has no data — sections 3.16 and 3.19. Decision 2026-11-05 |
+| `surveycore_warning_all_na_freqs` | an all-NA variable gives a frequency frame with no rows. Step 15 of section 3.11 drops the variable and raises `surveyreports_warning_all_na_dropped`, so the caller gets one warning, not two — section 3.19. Decision 2026-11-05 |
 
 The helpers muffle by class only. Every other surveycore warning still reaches
 the caller. Section 2.3 names the three helpers and the measured class.
@@ -1917,7 +1940,11 @@ the caller. Section 2.3 names the three helpers and the measured class.
 | `show_total = FALSE` with every banner level withheld | the block has zero data columns. Every row is written with its label and no data cell; `banner_all_withheld` fires and nothing else; the call returns the path — section 3.5 |
 | a `vars` or `banner` column the design names | `surveyreports_error_design_variable_selected`, raised after the tidy-select resolution and before the role guard — sections 3.11 and 3.17. The scope is every slot that holds a column name, so a replicate weight and a twophase subset column both abort |
 | single-value variable | one response row; the sample-size rows are unchanged, because they do not depend on the tabulated variable |
-| all-NA variable | the call succeeds. Its frequency frame has no rows, and its block is still written: the question text from the design, the heading rows and the sample-size rows, with no response row — section 3.16. The column groups come from the kept levels, and the sample-size rows report the design's in-scope rows, not `0`. `surveycore_warning_all_na_freqs` does not reach the caller. A column with no label and no preface is named in `surveyreports_warning_missing_variable_label` — section 3.18 |
+| all-NA variable | the call succeeds. Its frequency frame has no rows, so step 15 of section 3.11 drops it: no block and no sheet. `surveyreports_warning_all_na_dropped` names it, once per call with every other dropped column, and `surveycore_warning_all_na_freqs` does not reach the caller — section 3.18. The other blocks are unchanged, and their sample-size rows report the design's in-scope rows. Under `na.rm = FALSE` the frame keeps its `na_label` row, so the variable is not dropped — section 2.2 |
+| every `vars` variable all-NA | `surveyreports_error_vars_all_na`, at step 15 of section 3.11. No workbook is built and no warning is raised — section 3.17 |
+| a SATA or battery item all-NA | that item is dropped and named in the warning. The group keeps its block, its preface and its group id, with the surviving items only. The per-question sheet takes the name of the first surviving item. A group cut to one item keeps its group shape — section VI. When every item is all-NA, the group is dropped and each item is named |
+| a variable all-NA inside the domain only | dropped. On a domain-restricted design `get_freqs()` reads the rows inside the domain. Measured 2026-11-05: a column that is `NA` on every in-domain row and holds values outside the domain raises `surveycore_warning_all_na_freqs` and returns zero rows |
+| a variable all-NA in some waves of a collection | `export_topline()` only. The variable keeps its block, and the existing rule for a wave with no rows stands: that wave writes no column in the block. Measured 2026-11-05 on a two-wave collection with `q3` all-NA in `w2`: the `q3` block has headings `Total` and `w1` only. A wave that lacks the column is a different case and keeps its `w2 (n/a)` heading with blank cells. The pooled `Total` takes its question text from the first wave with rows — section 2.3. A variable all-NA in every wave is dropped |
 | a variable with missing values | the call succeeds. The response rows total less than the sample size above them. This is the stated contract of section 3.4, not a defect |
 | zero-weight rows | **cannot reach an export function.** `as_survey()` aborts at construction on a non-positive weight — section 1.4. No design holding one can be built, so there is no behavior here to specify. `testing.md`'s required edge-case list does not name this case — it names an all-NA variable, single-row data, a single-value variable, an empty banner level and a missing variable label. This row stands because a reader looking for a zero-weight rule needs the reason it is absent |
 | unused factor level on the banner | no column. surveycore drops a factor level that no row uses, exactly as it drops an unobserved labelled code |
@@ -1955,8 +1982,9 @@ on all four subclasses.
 ### 4.1 The bounded change
 
 `export_topline()` receives Part A and no part of B. Its signature does not
-change. Five things reach it anyway, and all five are unavoidable without a
-compatibility shim in a shared helper.
+change. Five things reach it anyway. The first four are unavoidable without a
+compatibility shim in a shared helper. The fifth, the all-NA drop, is a
+decision: section 3.11 applies it to both functions.
 
 | What reaches it | Why | Visible effect |
 |---|---|---|
@@ -1964,12 +1992,12 @@ compatibility shim in a shared helper.
 | The `"About"` sheet | `.build_workbook()` is shared, and its new signature makes every caller pass `design`, so the topline call site changes in any case. `export_topline()` passes its own `variance` on the same line — section 2.3 | a topline workbook gains the cover sheet, with the glossary and, for a collection, one block per wave. On a domain-restricted design it also gains the domain row, because `.write_cover_sheet()` is shared — section 3.14. No withheld block: topline withholds nothing. The glossary carries the two sample-size entries always, and `Confidence intervals` when the call sets `variance = "ci"`. `Why a column is missing` and `Percentages` are false in every topline workbook: topline withholds nothing and its cells are numbers. Section 3.15 makes each of the three conditional, so a topline workbook carries two entries or three |
 | `.reject_design_vars()` | `export_topline()` takes `vars`, and a column the design names is an error in both functions — sections 3.11 and 3.17 | a call naming a weight, a cluster id, a stratum, an FPC or a replicate-weight column in `vars` now aborts. Measured on a 200-row taylor design, `vars = c(q1, wt)` returns the path today and writes a second sheet named `wt` with 204 rows — one response row per distinct weight value — raising only `surveyreports_warning_missing_variable_label`. That sheet is gone |
 | A2, A3, A5 | `.base_note_for()`, `.apply_role_guard()` and the classification call are shared | universe base notes, the role guard on `vars`, and the loss of 80 deprecation warnings |
-| The two warning rules of section 3.18 | `.build_freq_frame()` calls `.emit_missing_label_warning()` and the three frequency helpers for both functions — section 2.3 | **a deliberate change to the console, not to the workbook.** A topline call on `all_na_var` now names it in `surveyreports_warning_missing_variable_label`, and `surveycore_warning_all_na_freqs` no longer reaches the caller. No cell moves, and no line of `R/export-topline.R` changes. For a column whose frame has rows, the warning names the same columns as today: measured 2026-11-05, today's check names `q1` and not the SATA or battery members, which carry a preface. One wording can move: the message lists the columns in input order, and on a two-wave collection today's message read `q2 and q1`. No committed snapshot holds this message. Section VI records the cost of the muffle for topline |
+| The all-NA drop, and the muffle of section 3.18 | the drop is step 9 of the topline order in section 3.11, a call to the shared `.apply_all_na_drop()`. The three frequency helpers are shared — section 2.3 | **a change to the console and to two calls, not to a written cell.** A variable with no non-missing value wrote no block before, because the route returned early. It now leaves `vars` before rendering, and `surveyreports_warning_all_na_dropped` names it. `surveycore_warning_all_na_freqs` no longer reaches the caller. Two calls change. Measured 2026-11-05 on the taylor fixture: `vars = all_na_var` alone writes a `"Topline"` sheet with no data, and it now aborts with `surveyreports_error_vars_all_na` — section V. On a two-wave collection, a variable with no non-missing value in wave 1 aborted with "subscript out of bounds" at `R/export-utils.R:344`, and the call now returns the path — section 2.3. The missing-label warning reads the frame, as today, so it names the same columns as today |
 
-**Part A's write surface in `R/export-topline.R` widens from three items to
-five.** Recorded, not absorbed, the way the earlier widenings were. The five
-are the `all_of()` fix, the role guard, the threaded base notes, the
-design-variable check and the deletion of the dead effective-N branch.
+**The write surface in `R/export-topline.R` widens from three items to six.**
+Recorded, not absorbed, the way the earlier widenings were. The six are the
+`all_of()` fix, the role guard, the threaded base notes, the design-variable
+check, the deletion of the dead effective-N branch, and the all-NA drop.
 
 The design-variable check is the fourth item: `.reject_design_vars()` lives in
 the shared file, but the call to it is a new line in this one. The check
@@ -1979,8 +2007,17 @@ other.
 
 The dead branch is the fifth item — decision 1, 2026-09-16. It is a removal
 inside `.render_topline_single()`, and it changes no cell, because the branch
-never fires. Section 2.3 names the site. Section 2.1's file table carries all
-five items and section 3.11 carries the step for the fourth.
+never fires. Section 2.3 names the site.
+
+The all-NA drop is the sixth item — decision 2026-11-05. It is one new call
+to `.apply_all_na_drop()` after estimation, and the deletion of the three
+`nrow(frame) == 0L` early returns at `R/export-topline.R:218`, `:482` and
+`:612`. After the drop no route receives a frame with no rows, so the three
+returns cannot fire. They are deleted, not marked `# nocov`, by the rule of
+decision 1 above: a marker keeps an unreachable branch in the file. No cell
+moves: a dropped variable wrote no block before. Section 2.1's file table
+carries all six items, and section 3.11 carries the steps for the fourth and
+the sixth.
 
 **The presentation in `R/export-topline.R` does not change.** The two
 inline `round(pct * 100, decimals)` sites at `:379` and `:394` stay as they are.
@@ -2057,6 +2094,7 @@ cell, so it does not reach the presentation this section holds fixed. Section
 | `show_eff_n` renamed `show_ess`, default `FALSE` → `TRUE` | the same, and every crosstab gains a second sample-size row by default |
 | `surveyreports_warning_subgroup_suppressed` renamed `_withheld` | any caller filtering on the class name |
 | a design variable in `vars` or `banner` now errors | any call that names a column the design itself names. Old behavior: `vars = c(q1, wt)` wrote a sheet of weight values and warned only about the missing variable label. New behavior: `surveyreports_error_design_variable_selected`, and no workbook. A caller who relied on the old behavior removes the column from the selection — `vars = q1` — and tabulates the design column outside the export functions if the table is wanted. This reaches **both** export functions — section 4.1 |
+| every `vars` variable all-NA now errors | any call whose every selected variable has no non-missing value. Old behavior, measured 2026-11-05: `export_topline()` wrote a `"Topline"` sheet with no data, and `export_crosstab()` wrote an empty `all_na_var` sheet. New behavior: `surveyreports_error_vars_all_na`, and no workbook — sections 3.11 and 3.17. This reaches **both** export functions — section 4.1 |
 | percentage cells become strings | any downstream read of a crosstab workbook that expects a number |
 | the `100%` row removed | any downstream read keyed on the last row |
 | every committed crosstab snapshot | moves |
@@ -2065,12 +2103,15 @@ cell, so it does not reach the presentation this section holds fixed. Section
 call's output moves — section 4.2 carries the measurement, and section 2.3
 names the site. **Decision (2026-09-16, decision 1): not a breaking change.**
 
-**The two warning rules of section 3.18 are not on this list.** Both reach
-both functions — section 4.1. The missing-label warning names more columns,
-and `surveycore_warning_all_na_freqs` no longer reaches the caller. No call
-that returned the path now fails, and no cell moves. A caller who caught the
-surveycore class to find an all-NA column loses that signal. **Decision
-(2026-11-05): not a breaking change.** Section VI records the cost.
+**The rest of the all-NA drop is not on this list.** A dropped variable wrote
+no block in `export_topline()`. In `export_crosstab()` it wrote an empty sheet
+on the per-question layout and nothing on the stacked sheet. So no data cell
+is lost. `surveycore_warning_all_na_freqs`
+no longer reaches the caller, and `surveyreports_warning_all_na_dropped` names
+the same variables, so a caller who caught the surveycore class keeps the
+signal under a new class. **Decision (2026-11-05): not a breaking change.** The
+one call that now fails has its own row in the table: every `vars` variable
+all-NA.
 
 **The `total_label` default is not on this list.** `total_label` is new in this
 spec, so changing its default from a literal to `NULL` changes no shipped call.
@@ -2115,9 +2156,10 @@ rediscover it as a bug.
 | Interaction cells that survive carry no effective N of their own in the table | The sample-size rows cover every rendered column, crossed cells included, so this cost is paid off by B2 — it was open in v0.7.0 §1.3.2 and is closed here |
 | Three helpers sit in `R/export-utils.R` against the letter of `code-style.md` | Section 2.1 names the three and the reason for each |
 | The proportion-to-percentage conversion has two implementations for the life of this branch | `.fmt_pct()` owns it in the crosstab render path. Three sites keep their inline `* 100` — `R/export-topline.R:379` and `:394`, and `R/export-utils.R:745` inside `.sata_pct_cell()` — because a topline cell is a number and Part A's scope line forbids changing that output. Sections 2.3 and 4.1 name all three. The topline pass retires them |
-| A 41-sheet workbook has no index | The `About` sheet carries the survey metadata, the subgroups not shown and the glossary. It does not list the question sheets, and a tab reads the variable name rather than the label — section 3.8 gives that reason. A fourth cover-sheet block, one row per sheet against its variable label, would need an eighth argument on `.write_cover_sheet()`, a change to the step 16 and step 17 order of section 3.11 so the final sheet names are known before the cover sheet is written, and a condition for the stacked layout's single `"Crosstab"` sheet. `surveycore::extract_var_label()` supplies the label, so the information is available. **Decision (2026-09-16, issue 68): out of scope for this spec.** |
+| A 41-sheet workbook has no index | The `About` sheet carries the survey metadata, the subgroups not shown and the glossary. It does not list the question sheets, and a tab reads the variable name rather than the label — section 3.8 gives that reason. A fourth cover-sheet block, one row per sheet against its variable label, would need an eighth argument on `.write_cover_sheet()`, a change to the step 17 and step 18 order of section 3.11 so the final sheet names are known before the cover sheet is written, and a condition for the stacked layout's single `"Crosstab"` sheet. `surveycore::extract_var_label()` supplies the label, so the information is available. **Decision (2026-09-16, issue 68): out of scope for this spec.** |
 | `.write_suppression_footnote()` stays, and its text contradicts the withheld wording | It prints `(n=…, threshold=…)` — a raw N — and the word "suppressed", while `.format_withheld_lines()` names the effective N and the word "withheld". The three `R/export-crosstab.R` call sites go; the three `R/export-topline.R` sites keep it, so the helper and its text stay in the tree. **Decision (2026-09-15): do not retire it in this round.** Retiring it means editing the topline render helpers, which Part A's scope line excludes. The topline pass resolves it |
-| A labelled all-NA column leaves no trace in a topline call | `export_topline()` keeps its early return on a frame with no rows — section 3.16 — so it writes no block for the column. The muffle of section 3.18 removes `surveycore_warning_all_na_freqs`, and a column with a label raises no missing-label warning. The call then gives no sign of the column. **Decision (2026-11-05): muffle in both functions.** The frequency helpers are shared, and the crosstab block shows the empty question. The topline pass closes the gap when topline writes the same block |
+| The workbook records nothing about a dropped all-NA variable | The console warning `surveyreports_warning_all_na_dropped` is the only trace, as for a role-dropped column above. **Decision (2026-11-05): drop with a warning, in both functions** — section 3.11, step 15 |
+| A group cut to one item by the all-NA drop keeps its group shape, and a group cut to one item by the role guard does not | The role guard runs before classification, so its single survivor is classified `single` and loses the preface — section 3.10. The all-NA drop reads the frequency frame, so it runs after classification, and the survivor keeps its group's type, id and preface — section 2.2. The test on the frame is the reason: it sees the row scope and the `na.rm` value of `get_freqs()`, so no second reading of the design can disagree with it |
 
 ---
 
@@ -2210,11 +2252,16 @@ without running the suite. The suite gates live with the scenarios.
 - [ ] `grep -rn "subgroup_suppressed" R/ man/ tests/` returns nothing. The scope
       excludes `plans/`, because this section and sections 3.18 and 5.1 all name
       the old class to record the rename
-- [ ] `plans/error-messages.md` holds all 6 new error classes and all 4 new
+- [ ] `plans/error-messages.md` holds all 7 new error classes and all 5 new
       warning classes plus the renamed one, and no longer holds
       `surveyreports_warning_subgroup_suppressed`. The edit lands **before**
       implementation
-- [ ] `R/export-utils.R` holds the 15 shared helpers of section 2.1, and
+- [ ] `grep -rn "nrow(frame) == 0L" R/` returns nothing. The six early
+      returns in the render routes are deleted — sections 3.16 and 4.1
+- [ ] `grep -rn "all_na_dropped\|vars_all_na" R/` returns lines in
+      `R/export-utils.R` only — both conditions live in
+      `.apply_all_na_drop()` — and `plans/error-messages.md` holds both classes
+- [ ] `R/export-utils.R` holds the 16 shared helpers of section 2.1, and
       `R/export-crosstab.R` holds the 3 helpers section 2.1 assigns to it —
       `.render_block_preamble()`, `.render_block_footer()` and
       `.unique_sheet_name()` — below the exported function. No `R/utils.R` was
@@ -2267,6 +2314,8 @@ without reading the spec twice:
 - The workbook's first sheet is `"About"`. `.build_workbook()` adds it before
   any question sheet, and openxlsx2 orders sheets by insertion — section 3.14.
 - Every warning path returns `invisible(file_name)` and leaves a readable file.
+- Every rendered block holds at least one response row. A variable with no
+  non-missing value has no block and no sheet — section 3.11, step 15.
 - No `%` appears in a sample-size cell, and no bare integer appears in an
   estimate cell.
 - No call site in `export_crosstab()`'s render path multiplies an estimate by
@@ -2349,5 +2398,13 @@ each member itself and owns the coercion rule of section 3.10, and
 `.resolve_base_notes()` now reads the universe itself and owns the wave
 unanimity rule of section 3.6. Each of the two helpers had one caller, so
 neither earns a name. Both are gone from sections 2.1 and 2.2.
+
+**Two 2026-11-05 decisions are replaced.** The entry "Plan review Pass 5:
+issues 33 to 36" wrote a block with no response row for a question whose
+frequency frame has no rows, and made the missing-label warning read the
+design. The entry "An all-NA variable is dropped, with a warning" replaces
+both: the variable leaves the output at step 15 of section 3.11, and the
+missing-label warning reads the frame again. The muffle of
+`surveycore_warning_all_na_freqs` stays.
 
 No open questions remain. Every question this spec raises is answered inside it.
