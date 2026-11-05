@@ -1,16 +1,18 @@
 # Implementation plan — export-metadata
 
 **Status:** PLAN_DRAFT
-**Version:** 4.4.0
+**Version:** 4.5.0
 **Date:** 2026-11-05
 **Id:** `export-metadata`
-**Source spec:** `plans/spec-export-metadata.md` v0.22.0
-**Source test-spec:** `plans/test-spec-export-metadata.md` v0.17.0
+**Source spec:** `plans/spec-export-metadata.md` v0.23.0
+**Source test-spec:** `plans/test-spec-export-metadata.md` v0.18.0
 **Review applied:** `plans/plan-review-export-metadata.md` Pass 1 — 21 issues, all
 resolved; Pass 2 — issues 22 and 23 resolved, suggestions 24 and 25 open;
 Pass 3 — PASS, suggestions 26 and 27 applied. A post-review spec change, the
 variance cell layout of spec 3.16 (v0.22.0), changed PR 17; Pass 4, a delta
-review of that change — issues 28 to 32 applied
+review of that change — issues 28 to 32 applied. A later spec change, the
+freeze pane on the stacked sheet (spec 3.16, v0.23.0), changed PR 15 and
+awaits the next delta review
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
@@ -1823,8 +1825,9 @@ it. Both files hold a single-response route, so task 4 names
 sheet. PR 17 task 32 changes the data width at the same site.
 `.render_block_preamble()`, from PR 14, writes the heading row, holds the
 `sample_size_display` branch and returns the first data row. So it sets the
-heading-row wrap, the heading row height and the freeze pane. No task in this
-PR changes `R/export-utils.R`.
+heading-row wrap, the heading row height and the freeze pane. It sets the pane
+only for a block at `start_row == 1L`, so the stacked sheet takes its pane from
+its first block (spec 3.16). No task in this PR changes `R/export-utils.R`.
 
 **Tasks** (2–5 minutes each):
 
@@ -1865,33 +1868,42 @@ PR changes `R/export-utils.R`.
     data row it returns, which is below the last sample-size row. Skip it when
     `sample_size_display == "bottom"`.
 22. Run the test from task 19. Confirm it passes.
-23. Write the numerical tests `XN-01`, `XN-02` and `XN-03`, each tagged
+23. Write the failing test `XB-11`: on the stacked sheet with two blocks, the
+    pane sits below the first block's last sample-size row, not below the
+    last block's.
+24. Run it. Confirm it fails: after task 21, the last block's pane wins.
+25. In `.render_block_preamble()`, set the pane of task 21 only when
+    `start_row == 1L`. The first block on every sheet starts at row 1 (spec
+    3.16), so a later block on the stacked sheet sets no pane. Add no
+    argument.
+26. Run the tests from tasks 19 and 23. Confirm both pass.
+27. Write the numerical tests `XN-01`, `XN-02` and `XN-03`, each tagged
     `[numerical]`.
-24. Run them. Confirm they pass.
-25. Write the numerical test `XN-04`: the count equals the rows the design
+28. Run them. Confirm they pass.
+29. Write the numerical test `XN-04`: the count equals the rows the design
     tabulates, computed from the design rather than hard-coded.
-26. Run it. Confirm it passes on twophase.
-27. Write the numerical test `XN-05`: the count equals the in-domain row count.
-28. Run it. Confirm it passes.
-29. Write the edge-case tests `XX-01`, `XX-03` and `XX-04`. Each block runs
+30. Run it. Confirm it passes on twophase.
+31. Write the numerical test `XN-05`: the count equals the in-domain row count.
+32. Run it. Confirm it passes.
+33. Write the edge-case tests `XX-01`, `XX-03` and `XX-04`. Each block runs
     against both export functions and labels every assertion with the function
     name.
-30. Run them. Confirm they pass.
-31. Write the edge-case test for an unused factor level on the tabulated
+34. Run them. Confirm they pass.
+35. Write the edge-case test for an unused factor level on the tabulated
     variable: no response row, and the sample-size rows unchanged.
-32. Run it. Confirm it passes.
-33. Write the edge-case test `XX-11`: the stacked layout writes one `Crosstab`
-    sheet plus the cover sheet.
-34. Run it. Confirm it passes.
-35. Write the edge-case test `XX-12`: the response rows total less than the
-    sample size above them, with no warning.
 36. Run it. Confirm it passes.
-37. Run `devtools::test()`. Review every moved snapshot with
+37. Write the edge-case test `XX-11`: the stacked layout writes one `Crosstab`
+    sheet plus the cover sheet.
+38. Run it. Confirm it passes.
+39. Write the edge-case test `XX-12`: the response rows total less than the
+    sample size above them, with no warning.
+40. Run it. Confirm it passes.
+41. Run `devtools::test()`. Review every moved snapshot with
     `testthat::snapshot_review()`.
-38. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-39. Run `air format .`, in its own commit.
-40. Run `devtools::check()`.
-41. Write `changelog/feature-crosstab-sheet-properties.md`.
+42. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+43. Run `air format .`, in its own commit.
+44. Run `devtools::check()`.
+45. Write `changelog/feature-crosstab-sheet-properties.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -1906,6 +1918,9 @@ PR changes `R/export-utils.R`.
       is 30 points (test-spec XB-03; spec 3.16).
 - [ ] A freeze pane is present under `"top"` and absent under `"bottom"`
       (test-spec XB-04; spec 3.16).
+- [ ] On the stacked sheet, the pane sits below the first block's last
+      sample-size row, and later blocks set none (test-spec XB-11;
+      spec 3.16).
 - [ ] Both counts match the oracle for the full sample and for a subgroup
       (test-spec XN-01, XN-02, XN-03; spec 3.4).
 - [ ] The counts follow the phase-2 subset and the in-domain rows (test-spec
@@ -1933,8 +1948,8 @@ PR changes `R/export-utils.R`.
 - [ ] `changelog/feature-crosstab-sheet-properties.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (15):** XH-10, XB-01, XB-02, XB-03, XB-04, XN-01, XN-02,
-XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12.
+**Scenarios owned (16):** XH-10, XB-01, XB-02, XB-03, XB-04, XB-11, XN-01,
+XN-02, XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12.
 
 **Files touched** — the exact write surface:
 
@@ -2518,7 +2533,7 @@ unchanged each time, because this work adds no export.
 
 ## Scenario coverage
 
-Each of the 184 scenario ids in `plans/test-spec-export-metadata.md` v0.17.0 is
+Each of the 185 scenario ids in `plans/test-spec-export-metadata.md` v0.18.0 is
 assigned to exactly one PR.
 
 | PR | Branch | Count | Scenario ids |
@@ -2537,16 +2552,16 @@ assigned to exactly one PR.
 | 12 | `feature/crosstab-banner-headings` | 10 | XH-01, XH-02, XH-03, XH-04, XH-05, XH-06, XH-07, XE-04, XE-05, XV-06 |
 | 13 | `feature/crosstab-withheld-notices` | 21 | XW-06, XW-07, XW-08, XW-09, XW-10, XW-11, XV-03, XV-04, XV-05, XV-10, XV-11, XV-12, XV-13, XA-06, XA-07, XA-12, XX-02, XX-06, XX-07, XX-08, XX-09 |
 | 14 | `feature/crosstab-label-cols-and-sizes` | 12 | XD-01, XS-01, XS-02, XS-03, XS-04, XS-05, XS-06, XS-07, XS-08, XS-09, XS-10, XE-07 |
-| 15 | `feature/crosstab-sheet-properties` | 15 | XH-10, XB-01, XB-02, XB-03, XB-04, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12 |
+| 15 | `feature/crosstab-sheet-properties` | 16 | XH-10, XB-01, XB-02, XB-03, XB-04, XB-11, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12 |
 | 16 | `feature/crosstab-percent-cells` | 11 | XC-01, XC-02, XC-03, XC-04, XC-05, XC-05a, XC-05b, XC-06, XC-07, XC-07a, XC-08 |
 | 17 | `feature/crosstab-variance-strings` | 15 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10 |
 | 18 | `feature/crosstab-total-and-missing` | 17 | XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12, XH-13, XH-14, XX-13, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08 |
 | 19 | `docs/export-metadata` | 0 | — |
-| | **Total** | **184** | |
+| | **Total** | **185** | |
 
-**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 10, XA 14,
-XM 17, XE 15, XV 13, XX 12, XN 10 — 152 for `export_crosstab()`. TP 14, TC 8,
-TE 4, TW 2, TN 4 — 32 for `export_topline()`. 152 plus 32 is 184. The id
+**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 11, XA 14,
+XM 17, XE 15, XV 13, XX 12, XN 10 — 153 for `export_crosstab()`. TP 14, TC 8,
+TE 4, TW 2, TN 4 — 32 for `export_topline()`. 153 plus 32 is 185. The id
 `XX-05` is retired in the test-spec and is not counted.
 
 **Six PRs own no scenario.** PRs 1 to 5 and PR 19. PR 1 changes a fixture and a

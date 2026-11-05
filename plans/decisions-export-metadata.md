@@ -1173,3 +1173,62 @@ The versions stay at spec 0.22.0, test-spec 0.17.0 and plan 4.4.0.
   the pane goes on the `"Crosstab"` sheet. With the pane set in
   `.render_block_preamble()`, each block resets it and the last block wins.
   The user has not decided this yet.
+
+---
+
+## [2026-11-05] — Freeze pane on the stacked sheet
+
+### Context
+
+Spec v0.22.0, section 3.16, puts the freeze pane below the last heading or
+sample-size row, and writes none under `sample_size_display == "bottom"`. It
+does not say where the pane goes on the stacked layout. There, every question
+block goes on one sheet named `"Crosstab"`. Plan v4.4.0, PR 15 task 21, sets
+the pane in `.render_block_preamble()`, which runs once per block. So each
+block resets the pane and the last block's position wins. The Pass 4 fixes
+above logged this as open.
+
+### Questions & Decisions
+
+**Q: Where does the freeze pane go on the stacked sheet?**
+- Options considered:
+  - **A:** The first block only, below that block's last heading or
+    sample-size row. Later blocks set no pane.
+  - **B:** No pane on the stacked sheet.
+  - **C:** The last block wins, as the plan now does.
+- **Decision:** A, chosen by the user.
+- **Rationale:** every block on the stacked sheet uses the same banner
+  columns, so the first block's headings describe every column below them.
+  Under C, the pane falls deep in the sheet, so the frozen rows can be
+  taller than the window.
+  The per-question layout is unchanged: each sheet gets its pane from its own
+  block. The `"bottom"` rule, no pane, is unchanged on both layouts.
+- **Mechanism:** `.render_block_preamble()` sets the pane only when
+  `start_row == 1L`. The first block on every question sheet starts at row 1:
+  `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question
+  layout, and `:275` sets `current_row <- 1L` on the stacked sheet. The
+  helper needs no new argument, so its signature in spec 2.2 and PR 14 stay
+  as they are. A `set_freeze` argument was rejected: the three render routes
+  call the preamble, so the flag would pass through three route signatures
+  and four call sites, and each caller would compute it from the row anyway.
+
+### Changes
+
+- Spec v0.23.0: the Freeze pane row of section 3.16 states the rule and the
+  `start_row == 1L` condition. The `.render_block_preamble()` comment in
+  section 2.2 cites it. The signature does not change.
+- Test-spec v0.18.0: one new row, `XB-11`, for the stacked sheet. It expects
+  the pane's top-left cell at `A7` and reads it from the sheet's
+  `freezePane` field, measured on openxlsx2 1.28. Template-coverage row 3
+  cites it. The scenario count goes from 184 to 185, and the XB family from
+  10 to 11.
+- Plan v4.5.0: PR 15 gains tasks 23 to 26, one acceptance criterion and the
+  id `XB-11`. Its later tasks move up by 4, so PR 15 has 45 tasks. The
+  scenario-coverage table and the family check give 185. PR 14 does not
+  change.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.5.0 at `PLAN_DRAFT` and needs a delta review of PR 15 before it returns to
+`PLAN_READY`.

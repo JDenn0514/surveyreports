@@ -1,7 +1,7 @@
 # Test-spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.17.0
+**Version:** 0.18.0
 **Date:** 2026-11-05
 **Id:** `export-metadata`
 **Branch:** `feature/export-metadata`
@@ -59,7 +59,7 @@ named scenarios or marked N/A with the reason. An N/A is a decision, not a gap.
 |---|---|---|
 | 1 | Happy paths — a non-empty file with the expected sheet, all design types | covered — `XC-01`, `XS-01`, `XA-01`, `XA-13`, `XR-01`, `XR-02`, and the **Result structure** list |
 | 2 | Multiple variables — every variable name appears in the workbook | covered — `XA-08`, `XW-09`, `XX-11` |
-| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11` |
+| 3 | Layout — per_question and stacked | covered — `XH-07`, `XX-11`, and `XB-11` for the freeze pane on the stacked sheet |
 | 4 | Banner columns — one column group per banner level, plus Total | covered — `XH-01`, `XH-02`, `XH-06`, `XH-08`, `XH-08a`, `XH-08b`, `XH-09`, `XH-09a` |
 | 5 | Interactions — crossed banner variables | covered — `XH-03`, `XH-04`, `XH-05`, `XW-06`, `XW-07`, `XN-08` |
 | 6 | Self-banner — a variable used as its own banner | covered — `XX-09` |
@@ -413,6 +413,7 @@ contrasting cell.
 | XB-08 | an estimate cell wraps when the variance shares its cell | all four | the `XB-05` call under `variance_display = "cell"`, then the same call with `variance = "se"` | under both `variance` values, every data cell of every estimate row resolves to a wrapping alignment. A data cell of a sample-size row in the same block resolves to a non-wrapping one, which is the contrast the row rests on. Read the resolved alignment, not the cell text — `XA-12` and `XS-02` give the pattern. Assert every estimate row, so a run that wraps the first row and no other fails | n/a |
 | XB-09 | an estimate row is 30 points tall when the variance shares its cell | all four | the two calls of `XB-08` | under both `variance` values, the stored height of every estimate row is `30`. A sample-size row in the same block carries no height of its own. Assert every estimate row | n/a |
 | XB-10 | no wrap and no estimate-row height without a second line | all four | the `XB-05` call with `variance = NULL` and `variance_display = "cell"` stated, then the `XB-05` call with `variance = "ci"` and `variance_display = "row"` | in both calls, every data cell of an estimate row resolves to a non-wrapping alignment, and no estimate row carries a height of its own. In the `"row"` call the variance rows carry no height either. `variance_display = "cell"` alone does not switch the rules on — `variance` must be set too | n/a |
+| XB-11 | the stacked sheet takes its freeze pane from its first block | all four | `layout = "stacked"`, `vars = c(q1, q2)`, `banner = gen`, `min_eff_n = 0`, `base_notes = c(q1 = "Base: all adults", q2 = "Base: all adults")`, `variance = NULL`, `sample_size_display = "top"`, `show_ess = TRUE`. The first block then holds the question text in row 1, the base note in row 2, the spanner in row 3, the heading row in row 4, and the two sample-size rows in rows 5 and 6 | the `"Crosstab"` sheet carries one freeze pane, with its top-left cell at **`A7`**, the first data row of the first block. It is **not** at the first data row of the second block, which is where the pane falls when each block resets it. Read it after `openxlsx2::wb_load()` with `wb$worksheets[[match("Crosstab", wb$get_sheet_names())]]$freezePane`. Measured on openxlsx2 1.28: that field holds the `<pane>` XML as one string, `""` when the sheet has no pane, and a second `wb_freeze_pane()` call on the same sheet replaces the first. Assert that the string holds `topLeftCell="A7"` and `ySplit="6"` | exact string |
 
 #### Happy path — the cover sheet
 

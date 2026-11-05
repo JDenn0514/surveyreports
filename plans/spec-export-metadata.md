@@ -1,7 +1,7 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.22.0
+**Version:** 0.23.0
 **Date:** 2026-11-05
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
@@ -555,6 +555,9 @@ is what satisfies section 5.2's snapshot gate.
 #    Calls .write_question_title(), .write_crosstab_headers() and
 #    .write_sample_size_rows(). The row order is the contract of
 #    section 3.16.
+#    Sets the freeze pane only when start_row == 1L, so a sheet takes its
+#    pane from its first block. No argument carries that fact — section
+#    3.16, Freeze pane.
 
 # The closing sequence of one question block: the two sample-size rows
 # under sample_size_display == "bottom", then the withheld lines under
@@ -1748,7 +1751,7 @@ rows and the withheld lines are the only things below the data rows.
 | Wrapping | on for the label column and the heading row. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line |
 | Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed |
 | Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height |
-| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"` |
+| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. Every block on that sheet uses the same banner columns, so the first block's headings describe every column below them. A row added above the first block breaks this condition, and `XB-04` and `XB-11` then fail |
 
 **Where `15 + 2 * decimals` comes from.** An interval string is `(`, a bound,
 ` – `, a bound and `)`, so it is 5 characters plus the two bounds. Section 3.12
