@@ -1932,3 +1932,461 @@ freeze rule rests on "the first block starts at row 1", which a zero-row frame
 breaks (measured), and the same early return makes `XX-03` fail in PR 15. The
 battery label-column width is also unstated. Issues 33 and 34 need an edit
 before the plan returns to `PLAN_READY`.
+
+---
+
+## Plan Review: export-metadata — Pass 6, delta (2026-11-05)
+
+Plan under review: `plans/impl-export-metadata.md` v4.8.0, with
+`plans/spec-export-metadata.md` v0.26.0 and
+`plans/test-spec-export-metadata.md` v0.21.0, on
+`docs/export-metadata-plan-pass-3` at `c6f5220`. This is a delta pass over
+`git diff b3c73a0..c6f5220` of those three files. `bb84e8d` applies the Pass 5
+fixes. `c6f5220` replaces the empty-block fix of issue 33 with the all-NA drop.
+This pass does not re-review the rest of the documents.
+
+Measurements are at `c6f5220`, with R 4.6.1, surveycore 1.2.0, openxlsx2 1.28
+and testthat 3.3.2, from scratch scripts outside the repo, on
+`devtools::load_all()` and `make_all_designs(seed = 42)`.
+`git diff 2728b60 c6f5220 --stat -- R/ tests/` is empty. At this commit the
+generator returns `taylor`, `replicate` and `twophase` only, so "every design"
+below means those three.
+
+### Prior issues (Pass 5)
+
+| # | Title | Status |
+|---|---|---|
+| 33 | A zero-row frame writes no block, so `XX-03` cannot pass and a stacked sheet can lose its pane | RESOLVED — by the drop of decision 2026-11-05, not by option A. `XB-12` pins the pane, `XX-03` moves to PR 12, and PR 12 tasks 47 and 48 delete the six returns. Measurement 1c finds no input that brings a kept variable to a zero-row frame |
+| 34 | No rule sets the width of a battery block's second label column | RESOLVED — option A. Spec line 1849 sets 20 and the stacked rule. `XB-01` (battery half), `XB-13` and `XB-14` check it. PR 15 tasks 8 to 10 and 29 to 32, and PR 17 tasks 36 and 37, carry it |
+| 35 | The reason given for the stacked pane is false above a battery block (suggestion) | RESOLVED — option A. Spec line 1853 states the two limits |
+| 36 | The range sentence is exact at `decimals = 1` only (suggestion) | RESOLVED — option A. Spec lines 1866-1880. Measured: the six strings are 15, 17, 19, 16, 18 and 20 characters, and `99.95`, `99.995` and `999.5` over `qnorm(0.975)` are 50.996, 51.019 and 509.958 |
+
+### Measurements
+
+**1a. An all-NA group item keeps its group.** On every design, with `sata_a`
+and `bat_1` set to `NA_integer_`,
+`classify_question_type(d, c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3))`
+gives `sata_a` type `sata`, group 2, and `bat_1` type `battery`, group 3. The
+metadata stays on the column. `.build_freq_frame(..., banner_resolved =
+"group")` gives 0 rows for `sata_a` and `bat_1`, so no `"total"` row. `sata_b`
+has 8 rows, 2 of them `"total"`. The rule "no `"total"` row" picks exactly
+`sata_a` and `bat_1`. The call raises `surveycore_warning_all_na_freqs`.
+
+**1b. A battery cut to one item renders.** With `bat_1` and `bat_2` all-NA,
+the full-group classification gives `bat_3` type `battery`, group 1.
+`classify_question_type(d, "bat_3")` alone gives `single`, which is the role
+guard difference spec VI records. A mock of `classify_question_type()` that
+returns the one-item battery row sends `bat_3` down the battery route. On every
+design, `export_crosstab()` per-question and stacked, and `export_topline()`,
+return the path with no error. The crosstab sheet is named `bat_3`, A1 holds the
+preface `Please rate the following items:`, and row 3 holds `Item` and
+`Response`. The topline A1 holds the preface and A2 holds `bat_3`. So the
+current routes need no task for this case.
+
+**1c. No kept variable reaches a zero-row frame.** A tracer on the six render
+routes logged `nrow(frame)` on entry. Each call passed only the variables that
+have a `"total"` row, as the drop will. On every design, no route received a
+zero-row frame for these inputs:
+
+| Input | Kept | Route frames (rows) |
+|---|---|---|
+| `q1` `NA` for every group `A` row, `banner = group` | `q1`, `q2` | 12, 8 |
+| `show_total = FALSE`, single, SATA and battery | all 7 | 12, 24, 60 |
+| every banner level withheld (`pub_type = "external"`) | `q1`, `q2` | 3, 2 |
+| the same with `show_total = FALSE` | `q1`, `q2` | 3, 2 |
+| self-banner, `vars = c(group, q1)` | both | 3, 12 |
+| `dom_na`, all-NA inside the domain `group == "A"` | `q1` | 6 |
+| a column `NA` on every phase-2 row | both | 12, 12 |
+
+- The withheld rows go and the `"total"` rows stay. `show_total` changes the
+  column groups, not the frame.
+- **`na.rm = FALSE` on an all-NA variable does not give a frame.**
+  `surveycore::get_freqs(d, all_na_var, na.rm = FALSE)` aborts with
+  `surveycore_error_all_na`, with and without `group = group`. A column all-NA
+  inside the domain aborts the same way. A column `NA` in one banner level only
+  returns 12 rows. Issue 38.
+- An all-`FALSE` domain is not a case for the drop. Step 4 raises
+  `surveyreports_error_empty_domain` first (spec 3.11). That check is not in the
+  code yet; `R/export-utils.R:68` is `# nocov`.
+
+**1d. The collection crash.** `export_topline(coll_na_first, vars = c(q1, q3))`
+and the `TC-10` call (`all_na_var` in both waves) abort with "subscript out of
+bounds". The srcref chain is `export-topline.R:118`, `export-utils.R:302`,
+`export-utils.R:344`. `coll_na_second` returns the path. So the crash is the
+line the plan names.
+
+- The plan's fix, PR 12 task 45, was applied as a patch to line 334: take
+  `first` from the first wave frame with rows, and return no pooled row when no
+  wave frame has rows. Then both `TC-09` calls return the path. The `q3` block
+  title is `q3`, and its heading row holds `Total` and one wave heading:
+  `w2\n(n=200)` for `coll_na_first`, `w1\n(n=200)` for `coll_na_second`. Issue
+  40.
+- With the patch, the `TC-10` frame holds no row for `all_na_var`. The route
+  still returns early at `R/export-topline.R:218`, because the drop is not in
+  the code yet.
+- With the patch, `q3` all-NA in wave 1 and absent from wave 2 gives 0
+  `"total"` rows and 1 placeholder row whose `question_text` is `q3`
+  (`R/export-utils.R:358-369`). The missing-label warning then reads "Variables
+  q1 and q3 have no variable_label." Issue 43.
+
+**Other measurements.**
+
+- The `XV-15` and `TW-04` pattern works under edition 3, which `DESCRIPTION`
+  line 33 sets. `expect_no_warning(expect_warning(f(), class =
+  "surveyreports_warning_all_na_dropped"), class =
+  "surveycore_warning_all_na_freqs")` fails when `f()` raises both classes and
+  passes when it raises the new class only. Under edition 2 it passes in both
+  cases, so the test file must not change the edition.
+- `plans/error-messages.md` holds the six older error classes and the four
+  older warning classes, and holds neither `vars_all_na` nor
+  `all_na_dropped`. The PR 1 table (plan lines 169-174) is true.
+
+### The delta, check by check
+
+**2. Ordering.**
+
+- Step 15 agrees with steps 10, 13 and 17 of spec 3.11 (lines 1375-1387). The
+  role guard empties `vars` before it, classification runs before it, and the
+  abort runs before the workbook build. The topline list (11 steps) maps to
+  crosstab steps 2, 3, 4, 7, 9, 10, 13, 14, 15, 17 and 18, and the seven steps
+  that do not apply are 1, 5, 6, 8, 11, 12 and 16. Both lists check.
+- Withholding reads the design's banner columns and filters subgroup rows.
+  The drop reads `"total"` rows. Neither reads what the other removes. PR 12
+  task 28 says so.
+- The drop does not run before withholding in the plan. PR 11 tasks 19 and 20
+  (plan lines 1327-1331) put `.build_withheld()` and the row filter inside
+  `.build_freq_frame()`, which is step 14. Spec line 1496 says the all-NA
+  warning comes "before withholding at step 16". Issue 39.
+
+**3. PR 12 tasks.**
+
+- A script reads PR 12 as tasks 1 to 53, PR 15 as 1 to 51 and PR 17 as 1 to
+  53, with no gap. PR 14 has 49.
+- In PR 12, tasks 30, 34, 38 and 46 cite tasks 25, 31, 35 and 43, and task 40
+  cites task 28. The intro cites tasks 44 and 45. All are right. The notes
+  table (plan line 2753) cites tasks 28, 29 and 37, and line 2754 cites PR 13
+  tasks 18 and 19. Both are right.
+- In PR 15, task 28 cites task 25, and tasks 30 and 32 cite task 29. PR 17 task
+  37 cites PR 15 task 10 and task 32. All are right.
+- Every PR 12 criterion cites a real id. The 22 owned ids equal the coverage
+  row.
+- The write surface (plan lines 1581-1590) covers every file a task edits:
+  `R/export-utils.R` (tasks 27, 33, 37, 45), `R/export-crosstab.R` (28, 47),
+  `R/export-topline.R` (29, 48), both test files, and
+  `_snaps/export-crosstab.md` for the `XV-14` and `XE-16` snapshots. No PR 12
+  row takes a topline snapshot, and `_snaps/export-topline.md` holds no all-NA
+  text today, so its absence is right. The file table (plan lines 2671 and
+  2673) adds PR 12 to both topline files.
+- The surface misses two committed test blocks that the new error breaks.
+  Issue 37.
+
+**4. Scenarios.**
+
+- 199 ids, no duplicate. XB 14, XE 16, XV 15, XX 15, TC 10, TE 5, TW 4, and
+  the other families unchanged. The coverage table sums to 199. Each row's
+  count equals its id list. A scripted diff of its ids against the test-spec
+  ids is empty. Every "Scenarios owned" list of PRs 6 to 18 equals its row.
+  The family check (plan lines 2719-2722) gives 162 plus 37.
+- `XE-16` takes the dual pattern, the first snapshot of
+  `surveyreports_error_vars_all_na`. `XV-14` takes the first snapshot of
+  `surveyreports_warning_all_na_dropped`. Every other row on the two classes
+  asserts the class alone and names the row that snapshots it. That is the
+  `testing.md` rule.
+- No row uses `withCallingHandlers()` or `tryCatch()`.
+- Every new crosstab row and every new `TE`/`TW` row says all four designs, as
+  its neighbours do. `TC-09` and `TC-10` run on the collection, as `TC-01` to
+  `TC-08` do.
+- The inputs are reachable. 1a confirms the `sata_a` and `bat_1` snippets, 1b
+  confirms the one-item battery of `XX-14`, 1c confirms `dom_na` for `XX-16`,
+  and 1d confirms the `coll_na_*` snippets.
+- `TC-09` names a heading string the code does not write. Issue 40.
+
+**5. Counts and versions.** True, except one stale count:
+
+- Spec 2.1 lists 16 helpers for `R/export-utils.R` and 3 for
+  `R/export-crosstab.R`, 19 in all. Spec 3.17 and 3.18 hold 7 new error classes
+  and 5 new warning classes. Spec 3.11 has 18 steps.
+- Spec line 4 reads 0.26.0. Test-spec line 4 reads 0.21.0. Plan line 4 reads
+  4.8.0, and plan lines 7 and 8 cite 0.26.0 and 0.21.0. Plan lines 14 and 17
+  cite v0.23.0 and v0.25.0 as history in the "Review applied" field.
+- Plan line 47, "add fifteen internal helpers", is still true. It counts the
+  four helper PRs, and `.apply_all_na_drop()` lands in PR 12.
+- Plan line 2502, the PR 18 criterion, still reads "holds the 15 shared
+  helpers of spec 2.1". Spec VIII now reads 16. Issue 41.
+
+**6. Leftovers.** `grep -n -i` for "no rows", "zero-row", "no label AND",
+"empty block", "no response row" and ".emit_missing_label_warning(design" in
+the three files finds no text that states the empty-block rule or the
+design-column label check as current. The hits are the zero-data-column block
+of spec 3.5, the zero-row withheld and counts frames, the `-` cell, spec
+section XI and the plan header, all correct.
+
+---
+
+### New issues
+
+#### Section: PR 12 — committed tests
+
+**Issue 37: two committed tests call an all-NA variable alone and expect success**
+Severity: REQUIRED
+The suite is red after PR 12 task 33, and no task fixes it.
+
+- `tests/testthat/test-export-crosstab.R:1024-1037`, "export_crosstab()
+  handles all-NA variable without crashing", calls
+  `export_crosstab(d, vars = all_na_var, banner = group, ...)` inside
+  `suppressWarnings()` and expects the file.
+- `tests/testthat/test-export-topline.R:379-388`, "export_topline() handles
+  all-NA variable without crashing", wraps the same call in
+  `expect_no_error()`.
+- After task 33 both calls abort with `surveyreports_error_vars_all_na` (spec
+  3.19, line 1944). `suppressWarnings()` does not stop an error. Task 49 says
+  "Confirm the suite is green". `grep -n -i "all-na\|all_na"` on the plan finds
+  no task that deletes or rewrites the two blocks.
+
+Options:
+- **A** Add a task to PR 12 after task 33: delete the two blocks. `XX-03` (both
+  functions), `XE-16` and `TE-05` replace them. Cite them by test name, since
+  earlier PRs move the lines. — Effort: low, Risk: low, Impact: task 49 can be
+  green.
+- **B** Rewrite the two blocks to expect the new error. — Effort: low, Risk:
+  low, Impact: duplicates `XE-16` and `TE-05`.
+- **C** Do nothing — PR 12 fails its own suite gate, and the builder must
+  guess which tests to change.
+
+**Recommendation: A** — the two blocks test the old behavior, and three new
+rows cover the new one.
+
+---
+
+#### Section: spec 2.2 and 3.19 — `na.rm = FALSE`
+
+**Issue 38: under `na.rm = FALSE` an all-NA variable aborts in surveycore, and the spec says it keeps a row**
+Severity: REQUIRED
+A stated edge-case behavior is false at surveycore 1.2.0 (measured), and no
+scenario covers it.
+
+- Spec lines 466-468 and line 1943 say that under `na.rm = FALSE` an all-NA
+  variable "keeps its na_label row, so it has a row and is not dropped". The
+  decisions log (lines 1531-1533) marks this reading as the assistant's, and
+  says it "needs the user's check".
+- Measured (1c): `get_freqs(d, all_na_var, na.rm = FALSE)` aborts with
+  `surveycore_error_all_na`, class vector `surveycore_error_all_na`,
+  `rlang_error`, `error`, `condition`. It aborts with `group = group` too, and
+  for a column all-NA inside the domain.
+- Spec 3.13 passes `na.rm` straight to the three frequency helpers. So in PR
+  18, any `na.rm = FALSE` call that holds one all-NA column aborts at step 14
+  with a surveycore error. Step 15 never runs, and no file is written. That
+  includes a SATA group with one all-NA item.
+- The `XH-11` to `XH-14` inputs hold no all-NA column, so no row sees it.
+
+Options:
+- **A** Under `na.rm = FALSE`, the three frequency helpers catch
+  `surveycore_error_all_na` by class and return zero rows. Step 15 then drops
+  the variable with the same warning, whose `"i"` bullet ("no non-missing
+  value") stays true. Rewrite the two spec sentences, and add a PR 18 task and
+  a scenario. — Effort: low, Risk: low, Impact: one rule for both `na.rm`
+  values.
+- **B** Keep the variable as one `na_label` row at 100 percent. The helpers
+  must recode `NA` before `get_freqs()`. — Effort: medium, Risk: medium,
+  Impact: matches the spec's current intent.
+- **C** Let it abort. State in spec 3.19 that `surveycore_error_all_na`
+  reaches the caller, and add a scenario. — Effort: low, Risk: low, Impact: a
+  call that is valid at `na.rm = TRUE` fails at `FALSE`.
+
+**Recommendation: A** — the user decides. A is the smallest change that keeps
+the drop rule true for both `na.rm` values.
+
+---
+
+#### Section: spec 3.11 and PR 13 — where the withholding warnings fire
+
+**Issue 39: the plan builds withholding inside estimation, so its warnings can fire before the all-NA drop**
+Severity: REQUIRED
+The delta states an order that the plan's code structure does not produce, and
+no task says where to raise the three withholding warnings.
+
+- Spec line 1384 puts withholding at step 16, after the drop. Spec line 1496
+  says the all-NA warning comes "before withholding at step 16". Spec line 1944
+  says a call whose every variable is all-NA raises no warning.
+- PR 11 tasks 19 and 20 (plan lines 1327-1331) put `.build_withheld()` and the
+  row filter inside `.build_freq_frame()`, which is step 14. PR 12 task 28
+  accepts that. PR 13 tasks 11, 15 and 16 (lines 1622-1631) raise the three
+  warnings and do not say where. Today the old class fires inside
+  `.build_freq_frame()` (`R/export-utils.R:462`), before the missing-label
+  warning at line 546.
+- A builder who raises the warnings where the withheld frame is built gets two
+  faults. First, they fire before `surveyreports_warning_all_na_dropped`, so
+  `XV-11` fails. PR 13 task 19 says "fix the emission order" but not that the
+  fix must leave `.build_freq_frame()`. Second, an all-NA call at the default
+  `min_eff_n = 100` with `banner = group` (about 67 rows a level, so every
+  level falls below the floor, as 1c shows) raises
+  `subgroup_withheld` and `banner_all_withheld` before
+  `surveyreports_error_vars_all_na`. `XE-16` runs at `min_eff_n = 0`, so no row
+  sees this.
+- The banner half of the missing-label warning (PR 12 tasks 4 and 5) must also
+  fire before step 15 for the order of spec 3.11 to hold. No task says where it
+  fires.
+
+Options:
+- **A** In PR 13 tasks 11, 15 and 16, raise the three warnings in
+  `export_crosstab()` after the `.apply_all_na_drop()` call, from the withheld
+  frame that `.build_freq_frame()` returns. In PR 12 task 4, raise the banner
+  missing-label warning before the drop. Reword spec 3.11 step 16 to say the
+  row filter runs inside estimation and the warnings run at step 16. Add a
+  second `XE-16` call at the default `min_eff_n`, whose snapshot holds the error
+  alone. — Effort: low, Risk: low, Impact: the order of spec 3.11 is built, not
+  repaired.
+- **B** Move `.build_withheld()` out of `.build_freq_frame()` to step 16, and
+  filter the frame there. — Effort: medium, Risk: medium, Impact: rewrites PR
+  11 tasks 19 and 20.
+- **C** Do nothing — `XV-11` fails first time, and the abort case breaks spec
+  3.19 with no test to show it.
+
+**Recommendation: A** — it moves three `cli_warn()` calls and adds one test
+call.
+
+---
+
+#### Section: test-spec — `TC-09`
+
+**Issue 40: `TC-09` names a wave heading that the code writes with a count**
+Severity: REQUIRED
+An oracle that a literal test fails on correct code.
+
+- `TC-09` (test-spec line 702) reads "Its headings are `Total` and the wave
+  with values only — `w2` for `coll_na_first`, `w1` for `coll_na_second`".
+- `R/export-topline.R:303-308` writes a wave heading as the label, then
+  `"\n(n="`, the count and `")"`. Measured (1d, with the task 45 patch): the
+  cells are `Total` and `w2\n(n=200)`, and `Total` and `w1\n(n=200)`.
+  `export_topline()` gets no presentation change (spec 4.1), so the count stays.
+- An `expect_identical()` on `c("Total", "w2")` fails. A test that checks only
+  that `w1` is absent passes. The row does not say which.
+
+Options:
+- **A** State the cell strings: `Total` and `w2\n(n=200)` for
+  `coll_na_first`, `Total` and `w1\n(n=200)` for `coll_na_second`, and no
+  third heading. — Effort: low, Risk: low, Impact: exact oracle.
+- **B** Say "compare the text before `\n`". — Effort: low, Risk: low, Impact:
+  exact oracle, and independent of the count.
+- **C** Do nothing — the tester guesses.
+
+**Recommendation: B** — the row tests which waves have a column, not the count.
+
+---
+
+#### Section: PR 18 — a stale count
+
+**Issue 41: the PR 18 criterion still counts 15 shared helpers**
+Severity: REQUIRED
+A criterion that reads false on correct code.
+
+- Plan line 2502 reads "`R/export-utils.R` holds the 15 shared helpers of spec
+  2.1". Spec 2.1 now lists 16, and spec VIII reads 16, because
+  `.apply_all_na_drop()` was added.
+
+Options:
+- **A** Change "15" to "16". — Effort: low, Risk: low, Impact: the criterion
+  and spec VIII agree.
+- **B** Do nothing — the PR 18 reviewer counts 16 and fails the criterion.
+
+**Recommendation: A** — one character.
+
+---
+
+#### Section: PR 12 — task order
+
+**Issue 42: the first snapshots of `XV-14` and `XE-16` are taken before the muffle lands**
+Severity: SUGGESTION
+
+- Task 25 writes `XV-14` and task 31 writes `XE-16`, both with a snapshot. Task
+  37 adds the muffle. So both first snapshots record
+  `surveycore_warning_all_na_freqs` (measured in 1a), and both move at task 38.
+  At task 34, `XE-16`'s "the snapshot records the error alone" is false. Task 49
+  reviews moved snapshots, so nothing is lost.
+
+Options:
+- **A** Move tasks 35 to 38 before task 25. — Effort: low, Risk: low, Impact:
+  each snapshot is right when first written.
+- **B** Do nothing — task 49 catches the move.
+
+**Recommendation: A** — the first snapshot should be the one that ships.
+
+---
+
+#### Section: spec 3.18 — a collection edge
+
+**Issue 43: on a collection, a dropped variable that a later wave lacks is still named in the missing-label warning**
+Severity: SUGGESTION
+
+- Spec line 1914 says "a variable dropped at step 15 of section 3.11 is not
+  named here". `TW-03` checks it on a single design only.
+- The collection path writes a placeholder row for a wave that lacks the
+  column, with `question_text = var` (`R/export-utils.R:358-369`). Measured
+  (1d): `q3` all-NA in wave 1 and absent from wave 2 is dropped by the rule,
+  and the warning still names `q3`. The placeholder sets `question_text = var`
+  whatever the label, so a labelled `q3` is named too. For a kept variable this
+  is older behavior and out of scope.
+
+Options:
+- **A** State the limit in spec 3.18 and spec 3.19. — Effort: low, Risk: low,
+  Impact: the sentence is true.
+- **B** Do nothing — the case needs a variable absent from one wave and all-NA
+  in every other.
+
+**Recommendation: A** — one clause.
+
+---
+
+#### Section: PR 12 — task 48
+
+**Issue 44: task 48 cites topline line numbers without the grep note that task 47 gives**
+Severity: SUGGESTION
+
+- Task 47 says the crosstab line numbers are those on `develop` today and to
+  find each return with `grep -n "nrow(frame) == 0L"`. Task 48 cites
+  `R/export-topline.R:218`, `:482` and `:612` with no note. PRs 6 to 9 edit
+  that file first (plan line 2671).
+
+Options:
+- **A** Add the same sentence to task 48. — Effort: low, Risk: low, Impact: no
+  stale line numbers.
+- **B** Do nothing — the grep criterion still finds all six.
+
+**Recommendation: A** — one sentence.
+
+---
+
+#### Section: PR 1, PR 13, PR 14, PR 15 and PR 17 — the rest of the delta
+
+No new issues found beyond issues 39 and 41. PR 1 tasks 2 to 4 and its
+criterion are true against `plans/error-messages.md`. PR 13 task 18 orders
+seven classes. The PR 14 note (plan lines 1775-1778) holds. PR 15 tasks 27 to
+32 and PR 17 tasks 36 and 37 match `XB-12` to `XB-14` and spec 3.16.
+
+#### Section: Scenario coverage
+
+No new issues found beyond issue 40.
+
+---
+
+## Summary (Pass 6)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 5 |
+| SUGGESTION | 3 |
+
+**Total issues:** 8 (issues 37 to 44).
+
+**Prior issues 33 to 36:** 4 RESOLVED, 0 open.
+
+**Verdict: BLOCK.**
+
+**Overall assessment:** The drop is sound where it was measured: group items
+keep their group, a one-item battery renders, no kept variable reaches a
+zero-row frame, and the task 45 fix stops the line 344 crash. The counts and
+cross-references check. But PR 12 leaves two committed tests red, the
+`na.rm = FALSE` sentence is false at surveycore 1.2.0, and the plan does not say
+where the withholding warnings fire, so issues 37 to 41 need an edit before
+`PLAN_READY`.

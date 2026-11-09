@@ -1617,3 +1617,86 @@ block. That entry is not edited.
 The spec and the test-spec stay at `SPEC_READY`. The plan is v4.8.0 at
 `PLAN_DRAFT`. The next delta review covers PRs 1, 12, 13, 14 and 15, and still
 PR 17.
+
+## [2026-11-05] — Plan review Pass 6: issues 37 to 41, and the plan is ready
+
+### Context
+
+Pass 6 of `plans/plan-review-export-metadata.md` is a delta review of
+`b3c73a0..c6f5220`, against plan v4.8.0, spec v0.26.0 and test-spec v0.21.0.
+Its verdict is BLOCK. It raises five REQUIRED issues, 37 to 41, and three
+suggestions, 42 to 44. The user agreed that the plan is ready once the
+REQUIRED issues of this pass are fixed, with no further review pass.
+
+### Questions & Decisions
+
+**Q (issue 38): What does an all-NA variable do under `na.rm = FALSE`?**
+- Context: the entry above, "An all-NA variable is dropped, with a warning",
+  says that under `na.rm = FALSE` an all-NA variable keeps its `na_label` row
+  and is not dropped. It marks that reading as the assistant's, pending the
+  user's check. That entry is not edited. This entry replaces its choice.
+- The premise is false. Pass 6 measured it on surveycore 1.2.0 and
+  `make_all_designs(seed = 42)`: `get_freqs(d, all_na_var, na.rm = FALSE)`
+  aborts with `surveycore_error_all_na`, with and without `group = group`,
+  and for a column all-NA inside the domain. The class vector is
+  `surveycore_error_all_na`, `rlang_error`, `error`, `condition`. So in PR 18
+  such a call aborts at step 14, before the drop, and writes no file.
+- Options considered:
+  - **Drop it too:** under `na.rm = FALSE` the three frequency helpers catch
+    `surveycore_error_all_na` by class and return zero rows. Step 15 drops the
+    variable with the same warning. When no variable is left,
+    `surveyreports_error_vars_all_na` applies.
+  - **Let surveycore's error through:** spec 3.19 states that
+    `surveycore_error_all_na` reaches the caller. A call that is valid at
+    `na.rm = TRUE` then fails at `FALSE`.
+  - Pass 6 also listed a third option: recode `NA` before `get_freqs()` and
+    keep one `na_label` row. It was not chosen.
+- **Decision:** drop it too, chosen by the user.
+- **Mechanism:** the helpers catch by class, never all errors, and only under
+  `na.rm = FALSE`. Under `na.rm = TRUE` they catch nothing. A SATA or battery
+  item and a column all-NA inside the domain follow the same rule.
+  `export_topline()` takes no `na.rm`, so the rule does not reach it, and the
+  collection case does not arise.
+- **Effect:** an all-NA variable is dropped whatever the `na.rm` value. Spec
+  2.2, 2.3, 3.13, 3.18, 3.19 and XI state it. New scenario `XX-17`. PR 18
+  tasks 32 to 35 and one criterion.
+
+**The other four issues take the review's recommendation.**
+- Issue 37, option A: PR 12 task 34 deletes the two committed blocks named
+  "handles all-NA variable without crashing", one in each export test file.
+  `XX-03`, `XE-16` and `TE-05` replace them.
+- Issue 39, option A: spec 3.11 step 16 and the warning-order paragraph give
+  each warning its site. `export_crosstab()` raises the three withholding
+  warnings after the `.apply_all_na_drop()` call, and the missing-label
+  warning before it. PR 12 task 5 and PR 13 tasks 11, 15 and 16 name the
+  site. PR 13 tasks 18 and 19 add a second `XE-16` call at the default floor.
+- Issue 39, one more change: `XE-16` moves from `banner = group` to the
+  labelled `gen` banner. `group` has no variable label, so the banner half of
+  the missing-label warning would fire before the abort.
+- Issue 40, option B: `TC-09` compares the text of each heading cell before
+  the first `\n`. It also states the measured cells, `w2\n(n=200)` and
+  `w1\n(n=200)`.
+- Issue 41, option A: the PR 18 criterion reads 16 shared helpers, as spec
+  VIII does. No other stale helper count was found.
+
+### Open items
+
+- Suggestions 24 and 25 (Pass 2) and 42, 43 and 44 (Pass 6) are open.
+- Issues 7, 17 and 20 stay PARTIAL.
+
+### Changes
+
+- Spec v0.27.0: sections 2.1, 2.2, 2.3, 3.11, 3.13, 3.18, 3.19 and XI. Section
+  3.19 gains one row. No helper, error class or warning class is added.
+- Test-spec v0.22.0: new `XX-17`. `XE-16`, `XV-11` and `TC-09` are rewritten.
+  Behavior item 15, the edge-case note and crosstab template section 7 name
+  the new rule. XX goes from 15 to 16, and the count from 199 to 200.
+- Plan v4.9.0: PR 12 has 54 tasks, PR 13 has 46 and PR 18 has 55. PR 18 owns
+  18 scenarios. The coverage table gives 200, and the family check 163 plus
+  37. The ordering table gains two rows. The notes count four test edits that
+  cross a PR boundary.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.9.0 at
+`PLAN_READY`, with no further review pass, by the user's decision.

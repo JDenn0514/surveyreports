@@ -1,7 +1,7 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.26.0
+**Version:** 0.27.0
 **Date:** 2026-11-05
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
@@ -228,7 +228,7 @@ same PR. Leaving it would state a gap the repository no longer has.
 
 | File | Change |
 |---|---|
-| `R/export-utils.R` | new `.resolve_eff_n()`, `.banner_levels_labelled()`, `.banner_heading()`, `.unanimous_across()`, `.resolve_base_notes()`, `.resolve_roles()`, `.apply_role_guard()`, `.write_cover_sheet()`, `.fmt_pct()`, `.fmt_variance()`, `.write_sample_size_rows()`, `.build_withheld()`, `.format_withheld_lines()`, `.reject_design_vars()`, `.has_domain()`, `.apply_all_na_drop()`; **delete `.compute_eff_n()`**; change `.empty_suppressed()`; change `.total_col_group()`; rewrite the withholding loop; change `.build_freq_frame()`, including its collection path, which takes the question text from the first wave with rows; change `.compute_interaction_freq()`; change `.compute_total_freq()` and `.compute_subgroup_freq()` to muffle one more surveycore class; change `.base_note_for()`; change `.build_workbook()`; delete the `show_eff_n` join block |
+| `R/export-utils.R` | new `.resolve_eff_n()`, `.banner_levels_labelled()`, `.banner_heading()`, `.unanimous_across()`, `.resolve_base_notes()`, `.resolve_roles()`, `.apply_role_guard()`, `.write_cover_sheet()`, `.fmt_pct()`, `.fmt_variance()`, `.write_sample_size_rows()`, `.build_withheld()`, `.format_withheld_lines()`, `.reject_design_vars()`, `.has_domain()`, `.apply_all_na_drop()`; **delete `.compute_eff_n()`**; change `.empty_suppressed()`; change `.total_col_group()`; rewrite the withholding loop; change `.build_freq_frame()`, including its collection path, which takes the question text from the first wave with rows; change `.compute_interaction_freq()`; change `.compute_total_freq()` and `.compute_subgroup_freq()` to muffle one more surveycore class; change all three frequency helpers to catch `surveycore_error_all_na` under `na.rm = FALSE`; change `.base_note_for()`; change `.build_workbook()`; delete the `show_eff_n` join block |
 | `R/export-crosstab.R` | the new signature; the design-variable check; the role guard; banner label validation; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11; the rewritten render helpers; `label_cols` added to `.write_crosstab_headers()`, which the battery route now calls; new `.render_block_preamble()`, `.render_block_footer()` and `.unique_sheet_name()` below the exported function |
 | `R/export-topline.R` | `all_of()` fix; the design-variable check; role guard; threaded base notes; **delete the dead effective-N branch in the collection `Total` header** — section 2.3; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11. Its two inline `round(pct * 100, decimals)` sites stay. **No presentation change**: the deleted branch never fires, and a dropped variable wrote no block before — section 4.1 |
 | `plans/error-messages.md` | 7 new error classes, 5 new warning classes, 1 renamed warning class, 1 extended trigger. The edit lands **before** implementation, per `code-style.md` |
@@ -464,8 +464,11 @@ is what satisfies section 5.2's snapshot gate.
 #    A variable is dropped when no row of `frame` has variable == it and
 #    subgroup_type == "total". The test reads the frame, so it uses the row
 #    scope and the na.rm value that get_freqs() used: on a domain-restricted
-#    design, the rows inside the domain. Under na.rm = FALSE an all-NA
-#    variable keeps its na_label row, so it has a row and is not dropped.
+#    design, the rows inside the domain. The rule is the same for both
+#    na.rm values. Under na.rm = FALSE, get_freqs() aborts on an all-NA
+#    column, and the three frequency helpers return zero rows in its place
+#    (section 2.3). So an all-NA variable is dropped whatever the na.rm
+#    value.
 #    On a survey_collection the pooled "total" rows are absent only when
 #    every wave frame is empty. So a variable is dropped only when it has no
 #    non-missing value in any wave — section 3.19.
@@ -696,6 +699,21 @@ is what satisfies section 5.2's snapshot gate.
 # condition. Step 15 of section 3.11 then drops the variable and names it
 # in surveyreports_warning_all_na_dropped, so the caller gets one warning,
 # not two. Every other warning still reaches the caller — section 3.18.
+#
+# CHANGED: one caught error class, under na.rm = FALSE only. Under
+# na.rm = FALSE, get_freqs() does not warn on an all-NA column. It aborts
+# with surveycore_error_all_na. Measured 2026-11-05 on surveycore 1.2.0
+# and the fixture's all_na_var: the class vector is
+# surveycore_error_all_na, rlang_error, error, condition. It aborts with
+# and without `group`, and for a column all-NA inside the domain. Each of
+# the three helpers catches that class alone, with tryCatch(), and only
+# when na.rm is FALSE. It then returns the zero-row frame that the
+# na.rm = TRUE path returns, so step 15 of section 3.11 drops the variable
+# with the same warning. Under na.rm = TRUE the helpers catch nothing. Every
+# other error, and this class under na.rm = TRUE, still reaches the caller.
+# The interaction helper passes its synthetic column to `group`, the call
+# shape measured above. export_topline() takes no na.rm, so its calls run
+# at na.rm = TRUE and the catch never fires there — section 3.19.
 
 # KEPT, unchanged, and now inconsistent with the withheld wording of
 # section 3.14. Its text is "* %s: %s suppressed (n=%d, threshold=%d)": a
@@ -1381,7 +1399,12 @@ checks would report the wrong condition if they ran out of turn.
     non-missing value from `vars` and from `classify_out`, and raises
     `surveyreports_warning_all_na_dropped`. When no variable survives, it
     aborts with `surveyreports_error_vars_all_na` instead
-16. **withholding** — `.build_withheld()` returns the withheld frame
+16. **withholding** — `export_crosstab()` raises the three withholding
+    warnings, after the `.apply_all_na_drop()` call, from the withheld frame
+    of `.build_withheld()`. `.build_withheld()` and the row filter that
+    removes a withheld level run inside estimation, in `.build_freq_frame()`,
+    and the frame comes back with the frequency frame. Only the warnings wait
+    for this step
 17. **the workbook build** — `.build_workbook()`, which writes the `"About"`
     sheet
 18. rendering
@@ -1491,10 +1514,19 @@ order, and this section is the only statement of it.
 6. `surveyreports_warning_banner_all_withheld`
 7. `surveyreports_warning_full_sample_below_min`
 
-It is the order the caller can act in, and it is already the order the call
-sequence produces. The missing-label warning comes from estimation, at step
-14, and the all-NA warning from step 15, before withholding at step 16. Fixing
-it in writing makes the snapshots deterministic.
+It is the order the caller can act in. Each warning has a fixed site:
+
+- The missing-label warning is raised at step 14, after estimation and before
+  the `.apply_all_na_drop()` call. Its `vars` half reads the frequency frame.
+  `export_crosstab()` raises its banner half before the drop too.
+- The all-NA warning is raised at step 15, in `.apply_all_na_drop()`.
+- The three withholding warnings are raised at step 16, in
+  `export_crosstab()`, after the `.apply_all_na_drop()` call. None is raised
+  inside `.build_freq_frame()`. So a call whose every variable is all-NA
+  aborts at step 15 and raises no withholding warning first, whatever the
+  floor.
+
+Fixing it in writing makes the snapshots deterministic.
 
 ### 3.12 Variance
 
@@ -1584,6 +1616,11 @@ and the variance row is blank in that column.
 |---|---|
 | `TRUE` (default) | as today — surveycore drops missing values from both the tabulated variable and the banner |
 | `FALSE` | a response row labelled `na_label` appears in every block, and each banner column with missing values gains a level labelled `na_label` |
+
+An all-NA variable has no block under either value. Under `na.rm = FALSE`,
+`get_freqs()` aborts on it with `surveycore_error_all_na`. The three frequency
+helpers catch that class and return zero rows, so step 15 of section 3.11
+drops the variable — sections 2.3 and 3.19.
 
 A missing-value banner level is a real subgroup and faces `min_eff_n` like any
 other. On most designs it is small and the floor removes it again — that is the
@@ -1931,6 +1968,15 @@ muffle each one by its class:
 The helpers muffle by class only. Every other surveycore warning still reaches
 the caller. Section 2.3 names the three helpers and the measured class.
 
+**One surveycore error never reaches the caller, under `na.rm = FALSE` only.**
+Under `na.rm = FALSE`, `get_freqs()` aborts on an all-NA column with
+`surveycore_error_all_na`, and raises no warning. The three frequency helpers
+catch that class alone and return zero rows. Step 15 of section 3.11 then
+drops the variable and raises `surveyreports_warning_all_na_dropped`, or
+`surveyreports_error_vars_all_na` when no variable is left. The helpers catch
+by class, never all errors, and catch nothing under `na.rm = TRUE`. Section
+2.3 gives the measurement. Decision 2026-11-05, Plan review Pass 6.
+
 ### 3.19 Edge cases
 
 | Case | Behavior |
@@ -1940,8 +1986,9 @@ the caller. Section 2.3 names the three helpers and the measured class.
 | `show_total = FALSE` with every banner level withheld | the block has zero data columns. Every row is written with its label and no data cell; `banner_all_withheld` fires and nothing else; the call returns the path — section 3.5 |
 | a `vars` or `banner` column the design names | `surveyreports_error_design_variable_selected`, raised after the tidy-select resolution and before the role guard — sections 3.11 and 3.17. The scope is every slot that holds a column name, so a replicate weight and a twophase subset column both abort |
 | single-value variable | one response row; the sample-size rows are unchanged, because they do not depend on the tabulated variable |
-| all-NA variable | the call succeeds. Its frequency frame has no rows, so step 15 of section 3.11 drops it: no block and no sheet. `surveyreports_warning_all_na_dropped` names it, once per call with every other dropped column, and `surveycore_warning_all_na_freqs` does not reach the caller — section 3.18. The other blocks are unchanged, and their sample-size rows report the design's in-scope rows. Under `na.rm = FALSE` the frame keeps its `na_label` row, so the variable is not dropped — section 2.2 |
-| every `vars` variable all-NA | `surveyreports_error_vars_all_na`, at step 15 of section 3.11. No workbook is built and no warning is raised — section 3.17 |
+| all-NA variable | the call succeeds. Its frequency frame has no rows, so step 15 of section 3.11 drops it: no block and no sheet. `surveyreports_warning_all_na_dropped` names it, once per call with every other dropped column, and `surveycore_warning_all_na_freqs` does not reach the caller — section 3.18. The other blocks are unchanged, and their sample-size rows report the design's in-scope rows. The variable is dropped whatever the `na.rm` value. Under `na.rm = FALSE`, `get_freqs()` aborts with `surveycore_error_all_na`, the three frequency helpers catch that class and return zero rows, and step 15 drops the variable with the same warning. No surveycore error reaches the caller — sections 2.3 and 3.18 |
+| every `vars` variable all-NA | `surveyreports_error_vars_all_na`, at step 15 of section 3.11, under either `na.rm` value. No workbook is built. The all-NA drop raises no warning, and no withholding warning is raised first, whatever the floor, because those warnings come at step 16 — sections 3.11 and 3.17. A banner column with no variable label is still named in `surveyreports_warning_missing_variable_label` first, because that warning comes at step 14 |
+| an all-NA variable under `na.rm = FALSE` | `export_crosstab()` only, because `export_topline()` takes no `na.rm`. Dropped, as under `na.rm = TRUE`. A SATA or battery item is dropped alone, and a column all-NA inside the domain is dropped, by the same catch: measured 2026-11-05, `get_freqs()` aborts with and without `group`, and inside the domain. The collection case does not arise: a `survey_collection` reaches `export_topline()` only, which runs at `na.rm = TRUE` |
 | a SATA or battery item all-NA | that item is dropped and named in the warning. The group keeps its block, its preface and its group id, with the surviving items only. The per-question sheet takes the name of the first surviving item. A group cut to one item keeps its group shape — section VI. When every item is all-NA, the group is dropped and each item is named |
 | a variable all-NA inside the domain only | dropped. On a domain-restricted design `get_freqs()` reads the rows inside the domain. Measured 2026-11-05: a column that is `NA` on every in-domain row and holds values outside the domain raises `surveycore_warning_all_na_freqs` and returns zero rows |
 | a variable all-NA in some waves of a collection | `export_topline()` only. The variable keeps its block, and the existing rule for a wave with no rows stands: that wave writes no column in the block. Measured 2026-11-05 on a two-wave collection with `q3` all-NA in `w2`: the `q3` block has headings `Total` and `w1` only. A wave that lacks the column is a different case and keeps its `w2 (n/a)` heading with blank cells. The pooled `Total` takes its question text from the first wave with rows — section 2.3. A variable all-NA in every wave is dropped |
@@ -2406,5 +2453,13 @@ design. The entry "An all-NA variable is dropped, with a warning" replaces
 both: the variable leaves the output at step 15 of section 3.11, and the
 missing-label warning reads the frame again. The muffle of
 `surveycore_warning_all_na_freqs` stays.
+
+**One reading of the entry "An all-NA variable is dropped, with a warning" is
+replaced.** That entry read rule 4 so that an all-NA variable keeps its
+`na_label` row under `na.rm = FALSE` and is not dropped. Plan review Pass 6
+measured that `get_freqs()` aborts there with `surveycore_error_all_na`. The
+entry "Plan review Pass 6: issues 37 to 41, and the plan is ready" records the
+user's decision: the frequency helpers catch that class, and the variable is
+dropped whatever the `na.rm` value — sections 2.3, 3.18 and 3.19.
 
 No open questions remain. Every question this spec raises is answered inside it.
