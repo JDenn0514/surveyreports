@@ -82,7 +82,7 @@ stands.** Only the formal arguments come forward.
 - [x] PR 1: `chore/export-metadata-infra` — check the surveycore floor, add the
       `survey_nonprob` design to the generator, confirm the class table.
 - [x] PR 2: `feature/metadata-readers` — the five helpers that read a design.
-- [ ] PR 3: `feature/metadata-unanimity` — the two resolvers that apply the
+- [x] PR 3: `feature/metadata-unanimity` — the two resolvers that apply the
       unanimity rule.
 - [ ] PR 4: `feature/metadata-guards` — the role guard and the
       design-variable reader.

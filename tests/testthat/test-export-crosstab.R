@@ -1998,3 +1998,344 @@ test_that(".banner_heading() falls back when the label is an empty string", {
 
   expect_identical(result, list(heading = "group", fell_back = TRUE))
 })
+
+# 20. Metadata resolvers: unwired helpers -------------------------------------
+# .resolve_roles() and .resolve_base_notes() have no caller yet. Later PRs
+# wire them into export_crosstab() and export_topline(). Until then they are
+# tested directly.
+
+# Sets one role payload of each shape that surveycore accepts unchanged.
+add_role_payloads <- function(d) {
+  surveycore::set_var_extra(
+    d,
+    q1 = list(role = "item"),
+    q2 = list(role = c("item", "demographic")),
+    y1 = list(role = 3L),
+    y2 = list(role = character(0)),
+    y3 = list(other = "x"),
+    group = list(role = "banana")
+  )
+}
+
+test_that(".resolve_roles() returns a length-1 character role, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    result <- surveyreports:::.resolve_roles(d, "q1")
+    expect_identical(result, c(q1 = "item"), label = nm)
+  }
+})
+
+test_that(".resolve_roles() returns an unrecognized role string as-is, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    result <- surveyreports:::.resolve_roles(d, "group")
+    expect_identical(result, c(group = "banana"), label = nm)
+  }
+})
+
+test_that(".resolve_roles() returns NA for an absent role key, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    # y3 has a var_extra entry without a role; bat_1 has no entry at all.
+    result <- surveyreports:::.resolve_roles(d, c("y3", "bat_1"))
+    expect_identical(
+      result,
+      c(y3 = NA_character_, bat_1 = NA_character_),
+      label = nm
+    )
+  }
+})
+
+test_that(".resolve_roles() returns NA for a length-0 role, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_no_error(result <- surveyreports:::.resolve_roles(d, "y2"))
+    expect_identical(result, c(y2 = NA_character_), label = nm)
+  }
+})
+
+test_that(".resolve_roles() returns NA for a length-2 role, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_no_error(result <- surveyreports:::.resolve_roles(d, "q2"))
+    expect_identical(result, c(q2 = NA_character_), label = nm)
+  }
+})
+
+test_that(".resolve_roles() returns NA for a non-character role, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_no_error(result <- surveyreports:::.resolve_roles(d, "y1"))
+    expect_identical(result, c(y1 = NA_character_), label = nm)
+  }
+})
+
+test_that(".resolve_roles() names and orders its result by cols, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  cols <- c("group", "y3", "y2", "y1", "q2", "q1")
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    result <- surveyreports:::.resolve_roles(d, cols)
+    expect_identical(
+      result,
+      c(
+        group = "banana",
+        y3 = NA_character_,
+        y2 = NA_character_,
+        y1 = NA_character_,
+        q2 = NA_character_,
+        q1 = "item"
+      ),
+      label = nm
+    )
+  }
+})
+
+test_that(".resolve_roles() raises no warning on a foreign payload", {
+  skip_if_not_installed("surveycore")
+  d <- add_role_payloads(make_all_designs(seed = 42)$taylor)
+
+  expect_no_warning(
+    surveyreports:::.resolve_roles(d, c("q1", "q2", "y1", "y2", "group"))
+  )
+})
+
+test_that(".resolve_roles() returns an empty named vector for no cols", {
+  skip_if_not_installed("surveycore")
+  d <- add_role_payloads(make_all_designs(seed = 42)$taylor)
+
+  result <- surveyreports:::.resolve_roles(d, character(0))
+
+  expect_identical(result, structure(character(0), names = character(0)))
+})
+
+test_that(".resolve_roles() resolves a role that agrees across a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(designs$taylor, q1 = list(role = "item")),
+    w2 = surveycore::set_var_extra(designs$replicate, q1 = list(role = "item"))
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_roles(coll, "q1"))
+  expect_identical(result, c(q1 = "item"))
+})
+
+test_that(".resolve_roles() returns NA for a role that disagrees across a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(designs$taylor, q1 = list(role = "item")),
+    w2 = surveycore::set_var_extra(
+      designs$nonprob,
+      q1 = list(role = "free_text")
+    )
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_roles(coll, "q1"))
+  expect_identical(result, c(q1 = NA_character_))
+})
+
+test_that(".resolve_roles() returns NA for a role missing in one member", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(
+      designs$taylor,
+      q1 = list(role = "item"),
+      q2 = list(role = "demographic")
+    ),
+    w2 = surveycore::set_var_extra(designs$twophase, q2 = list(role = 3L))
+  )
+
+  expect_no_error(
+    result <- surveyreports:::.resolve_roles(coll, c("q2", "q1"))
+  )
+  expect_identical(result, c(q2 = NA_character_, q1 = NA_character_))
+})
+
+test_that(".resolve_base_notes() returns the caller and the universe separately, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  caller <- c(q1 = "Asked of all U.S. adults.")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(
+      designs[[nm]],
+      q1 = "Adults",
+      q2 = "Voters"
+    )
+    result <- surveyreports:::.resolve_base_notes(d, caller)
+    expect_identical(
+      result,
+      list(caller = caller, universe = c(q1 = "Adults", q2 = "Voters")),
+      label = nm
+    )
+  }
+})
+
+test_that(".resolve_base_notes() returns an empty named universe with only a caller vector, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  caller <- c(q2 = "Asked of voters.")
+
+  for (nm in names(designs)) {
+    result <- surveyreports:::.resolve_base_notes(designs[[nm]], caller)
+    expect_identical(
+      result,
+      list(
+        caller = caller,
+        universe = structure(character(0), names = character(0))
+      ),
+      label = nm
+    )
+  }
+})
+
+test_that(".resolve_base_notes() returns a NULL caller with only a universe, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(designs[[nm]], q2 = "Voters")
+    result <- surveyreports:::.resolve_base_notes(d, NULL)
+    expect_identical(
+      result,
+      list(caller = NULL, universe = c(q2 = "Voters")),
+      label = nm
+    )
+  }
+})
+
+test_that(".resolve_base_notes() returns NULL when both sources are empty, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    result <- surveyreports:::.resolve_base_notes(designs[[nm]], NULL)
+    expect_identical(result, NULL, label = nm)
+  }
+})
+
+test_that(".resolve_base_notes() treats a zero-length caller vector as empty", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+
+  expect_identical(
+    surveyreports:::.resolve_base_notes(d, character(0)),
+    NULL
+  )
+  expect_identical(
+    surveyreports:::.resolve_base_notes(
+      surveycore::set_universe(d, q1 = "Adults"),
+      character(0)
+    ),
+    list(caller = NULL, universe = c(q1 = "Adults"))
+  )
+})
+
+test_that(".resolve_base_notes() omits an empty or NA universe entry", {
+  skip_if_not_installed("surveycore")
+  d <- surveycore::set_universe(
+    make_all_designs(seed = 42)$taylor,
+    q1 = "",
+    q2 = NA_character_,
+    group = "Adults"
+  )
+
+  expect_identical(
+    surveyreports:::.resolve_base_notes(d, NULL),
+    list(caller = NULL, universe = c(group = "Adults"))
+  )
+})
+
+test_that(".resolve_base_notes() keeps a universe that agrees across a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_universe(designs$taylor, q1 = "Adults"),
+    w2 = surveycore::set_universe(designs$replicate, q1 = "Adults")
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, NULL))
+  expect_identical(result, list(caller = NULL, universe = c(q1 = "Adults")))
+})
+
+test_that(".resolve_base_notes() omits a universe that disagrees across a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_universe(designs$taylor, q1 = "Adults", q2 = "Voters"),
+    w2 = surveycore::set_universe(
+      designs$nonprob,
+      q1 = "Adults",
+      q2 = "Parents"
+    )
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, NULL))
+  expect_identical(result, list(caller = NULL, universe = c(q1 = "Adults")))
+})
+
+test_that(".resolve_base_notes() omits a universe missing in one member", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_universe(designs$taylor, q1 = "Adults", q2 = "Voters"),
+    w2 = surveycore::set_universe(designs$twophase, q2 = "Voters")
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, NULL))
+  expect_identical(result, list(caller = NULL, universe = c(q2 = "Voters")))
+})
+
+test_that(".resolve_base_notes() passes the caller vector through on a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  caller <- c(q2 = "Asked of voters.")
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_universe(designs$taylor, q2 = "Voters"),
+    w2 = surveycore::set_universe(designs$replicate, q2 = "Parents")
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, caller))
+  expect_identical(
+    result,
+    list(
+      caller = caller,
+      universe = structure(character(0), names = character(0))
+    )
+  )
+})
+
+test_that(".resolve_base_notes() returns NULL on a collection with no agreeing universe and no caller", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_universe(designs$taylor, q1 = "Adults"),
+    w2 = surveycore::set_universe(designs$replicate, q1 = "Parents")
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, NULL))
+  expect_identical(result, NULL)
+})
