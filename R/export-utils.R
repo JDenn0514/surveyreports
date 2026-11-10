@@ -312,6 +312,114 @@
   first[agrees]
 }
 
+# -- Metadata resolvers ---------------------------------------------------------
+
+# A metadata reader applied to a design, or to every member of a collection.
+#
+# reader takes one survey_base design and returns a named character vector.
+# On a single design the result of reader() comes back unchanged. On a
+# survey_collection, reader() runs on each member and .unanimous_across()
+# keeps the keys that agree in every member. The surveycore readers abort on a
+# collection, so this branch is the only route to them for one.
+#' @keywords internal
+#' @noRd
+.extract_unanimous <- function(design, reader) {
+  if (S7::S7_inherits(design, surveycore::survey_collection)) {
+    return(.unanimous_across(lapply(design@surveys, reader)))
+  }
+  reader(design)
+}
+
+# The role of each column in cols, for one survey_base design.
+#
+# Applies the per-variable coercion rule of spec section 3.10 to the `role` key
+# of each extract_var_extra() payload. A length-1 character comes back as that
+# string, known role or not. An absent entry, an absent key, a length-0 value,
+# a length-2 or longer vector and a non-character value all become
+# NA_character_. The coercion runs before vapply(), so vapply() only ever sees
+# one string and cannot abort on a foreign payload.
+#' @keywords internal
+#' @noRd
+.extract_roles_single <- function(design, cols) {
+  extra <- surveycore::extract_var_extra(design)
+  vapply(
+    cols,
+    function(col) {
+      entry <- extra[[col]]
+      role <- if (is.list(entry)) entry[["role"]] else NULL
+      if (is.character(role) && length(role) == 1L) {
+        unname(role)
+      } else {
+        NA_character_
+      }
+    },
+    character(1),
+    USE.NAMES = TRUE
+  )
+}
+
+# The universe text of every variable that has one, for one survey_base
+# design, as a named character vector keyed by variable.
+#
+# An empty string or an NA counts as no universe and is omitted: neither one
+# is text a base-note row can show. extract_universe() returns an unnamed
+# character(0) when nothing is set, so the empty result is built here with
+# names.
+#' @keywords internal
+#' @noRd
+.extract_universe_single <- function(design) {
+  universe <- surveycore::extract_universe(design)
+  keep <- !is.na(universe) & nzchar(universe)
+  if (!any(keep)) {
+    return(structure(character(0), names = character(0)))
+  }
+  universe[keep]
+}
+
+# The role lookup for a set of columns. A lookup only: it does not classify,
+# warn or drop.
+#
+# Returns a named character vector, one entry per element of cols, in the
+# order of cols. An entry is NA_character_ when no role is set or the payload
+# is not a length-1 character (spec section 3.10). It never aborts.
+# On a survey_collection it reads each member and keeps a role only when every
+# member carries the same one (spec section 3.6). A role that disagrees, or
+# that is missing in any member, becomes NA_character_.
+#' @keywords internal
+#' @noRd
+.resolve_roles <- function(design, cols) {
+  found <- .extract_unanimous(
+    design,
+    function(d) .extract_roles_single(d, cols)
+  )
+  stats::setNames(unname(found[cols]), cols)
+}
+
+# The caller's base_notes and the design's universe, kept SEPARATE.
+#
+# Returns list(caller = <named chr or NULL>, universe = <named chr>), or NULL
+# when both sources are empty. universe is keyed by variable and is an empty
+# named character vector when nothing is set.
+# - caller is base_notes as supplied, with no validation here:
+#   .validate_base_notes() checks it before this call. A zero-length
+#   base_notes counts as empty and comes back as NULL.
+# - The text of both sources is verbatim. No "Base:" prefix is added.
+# - On a survey_collection, the universe follows the wave unanimity rule of
+#   spec section 3.6: a variable whose universe disagrees across members, or
+#   is missing in any member, is omitted. This helper applies that rule and no
+#   other. The battery rule runs later, in .base_note_for().
+#' @keywords internal
+#' @noRd
+.resolve_base_notes <- function(design, base_notes) {
+  caller <- if (length(base_notes) > 0L) base_notes else NULL
+  universe <- .extract_unanimous(design, .extract_universe_single)
+
+  if (is.null(caller) && length(universe) == 0L) {
+    return(NULL)
+  }
+  list(caller = caller, universe = universe)
+}
+
 # -- Frequency computation helpers ---------------------------------------------
 
 # Extract question_text and var_label from get_freqs meta.
