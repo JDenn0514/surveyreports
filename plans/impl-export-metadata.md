@@ -1,20 +1,32 @@
 # Implementation plan — export-metadata
 
-**Status:** PLAN_DRAFT
-**Version:** 4.1.0
-**Date:** 2026-11-04
+**Status:** PLAN_READY
+**Version:** 4.9.0
+**Date:** 2026-11-05
 **Id:** `export-metadata`
-**Source spec:** `plans/spec-export-metadata.md` v0.21.0
-**Source test-spec:** `plans/test-spec-export-metadata.md` v0.15.0
+**Source spec:** `plans/spec-export-metadata.md` v0.27.0
+**Source test-spec:** `plans/test-spec-export-metadata.md` v0.22.0
 **Review applied:** `plans/plan-review-export-metadata.md` Pass 1 — 21 issues, all
-resolved
+resolved; Pass 2 — issues 22 and 23 resolved, suggestions 24 and 25 open;
+Pass 3 — PASS, suggestions 26 and 27 applied. A post-review spec change, the
+variance cell layout of spec 3.16 (v0.22.0), changed PR 17; Pass 4, a delta
+review of that change — issues 28 to 32 applied. A later spec change, the
+freeze pane on the stacked sheet (spec 3.16, v0.23.0), changed PR 15; Pass 5,
+a delta review of that change — issues 33 to 36 applied. The two items Pass 5
+left open, the missing-label trigger and surveycore's all-NA warning, were
+decided on 2026-11-05 (spec 3.18, v0.25.0) and changed PR 12. A later
+decision the same day (spec 3.11, v0.26.0) replaces the empty-block rule of
+issue 33: an all-NA variable is dropped, with a warning. It changes PRs 1, 12,
+14 and 15. Pass 6, a delta review of that change — issues 37 to 41 applied;
+suggestions 42 to 44 open. The user decided that the plan is ready once these
+issues are applied, with no further review pass
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
 
 ## Overview
 
-This plan turns spec v0.20.0 into nineteen pull requests. The first five build
+This plan turns the spec into nineteen pull requests. The first five build
 shared helpers. The next four land Part A — the metadata integration. The
 following nine rebuild `export_crosstab()` output. The last one writes the
 documentation prose.
@@ -87,7 +99,8 @@ stands.** Only the formal arguments come forward.
 - [ ] PR 11: `feature/crosstab-min-eff-n` — `min_eff_n` replaces `pub_type`,
       and a banner level below the floor loses its column.
 - [ ] PR 12: `feature/crosstab-banner-headings` — banner spanners and
-      interaction levels read labels.
+      interaction levels read labels; an all-NA variable is dropped with a
+      warning, in both functions, and surveycore's all-NA warning is muffled.
 - [ ] PR 13: `feature/crosstab-withheld-notices` — the withholding warnings,
       the withheld lines and `withheld_note`.
 - [ ] PR 14: `feature/crosstab-label-cols-and-sizes` — `label_cols`, the two
@@ -97,9 +110,11 @@ stands.** Only the formal arguments come forward.
 - [ ] PR 16: `feature/crosstab-percent-cells` — a percentage cell becomes a
       string.
 - [ ] PR 17: `feature/crosstab-variance-strings` — `variance_display`, the
-      variance strings and the legend row.
+      variance strings, the legend row, and the column width, wrapping and
+      row height that a variance needs.
 - [ ] PR 18: `feature/crosstab-total-and-missing` — the Total column, the
-      missing-value rows, the glossary and the block row order.
+      missing-value rows, the all-NA drop under `na.rm = FALSE`, the glossary
+      and the block row order.
 - [ ] PR 19: `docs/export-metadata` — the documentation prose and
       `_pkgdown.yml`.
 
@@ -150,25 +165,27 @@ Constraint: a PR that adds an error or warning class lists
 `plans/error-messages.md` in its write surface, and the edit lands before the
 code that raises the class.
 
-**Measured 2026-09-22 against the committed file.** The table already holds
-every class this spec needs:
+**Measured 2026-09-22 against the committed file, and again on 2026-11-05.**
+The table holds every class this spec needs except the two that the all-NA
+drop adds (spec 3.11, step 15):
 
 | Item | Spec count | Found in `plans/error-messages.md` |
 |---|---|---|
-| New error classes | 6 | all 6 present |
-| New warning classes | 4 | all 4 present |
+| New error classes | 7 | 6 present; `vars_all_na` absent |
+| New warning classes | 5 | 4 present; `all_na_dropped` absent |
 | Renamed warning class | 1 | `surveyreports_warning_subgroup_withheld` present; `_subgroup_suppressed` absent |
 | Extended trigger | 1 | `surveyreports_warning_missing_variable_label` names a `banner` column |
 
-The six errors are `vars_all_dropped`, `banner_empty_selection`,
+The seven errors are `vars_all_dropped`, `banner_empty_selection`,
 `duplicate_value_label`, `multiple_unlabelled_codes`,
-`design_variable_selected` and `invalid_min_eff_n`. The four warnings are
-`banner_all_withheld`, `full_sample_below_min`, `role_dropped` and
-`unknown_role`.
+`design_variable_selected`, `invalid_min_eff_n` and `vars_all_na`. The five
+warnings are `banner_all_withheld`, `full_sample_below_min`, `role_dropped`,
+`unknown_role` and `all_na_dropped`.
 
 So the task on that file in `chore/export-metadata-infra` is a check against
-spec 3.17 and 3.18, not a rewrite. The file stays in that PR's write surface,
-because a check that finds a gap must close it there and nowhere later.
+spec 3.17 and 3.18 that adds two rows, not a rewrite. The file stays in that
+PR's write surface, because a check that finds a gap must close it there and
+nowhere later.
 
 ---
 
@@ -181,12 +198,14 @@ because a check that finds a gap must close it there and nowhere later.
 **Tasks** (2–5 minutes each):
 
 1. Cut `chore/export-metadata-infra` from `develop`.
-2. Read `plans/error-messages.md` against spec 3.17. Confirm the six error
-   classes.
-3. Read the same file against spec 3.18. Confirm the four warning classes, the
-   rename and the extended trigger.
-4. Add any missing row to `plans/error-messages.md`. Skip this task when tasks
-   2 and 3 find no gap.
+2. Read `plans/error-messages.md` against spec 3.17. Confirm the seven error
+   classes. Six are present; `surveyreports_error_vars_all_na` is absent.
+3. Read the same file against spec 3.18. Confirm the five warning classes, the
+   rename and the extended trigger. Four are present;
+   `surveyreports_warning_all_na_dropped` is absent.
+4. Add the two absent rows to `plans/error-messages.md`, with the trigger
+   wording of spec 3.17 and 3.18 and both export functions under "Thrown by".
+   Add any other missing row that tasks 2 and 3 find.
 5. Confirm `DESCRIPTION` reads `surveycore (>= 1.2.0)` or higher under
    `Imports:`. Do not edit the line.
 6. Confirm `DESCRIPTION` has no `Remotes:` line.
@@ -211,7 +230,13 @@ because a check that finds a gap must close it there and nowhere later.
 17. Remove the "Gap to close" note under **Cross-design testing** in
     `.claude/rules/testing.md`.
 18. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-19. Run `air format .`, in its own commit.
+19. Run `air format .`, in its own commit. On `develop` at `6b83e5f` this
+    reformats seven files: `tests/testthat/helper-test-data.R`, which this PR
+    already changes, and six files that this feature does not otherwise touch
+    (five `data-raw/` scripts and `tests/testthat/test-pool-pvals.R`). The
+    formatting commit holds the seven files and no change other than
+    formatting.
+    `air format --check .` then passes for every later PR of the chain.
 20. Run `devtools::check()`.
 21. Write `changelog/chore-export-metadata-infra.md`.
 22. Open the PR.
@@ -221,8 +246,10 @@ because a check that finds a gap must close it there and nowhere later.
 - [ ] `make_all_designs(seed = 42)` returns four elements, named `taylor`,
       `replicate`, `twophase` and `nonprob` (spec 1.6; test-spec profile gate
       "make_all_designs() returns four designs").
-- [ ] `plans/error-messages.md` holds the six error classes of spec 3.17 and
-      the four warning classes of spec 3.18, holds
+- [ ] `plans/error-messages.md` holds the seven error classes of spec 3.17 and
+      the five warning classes of spec 3.18, among them
+      `surveyreports_error_vars_all_na` and
+      `surveyreports_warning_all_na_dropped`, holds
       `surveyreports_warning_subgroup_withheld`, and does not hold
       `surveyreports_warning_subgroup_suppressed` (spec VIII).
 - [ ] `DESCRIPTION` reads `surveycore (>= 1.2.0)` or higher under `Imports:`
@@ -246,11 +273,21 @@ existing suite.
 **Files touched** — the exact write surface:
 
 - `DESCRIPTION` — checked; not modified
-- `plans/error-messages.md` — checked; modified only if a gap is found
+- `plans/error-messages.md` — modified; two rows added, and any other row a
+  check finds missing
 - `tests/testthat/helper-test-data.R` — modified
 - `tests/testthat/test-export-topline.R` — modified
 - `tests/testthat/test-export-crosstab.R` — modified
 - `.claude/rules/testing.md` — modified
+- `data-raw/parse-nationscape-codebooks.R` — reformatted by `air`; no other
+  change
+- `data-raw/prepare-anes-2024.R` — reformatted by `air`; no other change
+- `data-raw/prepare-gss-2024.R` — reformatted by `air`; no other change
+- `data-raw/prepare-nationscape-helpers.R` — reformatted by `air`; no other
+  change
+- `data-raw/prepare-nationscape-phase1.R` — reformatted by `air`; no other
+  change
+- `tests/testthat/test-pool-pvals.R` — reformatted by `air`; no other change
 - `changelog/chore-export-metadata-infra.md` — created
 
 ---
@@ -1363,7 +1400,7 @@ XW-13.
 
 ---
 
-### PR 12: Banner headings and interaction labels
+### PR 12: Banner headings, interaction labels, and the all-NA drop
 
 **Branch:** `feature/crosstab-banner-headings`
 **Depends on:** PR 11
@@ -1371,6 +1408,22 @@ XW-13.
 
 A spanner reads `Gender`, not `gen`. A crossed heading reads `Male × North`,
 not `1 × 1`. No formal argument changes, so no `man/` file moves here.
+
+This PR also lands the all-NA drop of spec 3.11, step 15, and the muffle of
+spec 3.18, both decided 2026-11-05. The two land together, so no commit of the
+chain gives the caller two warnings for one all-NA variable (spec 2.3). The
+drop runs after `.build_freq_frame()` and before the workbook build, so it
+needs no part of the block helpers of `feature/crosstab-label-cols-and-sizes`. It reaches both export functions
+(spec 4.1), so the write surface gains `R/export-topline.R` and
+`tests/testthat/test-export-topline.R`. `.apply_all_na_drop()` lands here with
+both of its call sites, so it is not an unwired helper and needs no helper PR.
+The missing-label warning keeps reading the frequency frame (spec 3.18).
+
+**A bug-fix PR may land on `develop` first.** The topline collection path
+aborts today on a variable with no non-missing value in wave 1
+(`R/export-utils.R:344`, spec 2.3). If a separate `fix/` branch fixes that
+before this PR is cut, task 45 finds `TC-09` and `TC-10` already passing, and
+task 46 is skipped. `TC-09` and `TC-10` stay owned here.
 
 **Tasks** (2–5 minutes each):
 
@@ -1381,7 +1434,10 @@ not `1 × 1`. No formal argument changes, so no `man/` file moves here.
 4. Call `.banner_heading()` for each surviving banner column in
    `export_crosstab()`.
 5. Collect `fell_back` across the columns and raise one
-   `surveyreports_warning_missing_variable_label`.
+   `surveyreports_warning_missing_variable_label`. Raise it in
+   `export_crosstab()` after `.build_freq_frame()` returns and before the
+   point where task 28 calls `.apply_all_na_drop()` (spec 3.11, warning
+   order).
 6. Run the test from task 2. Confirm it passes.
 7. Write the failing tests `XH-02` and `XV-06`. `XV-06` takes the dual pattern
    on the banner trigger.
@@ -1406,12 +1462,85 @@ not `1 × 1`. No formal argument changes, so no `man/` file moves here.
 23. Add the banner label validation of spec 3.7 at step 12 of spec 3.11, on the
     surviving columns only.
 24. Run the tests from task 21. Confirm they pass.
-25. Run `devtools::test()`. Review every moved snapshot with
-    `testthat::snapshot_review()`.
-26. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-27. Run `air format .`, in its own commit.
-28. Run `devtools::check()`.
-29. Write `changelog/feature-crosstab-banner-headings.md`.
+25. Write the failing tests `XX-03`, `XV-14` and `TW-03`: an all-NA variable is
+    dropped, and one `surveyreports_warning_all_na_dropped` names every dropped
+    variable. `XV-14` takes the dual pattern. Run `XX-03` against both export
+    functions and label every assertion with the function name.
+26. Run them. Confirm they fail: `export_crosstab()` writes an empty
+    `all_na_var` sheet, and neither function raises the class.
+27. Add `.apply_all_na_drop(frame, vars, classify_out)` to `R/export-utils.R`,
+    with the drop rule of spec 2.2 and the warning of spec 3.18. A variable is
+    dropped when the frame holds no `"total"` row for it.
+28. In `export_crosstab()`, call it right after `.build_freq_frame()` returns
+    and before `.build_workbook()` (spec 3.11, step 15). Replace
+    `vars_resolved` and `classify_out` with its result. The drop reads the
+    `"total"` rows only, and withholding never removes one, so the result does
+    not depend on where the withholding code of
+    `feature/crosstab-min-eff-n` sits.
+29. In `export_topline()`, call it at the same point (spec 3.11, topline step
+    9). Change no other line of `R/export-topline.R` here.
+30. Run the tests from task 25. Confirm they pass.
+31. Write the failing tests `XE-16` and `TE-05`: a call whose every variable is
+    all-NA aborts. `XE-16` takes the dual pattern. Write its first call
+    only; its second call, at the default floor, needs the withholding
+    warnings of `feature/crosstab-withheld-notices` (task 18 there).
+32. Run them. Confirm they fail.
+33. In `.apply_all_na_drop()`, abort with `surveyreports_error_vars_all_na`
+    when no variable survives, and raise no warning first (spec 3.17).
+34. Delete the two committed blocks that call an all-NA variable alone and
+    expect success. After task 33 both abort with
+    `surveyreports_error_vars_all_na`. Find each one by its test name, since
+    earlier PRs move the lines:
+    - `"export_crosstab() handles all-NA variable without crashing"` in
+      `tests/testthat/test-export-crosstab.R` (lines 1024-1037 on `develop`
+      today). `suppressWarnings()` does not stop an error.
+    - `"export_topline() handles all-NA variable without crashing"` in
+      `tests/testthat/test-export-topline.R` (lines 377-388 on `develop`
+      today). It wraps the call in `expect_no_error()`.
+
+    `XX-03` (both functions), `XE-16` and `TE-05` replace them.
+35. Run the tests from task 31. Confirm they pass.
+36. Write the failing tests `XV-15` and `TW-04`: no
+    `surveycore_warning_all_na_freqs` reaches the caller, and the new warning
+    fires in its place.
+37. Run them. Confirm they fail on the surveycore class.
+38. Muffle `surveycore_warning_all_na_freqs` by class in
+    `.compute_total_freq()`, `.compute_subgroup_freq()` and
+    `.compute_interaction_freq()`, beside `surveycore_warning_small_cell`
+    (spec 2.3). Muffle no other class.
+39. Run the tests from task 36. Confirm they pass.
+40. Write the tests `XX-14` and `XX-15`: a group keeps its surviving items, and
+    a group with no surviving item is dropped. Run both against both export
+    functions.
+41. Run them. Confirm they pass: task 28 removes the items from
+    `classify_out`, so a group's sheet takes its first surviving item's name
+    (spec 3.11).
+42. Write the test `XX-16`: a variable all-NA inside the domain only is
+    dropped on the restricted design and kept without the domain column.
+43. Run it. Confirm it passes: the test reads the frame, which holds the
+    in-domain rows only (spec 2.2).
+44. Write the failing tests `TC-09` and `TC-10` on the two-wave collection.
+45. Run them. Confirm that `TC-10` and the `coll_na_first` half of `TC-09`
+    abort with "subscript out of bounds" at `R/export-utils.R:344`.
+46. In the collection path of `.build_freq_frame()`, take `question_text` and
+    `var_label` from the first wave frame that has rows. When no wave frame has
+    rows, return no pooled row for the variable (spec 2.3).
+47. Run the tests from task 44. Confirm they pass.
+48. Delete the three `nrow(frame) == 0L` early returns of
+    `R/export-crosstab.R`, at `:506-508`, `:661-663` and `:781-783`, with the
+    `# nocov` marker on the second and the third (spec 3.16). Those are the
+    lines on `develop` today; earlier PRs move them, so find each one with
+    `grep -n "nrow(frame) == 0L"`.
+49. Delete the three `nrow(frame) == 0L` early returns of
+    `R/export-topline.R`, at `:218`, `:482` and `:612` (spec 4.1).
+50. Run `devtools::test()`. Confirm the suite is green, so no route receives a
+    frame with no rows. Review every moved snapshot with
+    `testthat::snapshot_review()`. No topline snapshot moves: the topline rows
+    of this PR take no snapshot (spec 5.2).
+51. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+52. Run `air format .`, in its own commit.
+53. Run `devtools::check()`.
+54. Write `changelog/feature-crosstab-banner-headings.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -1419,6 +1548,38 @@ not `1 × 1`. No formal argument changes, so no `man/` file moves here.
 - [ ] A banner with no variable label falls back to the column name and raises
       one `surveyreports_warning_missing_variable_label` naming it (test-spec
       XH-02, XV-06; spec 3.8, spec 3.18).
+- [ ] An all-NA variable leaves the output of both functions: no block and no
+      sheet. One `surveyreports_warning_all_na_dropped` names every dropped
+      variable in input order (test-spec XX-03, XV-14, TW-03; spec 3.11,
+      spec 3.18, spec 3.19).
+- [ ] A call whose every variable is all-NA aborts with
+      `surveyreports_error_vars_all_na` in both functions, raises no warning
+      first, and writes no file (test-spec XE-16, TE-05; spec 3.17, spec V).
+      The second `XE-16` call, at the default floor, lands in
+      `feature/crosstab-withheld-notices`, with the withholding warnings.
+- [ ] `grep -rn "handles all-NA variable without crashing" tests/` returns
+      nothing: task 34 deletes the two committed blocks that `XX-03`, `XE-16`
+      and `TE-05` replace.
+- [ ] The missing-label warning is raised before the `.apply_all_na_drop()`
+      call in `export_crosstab()`, for `vars` and for `banner` (spec 3.11).
+- [ ] `surveycore_warning_all_na_freqs` does not reach the caller of either
+      function. The three frequency helpers muffle that class and no other
+      new one (test-spec XV-15, TW-04; spec 2.3, spec 3.18).
+- [ ] A SATA or battery item is dropped alone, and its group keeps its block
+      and preface. A group whose every item is all-NA is dropped (test-spec
+      XX-14, XX-15; spec 3.11, spec 3.19).
+- [ ] On a domain-restricted design, a variable all-NA inside the domain is
+      dropped (test-spec XX-16; spec 2.2, spec 3.19).
+- [ ] On a collection, a variable all-NA in one wave keeps its block, in
+      either wave order, and a variable all-NA in every wave is dropped.
+      Neither call aborts (test-spec TC-09, TC-10; spec 2.3, spec 3.19).
+- [ ] The missing-label warning still reads the frequency frame, and
+      `.emit_missing_label_warning()` keeps its `function(frame)` signature
+      (spec 3.18).
+- [ ] `grep -rn "nrow(frame) == 0L" R/` returns nothing (spec 3.16, spec 4.1,
+      spec VIII).
+- [ ] The diff of `R/export-topline.R` holds the `.apply_all_na_drop()` call
+      and the three deleted early returns, and nothing else (spec 4.1).
 - [ ] An interaction spanner reads both labels, and a crossed heading reads
       value labels (test-spec XH-03, XH-04; spec 3.8).
 - [ ] A factor banner keeps its level order, alone and crossed (test-spec
@@ -1440,14 +1601,18 @@ not `1 × 1`. No formal argument changes, so no `man/` file moves here.
 - [ ] `changelog/feature-crosstab-banner-headings.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (10):** XH-01, XH-02, XH-03, XH-04, XH-05, XH-06, XH-07,
-XE-04, XE-05, XV-06.
+**Scenarios owned (22):** XH-01, XH-02, XH-03, XH-04, XH-05, XH-06, XH-07,
+XE-04, XE-05, XV-06, XX-03, XV-14, TW-03, XE-16, TE-05, XV-15, TW-04, XX-14,
+XX-15, XX-16, TC-09, TC-10.
 
 **Files touched** — the exact write surface:
 
 - `R/export-utils.R` — modified
 - `R/export-crosstab.R` — modified
+- `R/export-topline.R` — modified; the drop call and the three deleted early
+  returns (spec 4.1)
 - `tests/testthat/test-export-crosstab.R` — modified
+- `tests/testthat/test-export-topline.R` — modified
 - `tests/testthat/_snaps/export-crosstab.md` — regenerated
 - `changelog/feature-crosstab-banner-headings.md` — created
 
@@ -1482,57 +1647,73 @@ decides where the lines are written.
 9. Write the failing test `XV-03`, with the dual pattern.
 10. Run it. Confirm it fails.
 11. Raise `surveyreports_warning_subgroup_withheld` once per call, with the
-    bullets from `.format_withheld_lines()`.
+    bullets from `.format_withheld_lines()`. Raise it in `export_crosstab()`,
+    after the `.apply_all_na_drop()` call, from the withheld frame that
+    `.build_freq_frame()` returns. Raise no withholding warning inside
+    `.build_freq_frame()`; remove the old one at `R/export-utils.R:462` on
+    `develop` today, found with `grep -n "cli_warn" R/export-utils.R`
+    (spec 3.11, step 16).
 12. Run the test from task 9. Confirm it passes, the file exists, and the
     return value is the path.
 13. Write the failing tests `XV-04` and `XV-05`, each with the dual pattern.
 14. Run them. Confirm they fail.
 15. Raise `surveyreports_warning_banner_all_withheld` when every level of a
     column group or every cell of an interaction falls below the floor.
+    Raise it at the site of task 11, after the `.apply_all_na_drop()` call
+    (spec 3.11, step 16).
 16. Raise `surveyreports_warning_full_sample_below_min` when the full sample's
-    own effective N is below the floor. Remove nothing.
+    own effective N is below the floor. Remove nothing. Raise it at the site
+    of task 11 (spec 3.11, step 16).
 17. Run the tests from task 13. Confirm they pass, and the workbook is written
     in both.
-18. Write the failing test `XV-11`: the six classes arrive in the order of
-    spec 3.11.
-19. Run it. Confirm it passes, or fix the emission order.
-20. Write the tests `XV-10`, `XV-12` and `XV-13`.
-21. Run them. Confirm they pass.
-22. Add `withheld_note = c("once", "every", "none")` to the signature,
+18. Add the second call of `XE-16`, which `feature/crosstab-banner-headings`
+    owns: every variable all-NA, `banner = gen`, at the default `min_eff_n`.
+    Wrap the `expect_error()` in `expect_no_warning()`.
+19. Run it. Confirm it passes: the abort at step 15 comes before any
+    withholding warning (spec 3.11, spec 3.19).
+20. Write the failing test `XV-11`: the seven classes arrive in the order of
+    spec 3.11. `surveyreports_warning_all_na_dropped` lands in
+    `feature/crosstab-banner-headings`, so the order includes it.
+21. Run it. Confirm it passes. If it fails, move the raise, not the class:
+    every withholding warning is raised after the `.apply_all_na_drop()`
+    call, and never inside `.build_freq_frame()` (spec 3.11).
+22. Write the tests `XV-10`, `XV-12` and `XV-13`.
+23. Run them. Confirm they pass.
+24. Add `withheld_note = c("once", "every", "none")` to the signature,
     immediately after `show_total` and before `base_notes`. Spec 3.1 places it
     after `na_label`, which `feature/crosstab-total-and-missing` inserts in
     front of it.
-23. Write the `@param withheld_note` roxygen entry, listing its three values.
-24. Run `devtools::document()`.
-25. Pass the withheld frame to `.build_workbook()` when `withheld_note` is
+25. Write the `@param withheld_note` roxygen entry, listing its three values.
+26. Run `devtools::document()`.
+27. Pass the withheld frame to `.build_workbook()` when `withheld_note` is
     `"once"`, and `NULL` otherwise.
-26. Write the withheld lines at the end of each question block when
+28. Write the withheld lines at the end of each question block when
     `withheld_note` is `"every"`, from the three render routes.
     `feature/crosstab-label-cols-and-sizes` moves this into
     `.render_block_footer()`.
-27. Write the failing tests `XW-09`, `XW-10` and `XW-11`.
-28. Run them. Confirm they pass, and the console warning still fires at
+29. Write the failing tests `XW-09`, `XW-10` and `XW-11`.
+30. Run them. Confirm they pass, and the console warning still fires at
     `"none"`.
-29. Write the failing test `XW-07`: the cover sheet's withheld block names the
+31. Write the failing test `XW-07`: the cover sheet's withheld block names the
     crossed subgroup.
-30. Run it. Confirm it passes.
-31. Pass `min_eff_n` and `has_banner` to `.write_cover_sheet()`, so the
+32. Run it. Confirm it passes.
+33. Pass `min_eff_n` and `has_banner` to `.write_cover_sheet()`, so the
     `Why a column is missing` entry follows spec 3.15.
-32. Write the failing tests `XA-06` and `XA-07`.
-33. Run them. Confirm they pass.
-34. Write the failing test `XA-12`: the two header cells and every block
+34. Write the failing tests `XA-06` and `XA-07`.
+35. Run them. Confirm they pass.
+36. Write the failing test `XA-12`: the two header cells and every block
     heading resolve to a bold font, with all three blocks present.
-35. Run it. Confirm it passes.
-36. Write the edge-case tests `XX-02`, `XX-06` and `XX-07`.
-37. Run them. Confirm they pass.
-38. Write the edge-case tests `XX-08` and `XX-09`.
+37. Run it. Confirm it passes.
+38. Write the edge-case tests `XX-02`, `XX-06` and `XX-07`.
 39. Run them. Confirm they pass.
-40. Run `devtools::test()`. Review every moved snapshot with
+40. Write the edge-case tests `XX-08` and `XX-09`.
+41. Run them. Confirm they pass.
+42. Run `devtools::test()`. Review every moved snapshot with
     `testthat::snapshot_review()`.
-41. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-42. Run `air format .`, in its own commit.
-43. Run `devtools::check()`.
-44. Write `changelog/feature-crosstab-withheld-notices.md`.
+43. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+44. Run `air format .`, in its own commit.
+45. Run `devtools::check()`.
+46. Write `changelog/feature-crosstab-withheld-notices.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -1558,8 +1739,13 @@ decides where the lines are written.
       spec 3.18).
 - [ ] `grep -rn "subgroup_suppressed" R/ man/ tests/` returns nothing
       (spec VIII).
-- [ ] The six warning classes arrive in the order of spec 3.11 (test-spec
+- [ ] The seven warning classes arrive in the order of spec 3.11 (test-spec
       XV-11).
+- [ ] `export_crosstab()` raises the three withholding warnings after the
+      `.apply_all_na_drop()` call, and `.build_freq_frame()` raises none. A
+      call whose every variable is all-NA, at the default floor with
+      `banner = gen`, raises no warning before its abort (test-spec XE-16,
+      second call; spec 3.11, spec 3.19).
 - [ ] A design with no role set and every subgroup above the floor raises no
       warning, and `surveycore_warning_small_cell` never reaches the caller
       (test-spec XV-12, XV-13; spec 3.5).
@@ -1632,6 +1818,11 @@ raise an unused-argument error the moment the formals go.
 and heading rows inline today, so a preamble extracted first would serve two
 routes of three and leave the third to drift (spec IX, spec 3.16). Tasks 4 to 9
 come before task 25.
+
+**No route receives a frame with no rows.** `feature/crosstab-banner-headings`
+drops an all-NA variable before rendering and deletes the three early returns
+(spec 3.11, step 15; spec 3.16). So the preamble takes its question text and
+its column groups from the frame on every call, and needs no other source.
 
 **Tasks** (2–5 minutes each):
 
@@ -1798,6 +1989,20 @@ argument changes, so no `man/` file moves here.
 it. Both files hold a single-response route, so task 4 names
 `.render_crosstab_single()` and no other.
 
+**The sheet-property code goes in `R/export-crosstab.R`, at three sites.**
+`export_crosstab()` adds every question sheet and holds `variance` and
+`decimals`, so it sets the column widths and the label-column wrap, once per
+sheet. It also knows from `classify_out` whether a sheet holds a battery block,
+so it sets column B there. PR 17 task 32 changes the data width at the same
+site. `.render_crosstab_battery()` writes the battery's `Response` label cells,
+so it sets their wrap. On a stacked sheet column B is a data column in other
+blocks, so a column-wide wrap cannot serve it (spec 3.16).
+`.render_block_preamble()`, from PR 14, writes the heading row, holds the
+`sample_size_display` branch and returns the first data row. So it sets the
+heading-row wrap, the heading row height and the freeze pane. It sets the pane
+only for a block at `start_row == 1L`, so the stacked sheet takes its pane from
+its first block (spec 3.16). No task in this PR changes `R/export-utils.R`.
+
 **Tasks** (2–5 minutes each):
 
 1. Cut `feature/crosstab-sheet-properties` from `develop`.
@@ -1810,11 +2015,16 @@ it. Both files hold a single-response route, so task 4 names
 6. Write the test that `export_topline()` still writes its `Total` row of
    `100%` cells.
 7. Run it. Confirm it passes.
-8. Write the failing test `XB-01`: the label column's stored width rounds to
-   44, and each data column's rounds to 12.
+8. Write the failing test `XB-01`: the label column's stored width has the
+   integer part 44, and each data column's has the integer part 12. On a
+   per-question battery sheet, column B's has the integer part 20.
 9. Run it. Confirm it fails.
-10. Set fixed column widths with `openxlsx2::wb_set_col_widths()`. Do not
-    auto-fit.
+10. In `export_crosstab()`, set fixed column widths with
+    `openxlsx2::wb_set_col_widths()`, once per sheet, after the sheet's render
+    calls return. Do not auto-fit. Hold the data width in one variable. Set
+    column B of a per-question battery sheet to 20, and column B of a stacked
+    sheet that holds a battery block to the larger of 20 and the data width
+    (spec 3.16).
 11. Run the test from task 8. Confirm it passes.
 12. Write the failing test `XB-02`: two calls with labels of different length
     give the same widths, column by column.
@@ -1823,43 +2033,68 @@ it. Both files hold a single-response route, so task 4 names
     resolve to a wrapping alignment, an estimate cell does not, and the heading
     row's stored height is 30.
 15. Run it. Confirm it fails.
-16. Set the wrapping alignment on the label column and on the heading row.
-17. Set the heading row height to 30 points with
-    `openxlsx2::wb_set_row_heights()`. Do not auto-fit.
+16. Set the wrapping alignment on the label column in `export_crosstab()`,
+    beside the widths of task 10. Set it on the heading row in
+    `.render_block_preamble()`, after its `.write_crosstab_headers()` call.
+17. In `.render_block_preamble()`, set the heading row height to 30 points
+    with `openxlsx2::wb_set_row_heights()`. Do not auto-fit.
 18. Run the test from task 14. Confirm it passes.
 19. Write the failing test `XB-04`: a freeze pane under `"top"`, and none under
     `"bottom"`.
 20. Run it. Confirm it fails.
-21. Add the freeze pane, split below the last sample-size row, and skip it when
+21. In `.render_block_preamble()`, add the freeze pane, split at the first
+    data row it returns, which is below the last sample-size row. Skip it when
     `sample_size_display == "bottom"`.
 22. Run the test from task 19. Confirm it passes.
-23. Write the numerical tests `XN-01`, `XN-02` and `XN-03`, each tagged
+23. Write the failing test `XB-11`: on the stacked sheet with two blocks, the
+    pane sits below the first block's last sample-size row, not below the
+    last block's.
+24. Run it. Confirm it fails: after task 21, the last block's pane wins.
+25. In `.render_block_preamble()`, set the pane of task 21 only when
+    `start_row == 1L`. The first block on every sheet starts at row 1 (spec
+    3.16), so a later block on the stacked sheet sets no pane. Add no
+    argument.
+26. Run the tests from tasks 19 and 23. Confirm both pass.
+27. Write the test `XB-12`: on the stacked sheet with `all_na_var` first, the
+    variable is dropped, the `q1` block starts at row 1, and the pane sits at
+    `A7`.
+28. Run it. Confirm it passes: `feature/crosstab-banner-headings` drops the
+    variable before rendering (spec 3.11, step 15), so the `q1` block starts
+    at row 1 and task 25 sets its pane.
+29. Write the failing test `XB-13`: on a stacked sheet with `q1` and a
+    battery, column B is 20, the battery's `Response` cells wrap, and the
+    `q1` estimate cells in column B do not.
+30. Run it. Confirm it fails on the wrap.
+31. In `.render_crosstab_battery()`, set the wrapping alignment on the
+    `Response` label cells the route writes (spec 3.16, Wrapping).
+32. Run the test from task 29. Confirm it passes.
+33. Write the numerical tests `XN-01`, `XN-02` and `XN-03`, each tagged
     `[numerical]`.
-24. Run them. Confirm they pass.
-25. Write the numerical test `XN-04`: the count equals the rows the design
+34. Run them. Confirm they pass.
+35. Write the numerical test `XN-04`: the count equals the rows the design
     tabulates, computed from the design rather than hard-coded.
-26. Run it. Confirm it passes on twophase.
-27. Write the numerical test `XN-05`: the count equals the in-domain row count.
-28. Run it. Confirm it passes.
-29. Write the edge-case tests `XX-01`, `XX-03` and `XX-04`. Each block runs
-    against both export functions and labels every assertion with the function
-    name.
-30. Run them. Confirm they pass.
-31. Write the edge-case test for an unused factor level on the tabulated
+36. Run it. Confirm it passes on twophase.
+37. Write the numerical test `XN-05`: the count equals the in-domain row count.
+38. Run it. Confirm it passes.
+39. Write the edge-case tests `XX-01` and `XX-04`. Each block runs against
+    both export functions and labels every assertion with the function name.
+    `XX-03` is in `feature/crosstab-banner-headings`, with the all-NA drop.
+40. Run them. Confirm they pass.
+41. Write the edge-case test for an unused factor level on the tabulated
     variable: no response row, and the sample-size rows unchanged.
-32. Run it. Confirm it passes.
-33. Write the edge-case test `XX-11`: the stacked layout writes one `Crosstab`
+42. Run it. Confirm it passes.
+43. Write the edge-case test `XX-11`: the stacked layout writes one `Crosstab`
     sheet plus the cover sheet.
-34. Run it. Confirm it passes.
-35. Write the edge-case test `XX-12`: the response rows total less than the
+44. Run it. Confirm it passes.
+45. Write the edge-case test `XX-12`: the response rows total less than the
     sample size above them, with no warning.
-36. Run it. Confirm it passes.
-37. Run `devtools::test()`. Review every moved snapshot with
+46. Run it. Confirm it passes.
+47. Run `devtools::test()`. Review every moved snapshot with
     `testthat::snapshot_review()`.
-38. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-39. Run `air format .`, in its own commit.
-40. Run `devtools::check()`.
-41. Write `changelog/feature-crosstab-sheet-properties.md`.
+48. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+49. Run `air format .`, in its own commit.
+50. Run `devtools::check()`.
+51. Write `changelog/feature-crosstab-sheet-properties.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -1867,21 +2102,29 @@ it. Both files hold a single-response route, so task 4 names
       (test-spec XH-10; spec 3.9, spec 3.16).
 - [ ] `export_topline()` still writes its `Total` row of `100%` cells
       (spec 4.2).
-- [ ] The column widths are fixed at 44 and 12 (test-spec XB-01; spec 3.16).
+- [ ] At `variance = NULL`, the column widths are fixed at 44 and 12, and
+      column B of a per-question battery sheet is 20 (test-spec XB-01;
+      spec 3.16).
 - [ ] The widths do not follow the label text (test-spec XB-02; spec 3.16).
 - [ ] The label column and the heading row wrap, and the heading row's height
       is 30 points (test-spec XB-03; spec 3.16).
 - [ ] A freeze pane is present under `"top"` and absent under `"bottom"`
       (test-spec XB-04; spec 3.16).
+- [ ] On the stacked sheet, the pane sits below the first block's last
+      sample-size row, and later blocks set none (test-spec XB-11;
+      spec 3.16).
+- [ ] On a stacked sheet whose first variable is all-NA, that variable writes
+      nothing, the next block starts at row 1, and the pane sits below that
+      block's last sample-size row (test-spec XB-12; spec 3.11, spec 3.16).
+- [ ] On a stacked sheet that holds a battery block, column B is 20 at
+      `variance = NULL`. The battery's `Response` cells wrap, and another
+      block's estimate cells in column B do not (test-spec XB-13; spec 3.16).
 - [ ] Both counts match the oracle for the full sample and for a subgroup
       (test-spec XN-01, XN-02, XN-03; spec 3.4).
 - [ ] The counts follow the phase-2 subset and the in-domain rows (test-spec
       XN-04, XN-05; spec 3.20).
 - [ ] A single-row design at `min_eff_n = 0` succeeds and reports an unweighted
       sample size of `1`, in both export functions (test-spec XX-01;
-      spec 3.19).
-- [ ] An all-NA variable succeeds and the sample-size rows report the design's
-      in-scope rows, not `0`, in both export functions (test-spec XX-03;
       spec 3.19).
 - [ ] A single-value variable produces one response row, and the sample-size
       rows are unchanged against another variable on the same design, in both
@@ -1900,13 +2143,12 @@ it. Both files hold a single-response route, so task 4 names
 - [ ] `changelog/feature-crosstab-sheet-properties.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (15):** XH-10, XB-01, XB-02, XB-03, XB-04, XN-01, XN-02,
-XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12.
+**Scenarios owned (17):** XH-10, XB-01, XB-02, XB-03, XB-04, XB-11, XB-12,
+XB-13, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-04, XX-11, XX-12.
 
 **Files touched** — the exact write surface:
 
 - `R/export-crosstab.R` — modified
-- `R/export-utils.R` — modified
 - `tests/testthat/test-export-crosstab.R` — modified
 - `tests/testthat/test-export-topline.R` — modified
 - `tests/testthat/_snaps/export-crosstab.md` — regenerated
@@ -2026,6 +2268,15 @@ XC-06, XC-07, XC-07a, XC-08.
 **This PR adds a formal argument, so it owns its own roxygen.** It writes
 `@param variance_display` and runs `devtools::document()`.
 
+**This PR also owns the three variance rules of spec 3.16**: the `"ci"` column
+width, the wrapping on estimate cells and the estimate row height. The wrap
+and the row height depend on `variance_display`, which this PR adds. The
+`"ci"` width does not: it depends on `variance` and `decimals` only, under both
+displays (spec 3.16). It lands here because this PR is the first to write the
+interval it makes room for. So none of the three can land in PR 15. PR 15 sets
+the fixed widths, the wrapping and the heading row height; this PR changes
+those values only under `variance`.
+
 **Tasks** (2–5 minutes each):
 
 1. Cut `feature/crosstab-variance-strings` from `develop`.
@@ -2065,12 +2316,48 @@ XC-06, XC-07, XC-07a, XC-08.
 27. Run it. Confirm it passes.
 28. Write the numerical test `XN-10`, tagged `[numerical]`.
 29. Run it. Confirm it passes, with the en-dash asserted.
-30. Run `devtools::test()`. Review every moved snapshot with
+30. Write the failing tests `XB-05` and `XB-06`: under `variance = "ci"`,
+    each data column's stored width has the integer part `15 + 2 * decimals`,
+    under both displays.
+31. Run them. Confirm they fail.
+32. Compute the data column width from `variance` and `decimals` in
+    `export_crosstab()` in `R/export-crosstab.R`, where PR 15 task 10 sets the
+    fixed widths: `15 + 2 * decimals` under `"ci"`, 12 otherwise. Do not read
+    cell content.
+33. Run the tests from task 30. Confirm they pass.
+34. Write the test `XB-07`: under `variance = "se"`, each data column's width
+    stays 12.
+35. Run it. Confirm it passes.
+36. Write the test `XB-14`: under `variance = "ci"`, column B of a stacked
+    sheet that holds `q1` and a battery is 20 at `decimals = 1L` and 21 at
+    `decimals = 3L`. Column B of a per-question battery sheet stays 20.
+37. Run it. Confirm it passes: PR 15 task 10 sets column B from the data
+    width variable that task 32 now changes, so no new code is needed.
+38. Write the failing tests `XB-08` and `XB-09`: under
+    `variance_display = "cell"`, each estimate data cell wraps and each
+    estimate row is 30 points.
+39. Run them. Confirm they fail.
+40. In `.render_crosstab_single()`, set the wrapping alignment on every data
+    cell of an estimate row when `variance` is not `NULL` and
+    `variance_display == "cell"`.
+41. Do the same in `.render_crosstab_sata()`.
+42. Do the same in `.render_crosstab_battery()`.
+43. In `.render_crosstab_single()`, under the same condition, set every
+    estimate row height to 30 points with `openxlsx2::wb_set_row_heights()`.
+    Do not auto-fit.
+44. Do the same in `.render_crosstab_sata()`.
+45. Do the same in `.render_crosstab_battery()`.
+46. Run the tests from task 38. Confirm they pass.
+47. Write the test `XB-10`: under `variance = NULL`, and under
+    `variance_display = "row"`, no estimate cell wraps and no estimate row
+    carries a height.
+48. Run it. Confirm it passes.
+49. Run `devtools::test()`. Review every moved snapshot with
     `testthat::snapshot_review()`.
-31. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-32. Run `air format .`, in its own commit.
-33. Run `devtools::check()`.
-34. Write `changelog/feature-crosstab-variance-strings.md`.
+50. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+51. Run `air format .`, in its own commit.
+52. Run `devtools::check()`.
+53. Write `changelog/feature-crosstab-variance-strings.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -2087,6 +2374,22 @@ XC-06, XC-07, XC-07a, XC-08.
       spec 3.12).
 - [ ] A legend row appears only under `variance`, and names a non-default
       `conf_level` (test-spec XH-18, XH-19; spec 3.12, spec 3.16).
+- [ ] Under `variance = "ci"`, each data column is `15 + 2 * decimals`
+      characters wide under both displays: 17 at the default, 15 at
+      `decimals = 0L`, 19 at `decimals = 2L` (test-spec XB-05, XB-06; spec
+      3.16).
+- [ ] Under `variance = "se"`, each data column stays 12 characters wide
+      (test-spec XB-07; spec 3.16).
+- [ ] Under `variance = "ci"`, column B of a stacked sheet that holds a
+      battery block is the larger of 20 and the data width: 20 at the
+      default, 21 at `decimals = 3L`. Column B of a per-question battery sheet
+      stays 20 (test-spec XB-14; spec 3.16).
+- [ ] When `variance` is set and `variance_display = "cell"`, every data cell
+      of an estimate row wraps, and every estimate row is fixed at 30 points
+      (test-spec XB-08, XB-09; spec 3.16).
+- [ ] Under `variance = NULL`, and under `variance_display = "row"`, no
+      estimate cell wraps and no estimate row carries a height of its own
+      (test-spec XB-10; spec 3.16).
 - [ ] `variance_display` sits immediately after `variance` and before
       `conf_level` in `names(formals(export_crosstab))` (spec 3.1).
 - [ ] `devtools::document()` run; `NAMESPACE` and `man/` in sync (test-spec
@@ -2103,8 +2406,8 @@ XC-06, XC-07, XC-07a, XC-08.
 - [ ] `changelog/feature-crosstab-variance-strings.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (9):** XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20,
-XN-09, XN-10.
+**Scenarios owned (16):** XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20,
+XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10, XB-14.
 
 **Files touched** — the exact write surface:
 
@@ -2180,32 +2483,46 @@ order against spec 3.1.
 30. Write the failing test `XH-14`: a missing-value banner column faces the
     floor and is named in the withheld list.
 31. Run it. Confirm it passes.
-32. Pass `string_cells = TRUE` to `.build_workbook()` from
+32. Write the failing test `XX-17`: under `na.rm = FALSE` an all-NA variable
+    and an all-NA SATA item are dropped with
+    `surveyreports_warning_all_na_dropped`, and a call whose every variable
+    is all-NA aborts with `surveyreports_error_vars_all_na`.
+33. Run it. Confirm it fails: task 24 passes `na.rm = FALSE` to
+    `get_freqs()`, which aborts with `surveycore_error_all_na` (spec 2.3).
+34. In `.compute_total_freq()`, `.compute_subgroup_freq()` and
+    `.compute_interaction_freq()`, catch `surveycore_error_all_na` by class
+    when `na.rm` is `FALSE`, and return the zero-row frame that the
+    `na.rm = TRUE` path returns (spec 2.3, spec 3.18). Catch no other class,
+    and catch nothing when `na.rm` is `TRUE`.
+35. Run the test from task 32. Confirm it passes: the drop of
+    `feature/crosstab-banner-headings` removes the variable, and no
+    surveycore error reaches the caller.
+36. Pass `string_cells = TRUE` to `.build_workbook()` from
     `export_crosstab()`.
-33. Write the failing test `XA-05`: the glossary holds four terms, and
+37. Write the failing test `XA-05`: the glossary holds four terms, and
     `Confidence intervals` is absent.
-34. Run it. Confirm it passes.
-35. Write the failing test `XA-05a`: exactly two entries flip at
+38. Run it. Confirm it passes.
+39. Write the failing test `XA-05a`: exactly two entries flip at
     `min_eff_n = 0` with `variance = "ci"`.
-36. Run it. Confirm it passes.
-37. Write the numerical tests `XN-06` and `XN-07`, each tagged `[numerical]`.
-38. Run them. Confirm they pass.
-39. Write the numerical test `XN-08`, tagged `[numerical]`.
-40. Run it. Confirm it passes over the crossed grouping.
-41. Write the failing test `XR-01`: column A reads as an ordered character
+40. Run it. Confirm it passes.
+41. Write the numerical tests `XN-06` and `XN-07`, each tagged `[numerical]`.
+42. Run them. Confirm they pass.
+43. Write the numerical test `XN-08`, tagged `[numerical]`.
+44. Run it. Confirm it passes over the crossed grouping.
+45. Write the failing test `XR-01`: column A reads as an ordered character
     vector under `sample_size_display = "top"`.
-42. Run it. Confirm it passes, with blank and `NA` normalised first.
-43. Write the failing test `XR-02`: the same under `"bottom"`.
-44. Run it. Confirm it passes.
-45. Compare `names(formals(export_crosstab))` against the order of spec 3.1.
+46. Run it. Confirm it passes, with blank and `NA` normalised first.
+47. Write the failing test `XR-02`: the same under `"bottom"`.
+48. Run it. Confirm it passes.
+49. Compare `names(formals(export_crosstab))` against the order of spec 3.1.
     Fix any argument that sits out of place.
-46. Run `devtools::test()`. Review every moved crosstab snapshot with
+50. Run `devtools::test()`. Review every moved crosstab snapshot with
     `testthat::snapshot_review()`.
-47. Confirm no `export_topline()` snapshot moved.
-48. Run `covr::package_coverage()` and `covr::zero_coverage()`.
-49. Run `air format .`, in its own commit.
-50. Run `devtools::check()`.
-51. Write `changelog/feature-crosstab-total-and-missing.md`.
+51. Confirm no `export_topline()` snapshot moved.
+52. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+53. Run `air format .`, in its own commit.
+54. Run `devtools::check()`.
+55. Write `changelog/feature-crosstab-total-and-missing.md`.
 
 **Acceptance criteria** — observable outcomes before merge:
 
@@ -2229,6 +2546,12 @@ order against spec 3.1.
       renames both (test-spec XH-11, XH-12, XH-13; spec 3.13).
 - [ ] A missing-value banner level faces the floor and is named in the withheld
       list (test-spec XH-14; spec 3.13).
+- [ ] Under `na.rm = FALSE` an all-NA variable is dropped with
+      `surveyreports_warning_all_na_dropped`, a call whose every variable is
+      all-NA aborts with `surveyreports_error_vars_all_na`, and
+      `surveycore_error_all_na` never reaches the caller. The three frequency
+      helpers catch that class alone, under `na.rm = FALSE` only (test-spec
+      XX-17; spec 2.3, spec 3.18, spec 3.19).
 - [ ] `na.rm` reaches the four call sites inside this PR's write surface with
       the same value: `.compute_total_freq()`, `.compute_subgroup_freq()`,
       `.compute_interaction_freq()` and `.resolve_eff_n()` (spec 3.13). The
@@ -2243,7 +2566,7 @@ order against spec 3.1.
       the oracle as a string (test-spec XN-06, XN-07, XN-08).
 - [ ] Column A of a block reads in the order of spec 3.16 under both
       `sample_size_display` values (test-spec XR-01, XR-02).
-- [ ] `R/export-utils.R` holds the 15 shared helpers of spec 2.1, and
+- [ ] `R/export-utils.R` holds the 16 shared helpers of spec 2.1, and
       `R/export-crosstab.R` holds the 3 helpers spec 2.1 assigns to it, below
       the exported function. `ls("package:surveyreports", all.names = TRUE)`
       exposes none of them, and no `R/utils.R` exists (spec VIII).
@@ -2256,8 +2579,8 @@ order against spec 3.1.
 - [ ] `changelog/feature-crosstab-total-and-missing.md` exists
       (`github-strategy.md`, PR checklist).
 
-**Scenarios owned (17):** XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12,
-XH-13, XH-14, XX-13, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08.
+**Scenarios owned (18):** XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12,
+XH-13, XH-14, XX-13, XX-17, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08.
 
 **Files touched** — the exact write surface:
 
@@ -2409,10 +2732,12 @@ across the chain.
 | `plans/error-messages.md` | 1 |
 | `.claude/rules/testing.md` | 1 |
 | `tests/testthat/helper-test-data.R` | 1 |
-| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 18 |
-| `R/export-topline.R` | 6, 7, 8, 9, 19 |
+| `data-raw/` — five scripts, `air` reformat only | 1 |
+| `tests/testthat/test-pool-pvals.R` — `air` reformat only | 1 |
+| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 18 |
+| `R/export-topline.R` | 6, 7, 8, 9, 12, 19 |
 | `R/export-crosstab.R` | 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 |
-| `tests/testthat/test-export-topline.R` | 1, 6, 7, 8, 9, 15 |
+| `tests/testthat/test-export-topline.R` | 1, 6, 7, 8, 9, 12, 15 |
 | `tests/testthat/test-export-crosstab.R` | 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18 |
 | `tests/testthat/_snaps/export-topline.md` | 7, 9 |
 | `tests/testthat/_snaps/export-crosstab.md` | 10, 11, 12, 13, 14, 15, 16, 17, 18 |
@@ -2432,7 +2757,7 @@ unchanged each time, because this work adds no export.
 
 ## Scenario coverage
 
-Each of the 178 scenario ids in `plans/test-spec-export-metadata.md` v0.15.0 is
+Each of the 200 scenario ids in `plans/test-spec-export-metadata.md` v0.22.0 is
 assigned to exactly one PR.
 
 | PR | Branch | Count | Scenario ids |
@@ -2448,19 +2773,19 @@ assigned to exactly one PR.
 | 9 | `feature/topline-guards` | 17 | TP-05, TP-08, TP-09, TP-10, TP-11, TP-12, TP-13, TC-01, TC-02, TC-03, TC-04, TE-01, TE-02, TE-03, TE-04, TW-01, TW-02 |
 | 10 | `feature/crosstab-guards` | 28 | XM-06, XM-08, XM-09, XM-10, XM-11, XM-12, XM-13, XM-14, XM-15, XM-16, XM-17, XE-01, XE-02, XE-03, XE-06, XE-08, XE-09, XE-10, XE-12, XE-13, XE-14, XE-15, XV-01, XV-02, XV-07, XV-08, XV-09, XX-10 |
 | 11 | `feature/crosstab-min-eff-n` | 8 | XE-11, XW-01, XW-02, XW-03, XW-04, XW-05, XW-12, XW-13 |
-| 12 | `feature/crosstab-banner-headings` | 10 | XH-01, XH-02, XH-03, XH-04, XH-05, XH-06, XH-07, XE-04, XE-05, XV-06 |
+| 12 | `feature/crosstab-banner-headings` | 22 | XH-01, XH-02, XH-03, XH-04, XH-05, XH-06, XH-07, XE-04, XE-05, XV-06, XX-03, XV-14, TW-03, XE-16, TE-05, XV-15, TW-04, XX-14, XX-15, XX-16, TC-09, TC-10 |
 | 13 | `feature/crosstab-withheld-notices` | 21 | XW-06, XW-07, XW-08, XW-09, XW-10, XW-11, XV-03, XV-04, XV-05, XV-10, XV-11, XV-12, XV-13, XA-06, XA-07, XA-12, XX-02, XX-06, XX-07, XX-08, XX-09 |
 | 14 | `feature/crosstab-label-cols-and-sizes` | 12 | XD-01, XS-01, XS-02, XS-03, XS-04, XS-05, XS-06, XS-07, XS-08, XS-09, XS-10, XE-07 |
-| 15 | `feature/crosstab-sheet-properties` | 15 | XH-10, XB-01, XB-02, XB-03, XB-04, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-03, XX-04, XX-11, XX-12 |
+| 15 | `feature/crosstab-sheet-properties` | 17 | XH-10, XB-01, XB-02, XB-03, XB-04, XB-11, XB-12, XB-13, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-04, XX-11, XX-12 |
 | 16 | `feature/crosstab-percent-cells` | 11 | XC-01, XC-02, XC-03, XC-04, XC-05, XC-05a, XC-05b, XC-06, XC-07, XC-07a, XC-08 |
-| 17 | `feature/crosstab-variance-strings` | 9 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10 |
-| 18 | `feature/crosstab-total-and-missing` | 17 | XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12, XH-13, XH-14, XX-13, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08 |
+| 17 | `feature/crosstab-variance-strings` | 16 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10, XB-14 |
+| 18 | `feature/crosstab-total-and-missing` | 18 | XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12, XH-13, XH-14, XX-13, XX-17, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08 |
 | 19 | `docs/export-metadata` | 0 | — |
-| | **Total** | **178** | |
+| | **Total** | **200** | |
 
-**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 4, XA 14,
-XM 17, XE 15, XV 13, XX 12, XN 10 — 146 for `export_crosstab()`. TP 14, TC 8,
-TE 4, TW 2, TN 4 — 32 for `export_topline()`. 146 plus 32 is 178. The id
+**Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 14, XA 14,
+XM 17, XE 16, XV 15, XX 16, XN 10 — 163 for `export_crosstab()`. TP 14,
+TC 10, TE 5, TW 4, TN 4 — 37 for `export_topline()`. 163 plus 37 is 200. The id
 `XX-05` is retired in the test-spec and is not counted.
 
 **Six PRs own no scenario.** PRs 1 to 5 and PR 19. PR 1 changes a fixture and a
@@ -2491,17 +2816,21 @@ section instead, because the test-spec has no row for it.
 | `.write_crosstab_headers()` gains `label_cols`, and the battery route adopts it, before `.render_block_preamble()` is extracted | `feature/crosstab-label-cols-and-sizes`, tasks 4 to 9 precede task 25 |
 | The design-variable check runs after the tidy-select resolutions and before the role guard | `feature/topline-guards`, tasks 4 and 8; `feature/crosstab-guards`, tasks 4 and 5 |
 | The empty-domain check runs before the role guard | `feature/topline-guards`, task 15; `feature/crosstab-guards`, task 34 |
-| Withholding runs before the workbook build | `feature/crosstab-withheld-notices`, tasks 5 and 25 |
+| Withholding runs before the workbook build | `feature/crosstab-withheld-notices`, tasks 5 and 27 |
+| The all-NA drop runs after estimation and before the workbook build, in both functions; the muffle of `surveycore_warning_all_na_freqs` lands with it | `feature/crosstab-banner-headings`, tasks 28, 29 and 38 |
+| The missing-label warning arrives before the all-NA drop | `feature/crosstab-banner-headings`, task 5 |
+| The all-NA warning arrives before the withholding warnings | `feature/crosstab-banner-headings` precedes `feature/crosstab-withheld-notices`, whose tasks 11, 15 and 16 raise the three withholding warnings after the `.apply_all_na_drop()` call, task 18 adds the second `XE-16` call, and tasks 20 and 21 write `XV-11` |
+| Under `na.rm = FALSE` the three frequency helpers catch `surveycore_error_all_na` by class, so the all-NA drop still runs | `feature/crosstab-total-and-missing`, task 34 |
 | `min_eff_n` lands before the happy-path fixtures that need `min_eff_n = 0` | `feature/crosstab-min-eff-n` precedes PRs 12 to 18 |
 | The banner label checks run on the surviving columns, after the role guard | `feature/crosstab-guards` precedes `feature/crosstab-banner-headings` |
 | Each formal-argument change carries its own `devtools::document()` run | `feature/crosstab-min-eff-n`, `feature/crosstab-withheld-notices`, `feature/crosstab-label-cols-and-sizes`, `feature/crosstab-variance-strings`, `feature/crosstab-total-and-missing` |
-| The final argument order is pinned once, by the last PR to touch the signature | `feature/crosstab-total-and-missing`, task 45 |
+| The final argument order is pinned once, by the last PR to touch the signature | `feature/crosstab-total-and-missing`, task 49 |
 
 ---
 
 ## Notes for the builder and the tester
 
-**Three test edits cross a PR boundary.**
+**Four test edits cross a PR boundary.**
 
 - `feature/crosstab-min-eff-n` introduces `min_eff_n` with a default of 100. On
   a 200-row design that floor withholds most subgroups, so two blocks written
@@ -2518,6 +2847,11 @@ section instead, because the test-spec has no row for it.
 - `feature/crosstab-label-cols-and-sizes` deletes section 9, three blocks that
   pass `show_n` and `show_eff_n`, for the same reason. `XS-05` and `XS-08`
   replace their coverage in the same PR.
+- `feature/crosstab-banner-headings` deletes two committed blocks named
+  "handles all-NA variable without crashing", one in each export test file,
+  at its task 34. Each calls an all-NA variable alone and expects success, and
+  after its task 33 each aborts with `surveyreports_error_vars_all_na`.
+  `XX-03`, `XE-16` and `TE-05` replace their coverage in the same PR.
 
 **One code move crosses a PR boundary.**
 `feature/crosstab-withheld-notices` writes the `withheld_note = "every"` lines

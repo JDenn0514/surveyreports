@@ -955,3 +955,1438 @@ issue 1 fixed for the crosstab does not exist for `export_topline()`, because
 no PR moves any of its nine formals; what blocks the pass is one measurement
 the resolver did not take — `air format --check .` is already false on
 `develop` over seven files, six of which no PR declares.
+
+---
+
+## Plan Review: export-metadata — Pass 3, delta (2026-11-04)
+
+Plan under review: `plans/impl-export-metadata.md` v4.2.0, with
+`plans/test-spec-export-metadata.md` v0.16.0. Both are uncommitted edits on
+`develop` at `6b83e5f`. This is a delta pass. It checks issues 22 and 23, the
+lines the edit touched, and the four PARTIAL rows. It does not re-review the
+rest of the document.
+
+### Prior issues (Pass 1 and Pass 2)
+
+| # | Title | Status |
+|---|---|---|
+| 1 | The documentation deferral makes `check(): 0 warnings` unreachable | RESOLVED |
+| 2 | Four PRs remove arguments that committed tests still pass | RESOLVED |
+| 3 | `show_eff_n` is never removed from `export_crosstab()` | RESOLVED — the `XE-07` half landed with issue 23 |
+| 4 | No PR pins the final argument order of spec 3.1 | RESOLVED |
+| 5 | Fifteen helpers are defined 5 to 11 PRs before their first caller | RESOLVED |
+| 6 | Eight helper behaviors are tested by a task but pinned by no criterion | RESOLVED |
+| 7 | No numerical tolerance appears anywhere in the plan | PARTIAL — unchanged since Pass 2 |
+| 8 | PR 1 carries no `air` criterion and no coverage criterion | RESOLVED |
+| 9 | The coverage criterion is stricter than the gate the tester runs | RESOLVED |
+| 10 | Two PRs run `snapshot_review()` but list no snapshot file | RESOLVED |
+| 11 | PR 18's `na.rm` criterion names a call site outside its write surface | RESOLVED |
+| 12 | The About sheet's column widths and merged-cell rule reach no PR | RESOLVED |
+| 13 | PR 15's `100%` criterion is wider than the spec | RESOLVED |
+| 14 | Spec 3.19's unused factor level on the tabulated variable | RESOLVED |
+| 15 | Gate VIII's helper-inventory line reaches no criterion | RESOLVED (option B) |
+| 16 | The `variance = "se"` glossary entry reaches no PR | RESOLVED |
+| 17 | The Part A / Part B boundary is off by one | PARTIAL — unchanged since Pass 2 |
+| 18 | The standard gate criteria cite no source | RESOLVED |
+| 19 | "No exported function changes behavior" is not verifiable | RESOLVED |
+| 20 | Four criteria point at a source instead of stating the outcome | PARTIAL — unchanged since Pass 2 |
+| 21 | Five grep-checkable invariants are stated without the grep | RESOLVED |
+| 22 | `air format --check .` is already false on `develop`, six files outside every write surface | RESOLVED |
+| 23 | The plan's `XE-07` criterion names three arguments; the test-spec names two | RESOLVED |
+| 24 | Three criteria carry a spec section and no scenario id (suggestion) | OPEN — optional; no `TP` or `XX` row added |
+| 25 | `feature/cover-sheet` and `feature/base-notes-adoption` lack the snapshot guard (suggestion) | OPEN — optional; criterion not added |
+
+### What is still missing on the three PARTIAL rows
+
+None of the three changed. Each was measured again at `6b83e5f` with the
+working-tree edits applied.
+
+- **Issue 7.** `grep -n "1e-8" plans/spec-export-metadata.md` still returns
+  nothing. The plan carries the tolerance at
+  `plans/impl-export-metadata.md` lines 316 and 363, so the builder has the
+  number. As Pass 2 said, no change is needed unless the spec must stand alone.
+- **Issue 17.** `plans/impl-export-metadata.md` lines 1114-1115, in
+  `feature/crosstab-guards`, still read "This PR closes Part A." Line 2504
+  reads "PRs 6 to 9 precede PRs 10 to 18", so PR 10 is Part B. No execution
+  consequence.
+- **Issue 20.** `plans/impl-export-metadata.md` line 1567, in
+  `feature/crosstab-withheld-notices`, still reads "The three withholding
+  warnings fire with the dual pattern" and names no class. The scenario ids
+  `XV-03` to `XV-05` on line 1569 and the PR's tasks name the classes.
+
+### Job 1, issues 22 and 23 measured
+
+**Issue 22: resolved.** Measured 2026-11-04 at `6b83e5f` with `air 0.11.0`
+from `~/.local/bin/air`. `air format --check .` exits 1 and lists the same
+seven files as Pass 2:
+
+```
+Would reformat: data-raw\parse-nationscape-codebooks.R
+Would reformat: data-raw\prepare-anes-2024.R
+Would reformat: data-raw\prepare-gss-2024.R
+Would reformat: data-raw\prepare-nationscape-helpers.R
+Would reformat: data-raw\prepare-nationscape-phase1.R
+Would reformat: tests\testthat\helper-test-data.R
+Would reformat: tests\testthat\test-pool-pvals.R
+```
+
+All seven are now in PR 1's write surface, at
+`plans/impl-export-metadata.md` lines 255 and 259-267. Task 19, lines 214-219,
+names the seven by count, names `helper-test-data.R`, and names the six others
+by group. The file-by-file table at lines 2424-2427 lists all of them against
+PR 1 alone. No later PR claims any of the six. There is still no `air.toml`.
+
+The fix was also run, on a scratch copy of `git archive HEAD` outside the
+repo:
+
+- `air format .` changes the seven files and no others (615 insertions, 453
+  deletions).
+- `air format --check .` then exits 0. So one run makes the gate true, as
+  task 19 claims.
+- `testthat::test_file("tests/testthat/test-pool-pvals.R")` on the formatted
+  copy gives 110 passed, 0 failed, 11 skipped. The file holds 13
+  `expect_snapshot()` calls. `tests/testthat/_snaps/pool-pvals.md` shows no
+  content diff (`git diff --stat` is empty; the file differs in line endings
+  only). So "no other change" holds for `test-pool-pvals.R`.
+- Limit: the full suite was not run on the formatted copy, so
+  `helper-test-data.R` was checked by `air format --check .` only. `data-raw/`
+  is in `.Rbuildignore` (`^data-raw$`, line 8), so its reformat cannot reach
+  `R CMD check`.
+
+**Issue 23: resolved.** The test-spec and the plan now agree on all three
+arguments:
+
+- `plans/test-spec-export-metadata.md` line 480: the `XE-07` row reads
+  "`pub_type = "external"`, then `show_n = FALSE`, then `show_eff_n = TRUE`"
+  and "All three arguments are gone".
+- Test-spec lines 43-45 name all three, and the template row 9 at line 68
+  names `show_n` or `show_eff_n`.
+- Test-spec line 69 (template row 10) and line 315 (`XS-08`) still cite
+  `XE-07` for one argument each. Both are true under the three-argument row.
+- `plans/impl-export-metadata.md` task 23 (line 1692), the criterion at lines
+  1765-1766, the owned list at line 1787 and the coverage table at line 2469
+  all cite `XE-07` for `feature/crosstab-label-cols-and-sizes`, and the two
+  prose lines name all three arguments.
+- `plans/spec-export-metadata.md` does not cite `XE-07`.
+
+**Version citations.** The test-spec header (line 4) reads 0.16.0, dated
+2026-11-04. The plan cites v0.16.0 at line 8 and line 2451, and nowhere cites
+v0.15.0. The spec does not cite a test-spec version. The decisions entry at
+`plans/decisions-export-metadata.md` lines 1063-1067 matches the diff.
+
+### Job 2, what the edit could have broken
+
+- **Scenario count.** No row was added or removed. The test-spec still holds
+  178 ids, and the plan's coverage table and family check at lines 2454-2480
+  are unchanged and still total 178.
+- **"Six PRs own no scenario"** (line 2482). Still true. Reformatting adds no
+  behavior a scenario describes. The sentence "PR 1 changes a fixture and a
+  manifest" does not list the formatting commit, but it does not claim to be
+  exhaustive.
+- **PR 1's other criteria.** The coverage criterion at lines 241-242 reads
+  `covr::zero_coverage()`, which reports files in `R/`. PR 1 touches no file in
+  `R/`, so the six new files do not change it.
+- **Line-number citations.** No file in `plans/` cites a line number in any of
+  the seven reformatted files, so the reformat moves no citation.
+
+---
+
+### New issues
+
+#### Section: Overview
+
+**Issue 26: the Overview cites spec v0.20.0; the header cites v0.21.0**
+Severity: SUGGESTION
+Breaks citation hygiene. Not introduced by this edit: commit `6b83e5f` (#15)
+raised the header to v0.21.0 and left the Overview line.
+
+`plans/impl-export-metadata.md` line 7 reads "**Source spec:**
+`plans/spec-export-metadata.md` v0.21.0". Line 17 reads "This plan turns spec
+v0.20.0 into nineteen pull requests." The spec header
+(`plans/spec-export-metadata.md` line 4) reads 0.21.0. Line 17 is now the only
+stale version string in the plan.
+
+Options:
+- **A** Change line 17 to "spec v0.21.0" — Effort: low, Risk: low, Impact: the
+  plan cites one spec version.
+- **B** Drop the version from line 17, and leave the header as the one
+  citation — Effort: low, Risk: low, Impact: the next spec bump cannot make
+  line 17 stale.
+- **C** Do nothing — a reader sees two spec versions and has to check which one
+  the plan follows.
+
+**Recommendation: B** — one version string in the header is one place to keep
+current.
+
+---
+
+#### Section: PR 1 — task 19
+
+**Issue 27: task 19 counts seven reformatted files, then says the formatting commit holds "those six files"**
+Severity: SUGGESTION
+Clarity of a task the builder follows literally.
+
+`plans/impl-export-metadata.md` lines 214-218 read: "this reformats seven
+files: `tests/testthat/helper-test-data.R`, which this PR already changes, and
+six files that this feature does not otherwise touch … The formatting commit
+holds those six files and nothing else of substance."
+
+`air format .` also rewrites `helper-test-data.R` (74 lines changed on the
+scratch copy). So the formatting commit holds seven files, unless the builder
+formats `helper-test-data.R` in an earlier commit. A builder who reads "those
+six files" literally may try to keep `helper-test-data.R` out of the commit,
+which `air format .` does not allow. "Nothing else of substance" probably
+means to allow it, but the task does not say so.
+
+Options:
+- **A** Change the sentence to "The formatting commit holds the seven files and
+  no change other than formatting." — Effort: low, Risk: low, Impact: the task
+  says what the command writes.
+- **B** Do nothing — the result is the same either way, and a careful builder
+  reads "of substance" as the allowance.
+
+**Recommendation: A** — one sentence, and the count then agrees with itself.
+
+---
+
+#### Section: PR 1 — write surface and criteria
+
+No new issues found.
+
+#### Section: PR 14 — `feature/crosstab-label-cols-and-sizes` (`XE-07`)
+
+No new issues found.
+
+#### Section: Write surface, file by file
+
+No new issues found.
+
+#### Section: Scenario coverage
+
+No new issues found.
+
+#### Section: test-spec v0.16.0
+
+No new issues found.
+
+---
+
+## Summary (Pass 3)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 0 |
+| SUGGESTION | 2 |
+
+**Total issues:** 2 (issues 26 and 27).
+
+**Prior issues:** 20 RESOLVED, 3 PARTIAL (7, 17, 20, none with an execution
+consequence), 2 OPEN suggestions (24, 25), 0 REGRESSED.
+
+**Verdict: PASS.**
+
+**Overall assessment:** Both fixes measure true — the seven files `air` lists
+at `6b83e5f` are all in PR 1's surface, one `air format .` run makes the gate
+pass with the `test-pool-pvals.R` tests and snapshots unchanged, and `XE-07`
+now carries all three removed arguments in both documents — and what remains is
+two wording suggestions and three PARTIAL rows that change no PR.
+
+---
+
+## Plan Review: export-metadata — Pass 4, delta (2026-11-05)
+
+Plan under review: `plans/impl-export-metadata.md` v4.4.0, with
+`plans/spec-export-metadata.md` v0.22.0 and
+`plans/test-spec-export-metadata.md` v0.17.0. All three are uncommitted edits
+on `docs/export-metadata-plan-pass-3` at `2728b60`. This is a delta pass. It
+checks the three variance rules of spec 3.16, the rows `XB-05` to `XB-10`, the
+PR 17 changes and the counts. It does not re-review the rest of the documents.
+
+Measurements are at `2728b60`, with R 4.6.1 and openxlsx2 1.28, from a scratch
+script outside the repo.
+
+### Prior issues (Passes 1 to 3)
+
+| # | Title | Status |
+|---|---|---|
+| 1 | The documentation deferral makes `check(): 0 warnings` unreachable | RESOLVED |
+| 2 | Four PRs remove arguments that committed tests still pass | RESOLVED |
+| 3 | `show_eff_n` is never removed from `export_crosstab()` | RESOLVED |
+| 4 | No PR pins the final argument order of spec 3.1 | RESOLVED |
+| 5 | Fifteen helpers are defined 5 to 11 PRs before their first caller | RESOLVED |
+| 6 | Eight helper behaviors are tested by a task but pinned by no criterion | RESOLVED |
+| 7 | No numerical tolerance appears anywhere in the plan | PARTIAL — not changed by this delta |
+| 8 | PR 1 carries no `air` criterion and no coverage criterion | RESOLVED |
+| 9 | The coverage criterion is stricter than the gate the tester runs | RESOLVED |
+| 10 | Two PRs run `snapshot_review()` but list no snapshot file | RESOLVED |
+| 11 | PR 18's `na.rm` criterion names a call site outside its write surface | RESOLVED |
+| 12 | The About sheet's column widths and merged-cell rule reach no PR | RESOLVED |
+| 13 | PR 15's `100%` criterion is wider than the spec | RESOLVED |
+| 14 | Spec 3.19's unused factor level on the tabulated variable | RESOLVED |
+| 15 | Gate VIII's helper-inventory line reaches no criterion | RESOLVED (option B) |
+| 16 | The `variance = "se"` glossary entry reaches no PR | RESOLVED |
+| 17 | The Part A / Part B boundary is off by one | PARTIAL — not changed by this delta |
+| 18 | The standard gate criteria cite no source | RESOLVED |
+| 19 | "No exported function changes behavior" is not verifiable | RESOLVED |
+| 20 | Four criteria point at a source instead of stating the outcome | PARTIAL — not changed by this delta |
+| 21 | Five grep-checkable invariants are stated without the grep | RESOLVED |
+| 22 | `air format --check .` is already false on `develop` | RESOLVED |
+| 23 | The plan's `XE-07` criterion names three arguments; the test-spec names two | RESOLVED |
+| 24 | Three criteria carry a spec section and no scenario id (suggestion) | OPEN — not changed by this delta |
+| 25 | `feature/cover-sheet` and `feature/base-notes-adoption` lack the snapshot guard (suggestion) | OPEN — not changed by this delta |
+| 26 | The Overview cites spec v0.20.0; the header cites v0.21.0 (suggestion) | RESOLVED — applied |
+| 27 | Task 19 counts seven files, then says "those six files" (suggestion) | RESOLVED — applied |
+
+### What the delta did to the open rows
+
+- **Issue 7.** `grep -n "1e-8" plans/spec-export-metadata.md` still returns
+  nothing. The plan carries the tolerance at lines 321 and 368. The delta adds
+  no tolerance.
+- **Issue 17.** Plan lines 1118-1120 still read "This PR closes Part A." Line
+  2552 still reads "PRs 6 to 9 precede PRs 10 to 18". The line numbers moved,
+  and the text did not change.
+- **Issue 20.** Plan line 1572 still reads "The three withholding warnings
+  fire with the dual pattern" and names no class.
+- **Issue 24.** The four new PR 17 criteria, plan lines 2140-2151, each cite a
+  scenario id. The delta adds no criterion of the kind issue 24 names.
+- **Issue 25.** No snapshot guard was added to either PR.
+- **Issues 26 and 27.** Still applied. Plan line 20 cites no spec version.
+  Line 222 says the formatting commit holds "the seven files".
+
+### The delta, check by check
+
+**1. The width formula.** The formula holds for `decimals` 0, 1 and 2 inside
+the range spec line 1764 states. Measured with `nchar()`:
+
+| String | Characters |
+|---|---|
+| `(-10.5% – 100.4%)` | 17 |
+| `(-10.53% – 100.47%)` | 19 |
+| `(-10% – 100%)` | 13 |
+| `(-100% – 1000%)` | 15 |
+
+- The floor and ceiling strings of spec 3.3, line 795-796, are 3 and 4
+  characters at `decimals = 0`, 5 and 6 at 1, and 6 and 7 at 2. None is longer
+  than the `5 + decimals` bound of spec line 1756. So a floor or ceiling string
+  inside an interval cannot push it past the width.
+- At `decimals = 0`, `round(-99.6)` is `-100` and `round(999.6)` is `1000`.
+  Both values are inside the stated range, and both print 5 characters. The
+  worst string is then `(-100% – 1000%)`, 15 characters. It fits with 0
+  characters spare, not 2. Issue 31.
+- No string the formatter writes under `"ci"` exceeds the width inside the
+  stated range. Outside it (a lower bound at or below `-100%`, an upper bound
+  at or above `1000%`) a string can. Spec line 1764 states that limit.
+- Limit: this counts characters, not Excel width units. No workbook was opened
+  in Excel.
+
+**2. The six test-spec rows.** Lines 410-415 have the 8 cells of their
+neighbours. The 184 ids hold no duplicate. Each input is reachable when PR 17
+runs: `min_eff_n` lands in PR 11, `variance_display` at PR 17 task 4, and
+`XH-16` already runs `variance = "ci"` on all four designs. Each oracle states
+an exact value. The readback is feasible on openxlsx2 1.28, measured after
+`wb_save()` and `wb_load()`:
+
+- openxlsx2 exports no width getter. The width is in
+  `wb$worksheets[[i]]$cols_attr`, as `width="17.711"` for a width set to 17.
+- A row height is in `wb$worksheets[[i]]$sheet_data$row_attr`: `ht` is `"30"`
+  and `customHeight` is `"1"` for a set row, and `ht` is `""` for a row with no
+  height of its own. So "carries no height of its own" is testable.
+- `wb_get_cell_style()` returns the style id, and
+  `wb$styles_mgr$styles$cellXfs` holds `<alignment wrapText="1"/>` for it.
+
+The width oracle has one defect, which `XB-01` shares. Issue 28.
+
+**3. PR placement.** PR 17 is the right owner, though one reason it gives is
+wrong (issue 30). At `2728b60`, `R/export-crosstab.R` holds no `se`, `ci_low`
+or `ci_high`. `variance` reaches only the `get_freqs()` call at line 187. So
+before PR 17 a `"ci"` call writes no interval, and the width of 12 between PR 15
+and PR 17 hides nothing. No PR 15 or PR 16 criterion is false at its own merge.
+`XB-03` (test-spec line 408) runs at `variance = NULL`, so its "an estimate
+cell … resolves to a non-wrapping one" stays true after PR 17.
+
+TDD granularity holds. Each new row gets a write, run, implement and run step.
+`XB-07` and `XB-10` are guards that pass on first run, and tasks 35 and 42 say
+so. No cross-reference is stale. The only "task N" citations outside a PR,
+plan lines 2557 and 2562, name PR 10 task 34 and PR 18 task 45. Neither PR was
+renumbered.
+
+**4. Write surface.** The author's flag is a real gap. Issue 29.
+
+**5. Counts and citations.** All true:
+
+- The test-spec holds 184 ids: XB 10, XC 11, XS 10, XW 13, XH 24, XD 1, XR 2,
+  XA 14, XM 17, XE 15, XV 13, XX 12, XN 10, TP 14, TC 8, TE 4, TW 2, TN 4.
+- The coverage table, plan lines 2503-2523, sums to 184. A scripted diff of
+  its ids against the test-spec ids is empty.
+- PR 17 owns 15 at plan line 2168 and at line 2520.
+- Spec line 4 reads 0.22.0. Test-spec line 4 reads 0.17.0. Plan line 4 reads
+  4.4.0, lines 7-8 cite 0.22.0 and 0.17.0, and line 2499 cites v0.17.0.
+- `grep` for `0.21.0`, `0.16.0`, `4.3.0` and `178` finds nothing in the three
+  documents. The `184.98` hits at spec lines 155-158 and 1142 and test-spec
+  line 723 are effective-N values.
+
+**6. Other notes, not issues.**
+
+- Spec line 1471 is 89 characters, the one prose line in the delta past 80.
+- `plans/decisions-export-metadata.md` line 1122 says 3.16 "changes the Column
+  widths and Wrapping rows, adds an Estimate row height row". The diff also
+  adds a sentence to the Heading row height row (spec line 1749). The decisions
+  file is history, so this review does not ask for an edit.
+
+---
+
+### New issues
+
+#### Section: test-spec v0.17.0 — sheet properties
+
+**Issue 28: "rounded to the nearest whole number" turns a correct width of 17 into 18**
+Severity: REQUIRED
+A stated oracle fails on correct code. The defect predates the delta in
+`XB-01`, and the delta copies it into three rows.
+
+`plans/test-spec-export-metadata.md` lines 410-412 (`XB-05`, `XB-06`,
+`XB-07`) give the tolerance "rounded to the nearest whole number", as `XB-01`
+does at line 406. The plan repeats it: task 8 (line 1832, "rounds to 44") and
+task 30 (line 2094, "rounds to `15 + 2 * decimals`").
+
+Measured on openxlsx2 1.28: `wb_set_col_widths()` with widths 44, 15 and 17
+writes `width="44.711"`, `"15.711"` and `"17.711"`, and `wb_load()` reads the
+same back. `round()` gives 45, 16 and 18. So a tester who follows the rows
+reads 18 for a correct 17 and blocks the PR. `XB-01` fails the same way in PR
+15 (45 for 44, 13 for 12). `XB-02` compares two workbooks, so it is not
+affected.
+
+Options:
+- **A** Change the tolerance on `XB-01`, `XB-05`, `XB-06` and `XB-07` to "the
+  integer part, `floor()`, of the stored width", and say that openxlsx2 1.28
+  stores the set width plus 0.711. Change plan tasks 8 and 30 from "rounds to"
+  to "has the integer part". — Effort: low, Risk: low, Impact: the oracle
+  passes correct code and still tells 15, 17 and 19 apart.
+- **B** State the stored value: "the stored width is the set width plus
+  `0.711`, compared at `1e-6`". — Effort: low, Risk: medium, Impact: exact, but
+  a future openxlsx2 that changes the padding breaks every row.
+- **C** Do nothing — the tester blocks PR 15 on `XB-01` and PR 17 on `XB-05`
+  to `XB-07`, or improvises a rule the test-spec does not state.
+
+**Recommendation: A** — `floor()` holds whether or not openxlsx2 keeps its
+0.711 padding, and the rows stay 2 characters apart.
+
+---
+
+#### Section: PR 15 and PR 17 — write surface
+
+**Issue 29: no PR names the file that holds the width code, and PR 15's surface points the wrong way**
+Severity: REQUIRED
+Lens 5, file completeness. A builder must guess a file, and one guess stops
+PR 17 at the shipper's write-surface check.
+
+- PR 17 task 32 (plan lines 2097-2099) edits the width "at the site where PR
+  15 sets the fixed widths". PR 17's surface (lines 2171-2178) lists
+  `R/export-crosstab.R` and not `R/export-utils.R`.
+- PR 15 task 10 (lines 1835-1836), task 16 (line 1845), task 17 (line 1846)
+  and task 21 (line 1852) name no file or function.
+- PR 15's surface lists `R/export-utils.R` (line 1928), and the file table
+  lists PR 15 against it (line 2476). No PR 15 task names a change in that
+  file. Tasks 23 to 36 only write tests and confirm they pass. So the only PR 15
+  code that could go in `R/export-utils.R` is the sheet-property code.
+- If PR 15 puts the widths or the freeze pane there, for example inside
+  `.write_sample_size_rows()`, which knows the last sample-size row, then PR
+  17 task 32 is outside PR 17's surface.
+
+The likely site is `R/export-crosstab.R`. The question sheets are added there
+(lines 209, 231, 253, 274), and the three routes that write the estimate cells
+are there. Spec 2.1 lists every new helper and names no width helper, so the
+code goes into an existing function. But the plan does not say so.
+
+Options:
+- **A** Name the site in PR 15 task 10, task 16, task 17 and task 21, for
+  example "in `R/export-crosstab.R`, after each sheet is added in
+  `export_crosstab()`". Name the same file in PR 17 task 32. Then drop
+  `R/export-utils.R` from PR 15's surface and from PR 15 on line 2476, or
+  state the change that needs it. — Effort: low, Risk: low, Impact: both
+  surfaces agree with the tasks.
+- **B** Add `R/export-utils.R` to PR 17's surface and the file table. —
+  Effort: low, Risk: low, Impact: the gate cannot stop PR 17, but the site
+  stays unnamed and PR 17's surface is wider than its tasks.
+- **C** Do nothing — the result depends on where the PR 15 builder puts the
+  code.
+
+**Recommendation: A** — one named site removes the guess in both PRs and the
+unexplained `R/export-utils.R` entry in PR 15.
+
+---
+
+#### Section: PR 17 — the boundary note
+
+**Issue 30: the PR 17 note says the `"ci"` width depends on `variance_display`; it does not**
+Severity: SUGGESTION
+A stated reason does not match the spec.
+
+Plan lines 2048-2050 read: "All three depend on `variance_display`, which this
+PR adds, so none can land in PR 15." Spec line 1747 says the width rule
+"holds under both `variance_display` values", and `XB-05` (test-spec line 410)
+tests that. The width depends on `variance` and `decimals`, and both exist at
+`2728b60` (`R/export-crosstab.R` line 79). The placement is still right, for a
+different reason: PR 17 is the first PR that writes an interval.
+
+PR 15's criterion at plan line 1889 reads "The column widths are fixed at 44
+and 12". After PR 17 that is true only away from `"ci"`. PR 16 carries a lag
+note for a similar case (line 1946).
+
+Options:
+- **A** Change lines 2048-2050 to say that the wrap and the row height depend
+  on `variance_display`, and that the width lands here because this PR first
+  writes the interval it makes room for. Add "at `variance = NULL`" to the PR
+  15 criterion at line 1889. — Effort: low, Risk: low, Impact: the reason is
+  true and the PR 15 criterion matches spec 3.16.
+- **B** Do nothing — the placement is right, and a reader who checks the
+  reason against spec 3.16 finds it false.
+
+**Recommendation: A** — two short edits, and both texts then match spec 3.16.
+
+---
+
+#### Section: spec v0.22.0 — section 3.16
+
+**Issue 31: the derivation says 2 characters are spare at `decimals = 0`, and the `"se"` claim is checked at one `decimals` value**
+Severity: SUGGESTION
+A worked bound in the spec is not exact. No string exceeds the width.
+
+- Spec lines 1760-1762 say a bound at `decimals = 0` "prints at most 4
+  characters", and that the formula "leaves 2 characters spare". Inside the
+  range line 1764 states, `round(-99.6)` prints `-100%` and `round(999.6)`
+  prints `1000%`, 5 characters each. The worst string,
+  `(-100% – 1000%)`, is 15 characters, so 0 are spare. The formula still
+  holds.
+- Spec lines 1766-1768 justify the width of 12 under `"se"` at
+  `decimals = 1` only. `(100.00%)` at `decimals = 2` is 9 characters, so the
+  rule holds there too, but the text does not say so. It holds up to
+  `decimals = 5` (`(100.00000%)`, 12 characters).
+
+Options:
+- **A** Change "at most 4 characters" to "at most 5, as in `-100%`", and
+  "2 characters spare" to "the worst string, `(-100% – 1000%)`, fills it
+  exactly". Add "and `(100.00%)`, 9 characters, at `decimals = 2`" to the
+  `"se"` paragraph. — Effort: low, Risk: low, Impact: the derivation is exact.
+- **B** Do nothing — the width rule is correct, and only its explanation is
+  off at an edge no real interval reaches.
+
+**Recommendation: A** — the derivation exists to be checked, so it should
+check.
+
+---
+
+#### Section: PR 17 — tasks 38 and 39
+
+**Issue 32: the wrap and the row height are written three times, one copy per route**
+Severity: SUGGESTION
+`CLAUDE.md` engineering principle 1 (DRY) asks for repetition to be raised in
+review.
+
+Task 38 (plan lines 2108-2110) sets the wrap "in all three render routes".
+Task 39 (lines 2111-2112) sets the row height "under the same condition" and
+names no site. So the condition `!is.null(variance) && variance_display ==
+"cell"` and two openxlsx2 calls go into three functions. The same PR splits
+the `.fmt_variance()` calls into one task per route (tasks 7 to 9). Spec 2.1
+closes the helper list, so a new helper is not an option without a spec edit.
+
+Options:
+- **A** Keep the three copies, and split tasks 38 and 39 into one task per
+  route, as tasks 7 to 9 do. — Effort: low, Risk: low, Impact: each edit is one
+  2-5 minute step, and the repetition is a stated choice.
+- **B** Set both properties once per block, where the estimate row range is
+  known after the route returns, and say where in task 38. — Effort: medium,
+  Risk: low, Impact: one copy of the condition, but the route must return the
+  range.
+- **C** Do nothing — three copies of the condition, and one task that covers
+  three edits.
+
+**Recommendation: A** — it matches tasks 7 to 9 and needs no spec change.
+
+---
+
+#### Section: PR 17 — acceptance criteria and owned scenarios
+
+No new issues found.
+
+#### Section: Scenario coverage
+
+No new issues found.
+
+#### Section: Write surface, file by file
+
+No new issue beyond issue 29.
+
+---
+
+## Summary (Pass 4)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 2 |
+| SUGGESTION | 3 |
+
+**Total issues:** 5 (issues 28 to 32).
+
+**Prior issues:** 22 RESOLVED, 3 PARTIAL (7, 17, 20), 2 OPEN suggestions (24,
+25), 0 REGRESSED. The delta changed none of the open rows.
+
+**Verdict: BLOCK.**
+
+**Overall assessment:** The width formula, the counts and the PR 17 placement
+are correct, but the width oracle fails correct code on openxlsx2 1.28
+(`round(17.711)` is 18) and no PR names the file that holds the width code, so
+both REQUIRED issues need a short edit before the plan returns to
+`PLAN_READY`.
+
+---
+
+## Plan Review: export-metadata — Pass 5, delta (2026-11-05)
+
+Plan under review: `plans/impl-export-metadata.md` v4.5.0, with
+`plans/spec-export-metadata.md` v0.23.0 and
+`plans/test-spec-export-metadata.md` v0.18.0, on
+`docs/export-metadata-plan-pass-3` at `b3c73a0`. This is a delta pass over two
+commits. `886cee4` applies the Pass 4 fixes for issues 28 to 32 and rewrites
+the range sentence of spec 3.16. `b3c73a0` adds the freeze-pane rule for the
+stacked sheet, `XB-11`, and PR 15 tasks 23 to 26. This pass does not re-review
+the rest of the documents.
+
+Measurements are at `b3c73a0`, with R 4.6.1 and openxlsx2 1.28, from scratch
+scripts outside the repo. `git diff 2728b60 b3c73a0 --stat -- R/` is empty, so
+the code is the same as at `2728b60`.
+
+### Prior issues (Passes 1 to 4)
+
+| # | Title | Status |
+|---|---|---|
+| 1 | The documentation deferral makes `check(): 0 warnings` unreachable | RESOLVED |
+| 2 | Four PRs remove arguments that committed tests still pass | RESOLVED |
+| 3 | `show_eff_n` is never removed from `export_crosstab()` | RESOLVED |
+| 4 | No PR pins the final argument order of spec 3.1 | RESOLVED |
+| 5 | Fifteen helpers are defined 5 to 11 PRs before their first caller | RESOLVED |
+| 6 | Eight helper behaviors are tested by a task but pinned by no criterion | RESOLVED |
+| 7 | No numerical tolerance appears anywhere in the plan | PARTIAL — not changed by this delta |
+| 8 | PR 1 carries no `air` criterion and no coverage criterion | RESOLVED |
+| 9 | The coverage criterion is stricter than the gate the tester runs | RESOLVED |
+| 10 | Two PRs run `snapshot_review()` but list no snapshot file | RESOLVED |
+| 11 | PR 18's `na.rm` criterion names a call site outside its write surface | RESOLVED |
+| 12 | The About sheet's column widths and merged-cell rule reach no PR | RESOLVED |
+| 13 | PR 15's `100%` criterion is wider than the spec | RESOLVED |
+| 14 | Spec 3.19's unused factor level on the tabulated variable | RESOLVED |
+| 15 | Gate VIII's helper-inventory line reaches no criterion | RESOLVED (option B) |
+| 16 | The `variance = "se"` glossary entry reaches no PR | RESOLVED |
+| 17 | The Part A / Part B boundary is off by one | PARTIAL — not changed by this delta |
+| 18 | The standard gate criteria cite no source | RESOLVED |
+| 19 | "No exported function changes behavior" is not verifiable | RESOLVED |
+| 20 | Four criteria point at a source instead of stating the outcome | PARTIAL — not changed by this delta |
+| 21 | Five grep-checkable invariants are stated without the grep | RESOLVED |
+| 22 | `air format --check .` is already false on `develop` | RESOLVED |
+| 23 | The plan's `XE-07` criterion names three arguments; the test-spec names two | RESOLVED |
+| 24 | Three criteria carry a spec section and no scenario id (suggestion) | OPEN — not changed by this delta |
+| 25 | `feature/cover-sheet` and `feature/base-notes-adoption` lack the snapshot guard (suggestion) | OPEN — not changed by this delta |
+| 26 | The Overview cites spec v0.20.0; the header cites v0.21.0 (suggestion) | RESOLVED — applied |
+| 27 | Task 19 counts seven files, then says "those six files" (suggestion) | RESOLVED — applied |
+| 28 | "rounded to the nearest whole number" turns a correct width of 17 into 18 | RESOLVED |
+| 29 | No PR names the file that holds the width code | RESOLVED |
+| 30 | The PR 17 note says the `"ci"` width depends on `variance_display` | RESOLVED |
+| 31 | The derivation says 2 characters are spare at `decimals = 0` (suggestion) | RESOLVED — the new range sentence has its own defects, issue 36 |
+| 32 | The wrap and the row height are written three times (suggestion) | RESOLVED — option A |
+
+### What the delta did to the open rows
+
+No hunk of the two commits touches the text of these rows.
+
+- **Issue 7.** `grep -n "1e-8" plans/spec-export-metadata.md` still returns
+  nothing. The plan carries the tolerance at lines 323 and 370.
+- **Issue 17.** Plan lines 1121-1122 still read "This PR closes Part A." Line
+  2589 still reads "PRs 6 to 9 precede PRs 10 to 18".
+- **Issue 20.** Plan line 1574 still reads "The three withholding warnings
+  fire with the dual pattern" and names no class.
+- **Issue 24.** The new PR 15 criterion, plan lines 1921-1923, cites `XB-11`.
+  The delta adds no criterion of the kind issue 24 names.
+- **Issue 25.** The snapshot guard is still at plan lines 388, 473, 557 and
+  688 only, which are PRs 2 to 5. PR 6 and PR 8 still lack it.
+
+### The delta, check by check
+
+**1. Issues 28 to 32.**
+
+- **28.** `XB-01` and `XB-05` to `XB-07` (test-spec lines 406, 410-412)
+  compare `floor()` of the stored width. Plan task 8 (line 1844) and PR 17
+  task 30 (line 2124) say "integer part". Measured: widths 44, 15 and 19 are
+  stored and read back as `44.711`, `15.711` and `19.711`, so `floor()` gives
+  the set width. `XB-02` (line 407) still says "rounded to the nearest whole
+  number". It compares two workbooks that both store `w + 0.711`, so it cannot
+  fail correct code. That is a wording mismatch, not an issue.
+- **28, heights.** Measured: `wb_set_row_heights(heights = 30)` stores
+  `ht="30"` and `customHeight="1"`, and `wb_load()` reads back the string
+  `"30"`. A row with no height reads `""`. So the 30-point oracles of `XB-03`
+  and `XB-09`, and the "no height of its own" checks of `XB-03`, `XB-09` and
+  `XB-10`, need no rounding.
+- **29.** Every PR 15 and PR 17 task that sets a sheet property names a site.
+  PR 15: the note at plan lines 1822-1830, task 10 (1847), task 16 (1858),
+  task 17 (1861), task 21 (1867), task 25 (1875). PR 17: task 32 (2128), tasks
+  38 to 43 (2140-2149). PR 15's surface (lines 1955-1960) no longer lists
+  `R/export-utils.R`. The file table no longer lists PR 15 against
+  `R/export-utils.R` (line 2513), and lists 15 and 17 against
+  `R/export-crosstab.R` (line 2515). PR 17's surface lists
+  `R/export-crosstab.R` (line 2210). No PR 15 task touches `R/export-utils.R`.
+- **30.** Plan lines 2076-2083 give the right reason. The PR 15 criterion at
+  line 1914 reads "At `variance = NULL`".
+- **31.** Spec lines 1763-1766 and 1775-1778 apply option A.
+- **32.** Tasks 38 to 43 give one task per route, as tasks 7 to 9 do.
+
+**2. The range sentence of spec 3.16 (lines 1767-1773).** Measured with
+`formatC()` and `nchar()`:
+
+| `decimals` | Width | Widest string inside the printed limits | Characters |
+|---|---|---|---|
+| 0 | 15 | `(-100% – 1000%)` | 15 |
+| 1 | 17 | `(-99.9% – 999.9%)` | 17 |
+| 2 | 19 | `(-99.99% – 999.99%)` | 19 |
+
+- One step outside: `(-100.0% – 999.9%)` is 18 characters at `decimals = 1`,
+  and `-100.00%` alone is 8 characters at `decimals = 2`.
+- The sentence is exact at `decimals = 1`. At 2 and at 0 it is not. Issue 36.
+- The 51: a lower bound prints `-100.0%` when it is below `-99.95`. At an
+  estimate of 0 that needs a standard error above
+  `99.95 / qnorm(0.975)`, which is 50.996. At an estimate `p` it needs
+  `(p + 99.95) / 1.96`. So 51 is the right size and the right direction, but
+  an SE of exactly 51 at `p = 0` gives `-99.958`, which prints `-100.0%`.
+  "Above 51" excludes a case that breaks. Issue 36.
+
+**3. The stacked freeze-pane rule.**
+
+- **One preamble call per block.** PR 14 tasks 28 to 30 (plan lines
+  1710-1715) replace each route's opening sequence with one
+  `.render_block_preamble()` call. Each route passes its own `start_row`. No
+  route calls the preamble twice for one block.
+- **Per-question layout.** Each branch adds a sheet and passes `1L`
+  (`R/export-crosstab.R` lines 209 and 214, 231 and 236, 253 and 258). So each
+  per-question sheet that holds a block gets one pane.
+- **Stacked layout.** Line 275 sets `current_row <- 1L`. Line 346 sets
+  `current_row <- result$next_row + 1L`, which is 2 or more. So no later block
+  starts at row 1, and no block sets a second pane.
+- **The gap.** Each route returns `next_row = start_row` and writes nothing on
+  a zero-row frame (lines 506-508, 661-662, 781-782). Then the next stacked
+  block starts at row 2 and sets no pane. Measured below. Issue 33.
+- **`A7` follows.** Spec 3.16 (lines 1709-1715) at `variance = NULL` drops the
+  legend row. So `XB-11`'s first block is title 1, base note 2, spanner 3,
+  heading 4, the two sample-size rows 5 and 6, and the first data row 7. The
+  code today computes the spanner and heading rows the same way
+  (`start_row + note_shift + 1L` and `+ 2L`, lines 535-536).
+- **The readback is feasible.** Measured: `wb_freeze_pane(first_active_row =
+  7)` stores `<pane ySplit="6" topLeftCell="A7" activePane="bottomLeft"
+  state="frozen"/><selection pane="bottomLeft"/>`. A second call with row 15
+  replaces it with `ySplit="14"` and `topLeftCell="A15"`, so task 24's "the
+  last block's pane wins" is true. The string survives `wb_save()` and
+  `wb_load()`. A sheet with no pane holds `""`. `wb$get_sheet_names()` returns
+  a named character vector, and `match("Crosstab", ...)` gives the index. The
+  field also holds the `<selection>` element, so "holds the `<pane>` XML as one
+  string" (test-spec line 416) is narrow. The substring assertions still work.
+- **`XB-04` agrees with `XB-11`.** `XB-04` (line 409) runs a per-question
+  `q1` call. Its one block starts at row 1 and sets the pane.
+- **The stated reason.** Spec line 1754 says every block on the stacked sheet
+  "uses the same banner columns". The banner levels are the same, because the
+  floor ignores the tabulated variable (spec line 923). The column positions
+  are not the same for a battery block. Issue 35.
+- **Note.** Spec line 1754 cites `R/export-crosstab.R:214`, `:236`, `:258`
+  and `:275`. These are true at `b3c73a0`. PRs 5 to 14 edit the file first,
+  so the numbers will have moved by PR 15. The facts they cite will not.
+
+**4. Renumbering.** A script reads PR 15 as tasks 1 to 45 and PR 17 as tasks 1
+to 51, with no gap. In PR 15, tasks 5, 11, 18, 22 and 26 cite tasks 2, 8, 14,
+19, and 19 and 23. Tasks 24 and 25 cite task 21. Each one is the right task. In
+PR 17, tasks 10, 18, 25, 33 and 44 cite tasks 2, 15, 21, 30 and 36, and task
+32 cites PR 15 task 10. All are right. The notes section (plan lines
+2585-2643) cites tasks in PRs 1, 9, 10, 11, 13, 14 and 18, and none of those
+PRs was renumbered.
+
+**5. Counts and versions.** All true:
+
+- The test-spec holds 185 ids and no duplicate: XB 11, XC 11, XS 10, XW 13,
+  XH 24, XD 1, XR 2, XA 14, XM 17, XE 15, XV 13, XX 12, XN 10, TP 14, TC 8,
+  TE 4, TW 2, TN 4.
+- The coverage table sums to 185 (plan line 2560). Each row's count equals the
+  length of its id list. A scripted diff of its ids against the test-spec ids
+  is empty.
+- PR 15 owns 16 at plan lines 1951 and 2555. PR 17 owns 15 at lines 2205 and
+  2557. The family check (lines 2562-2564) gives 153 plus 32, 185.
+- Spec line 4 reads 0.23.0. Test-spec line 4 reads 0.18.0. Plan line 4 reads
+  4.5.0, and lines 7, 8 and 2536 cite 0.23.0 and 0.18.0.
+- The only older version outside a history file is plan line 12, which cites
+  v0.22.0 as history inside the "Review applied" field. The `184.98` hits at
+  spec lines 155-158 and 1145 and the `184.979064` at test-spec line 724 are
+  effective-N values.
+
+**6. Other notes, not issues.**
+
+- PR 17 tasks 38 to 43 test `variance` and `variance_display` inside the three
+  routes. No PR 17 task adds those two arguments to the route signatures.
+  Tasks 7 to 9 and 17 had the same need before the delta. A builder can infer
+  the step.
+- Issue 34 predates the delta. The delta's choice of one width call per sheet
+  makes the gap concrete, so this pass raises it.
+
+---
+
+### New issues
+
+#### Section: PR 14 and PR 15 — the zero-row frame
+
+**Issue 33: a zero-row frame writes no block, so `XX-03` cannot pass and a stacked sheet can lose its pane**
+Severity: REQUIRED
+A stated precondition is false, and a scenario fails on the code the plan
+describes.
+
+- Spec line 1754 and plan task 25 (lines 1875-1878) say that the first block
+  on every question sheet starts at row 1. Each render route returns early on
+  a zero-row frame: `R/export-crosstab.R` lines 506-508, 661-662 and 781-782
+  return `next_row = start_row` and write nothing. The SATA and battery copies
+  are marked `# nocov`. The single-route copy is reachable.
+- Measured at `b3c73a0`: the fixture's `all_na_var` gives a zero-row frame
+  from `.build_freq_frame()`, with surveycore's "Returning 0 rows" warning. A
+  stacked call with `vars = c(all_na_var, q1)` writes nothing for
+  `all_na_var`, and the `q1` block starts at row 2. The sheet dimension is
+  `A2:F8`. Under task 25, no block on that sheet starts at row 1, so the sheet
+  gets no pane. No scenario covers this case. Spec line 1754 names only "a row
+  added above the first block" as the way to break the condition.
+- The same early return stops `XX-03`. Measured: a per-question call with
+  `vars = all_na_var` writes an `all_na_var` sheet that holds 0 cells.
+  `XX-03` (test-spec line 551) expects sample-size rows. PR 15 tasks 33 and 34
+  (plan lines 1888-1891) say "Confirm they pass", and the criterion at lines
+  1931-1933 says the same. No task in PRs 5 to 15 removes the return. PR 14
+  tasks 28 to 30 replace each route's "opening sequence", which comes after the
+  return. `na.rm` arrives in PR 18 with a default of `TRUE`, so it does not
+  change this. The `XX-03` half predates the delta. The delta makes the pane
+  depend on it.
+- The single route reads `frame$question_text[[1L]]` (line 510). So a route
+  that writes a block for a zero-row frame needs the question text from
+  another source.
+
+Options:
+- **A** Add a task to PR 14, before task 28: a zero-row frame still writes the
+  preamble and the footer, with no data rows. Take the question text from the
+  design, not from the frame. Add a stacked case with `all_na_var` first to
+  `XB-11`, or a new `XB-12`. — Effort: medium, Risk: low, Impact: `XX-03`
+  passes, the first block starts at row 1 on every sheet, and spec line 1754
+  is true.
+- **B** Keep the early return. In the stacked loop, advance `current_row` only
+  when the route wrote a row (`result$next_row > current_row`). — Effort: low,
+  Risk: low, Impact: the stacked pane is fixed, but `XX-03` still fails and
+  needs its own fix.
+- **C** Do nothing — PR 15 task 34 fails on `XX-03`, and a stacked sheet that
+  starts with an all-NA variable has no pane, with no test to show it.
+
+**Recommendation: A** — one change fixes both consequences and matches what
+`XX-03` already expects.
+
+---
+
+#### Section: spec 3.16 and PR 15 — the battery label columns
+
+**Issue 34: no rule sets the width of a battery block's second label column**
+Severity: REQUIRED
+Lenses 3 and 4. A builder must guess a width, and no scenario checks the
+guess. The gap predates the delta.
+
+- Spec line 1750 sets "44 characters for the label column" and 12 for "each
+  data column". A battery block has two label columns, `Item` and `Response`
+  (spec lines 1720-1723). The spec does not say whether column B of a battery
+  sheet is 44 or 12. The Wrapping row (line 1751) also names only "the label
+  column".
+- Plan tasks 10 and 16 (lines 1847 and 1858) set the widths and the
+  label-column wrap in `export_crosstab()`, once per sheet. On a stacked sheet
+  that holds a battery block and a block of another shape, column B is a label
+  column for one and a data column for the other. One width per sheet cannot
+  follow both.
+- `XB-01` and `XB-05` to `XB-07` all run `vars = q1` (test-spec lines 406,
+  410-412). So column B at 12 or at 44 on a battery sheet passes every row.
+
+Options:
+- **A** State in spec 3.16 the width and the wrap of a battery's second label
+  column on a per-question sheet. State the stacked rule: a column that is a
+  label column in any block on the sheet takes the label width, or it takes
+  the data width. Add a battery case to `XB-01`, for example
+  `vars = c(bat_1, bat_2, bat_3)`. — Effort: low, Risk: low, Impact: the
+  builder has one rule, and a test checks it.
+- **B** State only that the second label column takes the data width and does
+  not wrap, and add the battery case to `XB-01`. — Effort: low, Risk: medium,
+  Impact: one rule, but long response labels in a 12-character column are cut
+  off.
+- **C** Do nothing — the result depends on the PR 15 builder's guess.
+
+**Recommendation: A** — the user picks the width, and the spec and a test then
+pin it.
+
+---
+
+#### Section: spec 3.16 — the freeze pane
+
+**Issue 35: the reason given for the stacked pane is false above a battery block**
+Severity: SUGGESTION
+A stated reason does not match the spec's own block shapes.
+
+- Spec line 1754 reads "Every block on that sheet uses the same banner
+  columns, so the first block's headings describe every column below them."
+  The decisions log repeats it (`plans/decisions-export-metadata.md` line
+  1200).
+- The banner levels are the same in every block, because the floor ignores
+  the tabulated variable (spec line 923). Their positions are not. A battery
+  block is one column wider (spec line 1722). On a stacked sheet with `q1`
+  first and a battery below, the frozen heading row puts `Total` over column
+  B, and the battery's `Response` labels sit in column B. Each frozen data
+  heading sits one column left of the battery's data.
+- The frozen rows also hold the first block's question text. At a later block,
+  the frozen title names the first question. Line 1754's "so the question …
+  stay in view" holds for the first block only.
+- `XB-11` (test-spec line 416) uses two single-response blocks, so no test
+  sees either effect.
+
+Options:
+- **A** Keep the rule. Reword the sentence to state the limit: the frozen rows
+  are the first block's, they name the first question, and they sit one
+  column off above a battery block. — Effort: low, Risk: low, Impact: the text
+  says what the rule does.
+- **B** Change the rule, for example no pane on the stacked sheet (option B
+  of the decision), or a pane only when every block has the same number of
+  label columns. — Effort: low to medium, Risk: low, Impact: needs the user,
+  who chose option A.
+- **C** Do nothing — the reason reads as true and is not.
+
+**Recommendation: A** — the user chose the rule, and the spec should state
+what it does.
+
+---
+
+#### Section: spec 3.16 — the width derivation
+
+**Issue 36: the range sentence is exact at `decimals = 1` only**
+Severity: SUGGESTION
+A worked bound in the spec is not exact. No string inside the printed limits
+exceeds the width.
+
+- Line 1769 limits the upper bound to `999.9%` for all `decimals >= 1`. At
+  `decimals = 2`, `999.99%` fits: `(-99.99% – 999.99%)` is 19 characters.
+- Line 1770 says a bound that prints `-100.0%` or lower "is 7 characters".
+  That is true at `decimals = 1`. At 2, `-100.00%` is 8.
+- The sentence states no limit at `decimals = 0`. There a bound fits from
+  `-999%` to `9999%`, and `-1000%` is 6 characters. Line 1763's "prints at
+  most 5 characters" is true only inside that range.
+- Line 1771 says the bound "needs a standard error above 51 percentage
+  points". The exact threshold at an estimate of 0 is 50.996. An SE of 51.0
+  there gives a lower bound of `-99.958`, which prints `-100.0%`.
+
+Options:
+- **A** Rewrite lines 1767-1773: "The count limits each bound as printed,
+  after rounding: from `-99.9%` to `999.9%` at `decimals = 1`, from `-99.99%`
+  to `999.99%` at 2, and from `-999%` to `9999%` at 0. A bound outside that
+  range is at least one character too long, and the string no longer fits. At
+  95 percent confidence a lower bound below the range needs a standard error
+  of at least 51 percentage points." — Effort: low, Risk: low, Impact: the
+  derivation checks at every `decimals` value it names.
+- **B** Do nothing — the width rule is correct, and only its explanation is
+  off at edges no real interval reaches.
+
+**Recommendation: A** — the derivation exists to be checked, so it should
+check.
+
+---
+
+#### Section: PR 15 — tasks 23 to 26, acceptance criteria and owned scenarios
+
+No new issue beyond issues 33 and 35.
+
+#### Section: PR 17 — renumbered tasks and write surface
+
+No new issues found.
+
+#### Section: Scenario coverage
+
+No new issues found.
+
+---
+
+## Summary (Pass 5)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 2 |
+| SUGGESTION | 2 |
+
+**Total issues:** 4 (issues 33 to 36).
+
+**Prior issues:** 27 RESOLVED (issues 28 to 32 among them), 3 PARTIAL (7, 17,
+20), 2 OPEN suggestions (24, 25), 0 REGRESSED. The two commits changed none of
+the open rows.
+
+**Verdict: BLOCK.**
+
+**Overall assessment:** The Pass 4 fixes landed as recommended, and the
+counts, versions, renumbering and the `XB-11` readback all check. But the new
+freeze rule rests on "the first block starts at row 1", which a zero-row frame
+breaks (measured), and the same early return makes `XX-03` fail in PR 15. The
+battery label-column width is also unstated. Issues 33 and 34 need an edit
+before the plan returns to `PLAN_READY`.
+
+---
+
+## Plan Review: export-metadata — Pass 6, delta (2026-11-05)
+
+Plan under review: `plans/impl-export-metadata.md` v4.8.0, with
+`plans/spec-export-metadata.md` v0.26.0 and
+`plans/test-spec-export-metadata.md` v0.21.0, on
+`docs/export-metadata-plan-pass-3` at `c6f5220`. This is a delta pass over
+`git diff b3c73a0..c6f5220` of those three files. `bb84e8d` applies the Pass 5
+fixes. `c6f5220` replaces the empty-block fix of issue 33 with the all-NA drop.
+This pass does not re-review the rest of the documents.
+
+Measurements are at `c6f5220`, with R 4.6.1, surveycore 1.2.0, openxlsx2 1.28
+and testthat 3.3.2, from scratch scripts outside the repo, on
+`devtools::load_all()` and `make_all_designs(seed = 42)`.
+`git diff 2728b60 c6f5220 --stat -- R/ tests/` is empty. At this commit the
+generator returns `taylor`, `replicate` and `twophase` only, so "every design"
+below means those three.
+
+### Prior issues (Pass 5)
+
+| # | Title | Status |
+|---|---|---|
+| 33 | A zero-row frame writes no block, so `XX-03` cannot pass and a stacked sheet can lose its pane | RESOLVED — by the drop of decision 2026-11-05, not by option A. `XB-12` pins the pane, `XX-03` moves to PR 12, and PR 12 tasks 47 and 48 delete the six returns. Measurement 1c finds no input that brings a kept variable to a zero-row frame |
+| 34 | No rule sets the width of a battery block's second label column | RESOLVED — option A. Spec line 1849 sets 20 and the stacked rule. `XB-01` (battery half), `XB-13` and `XB-14` check it. PR 15 tasks 8 to 10 and 29 to 32, and PR 17 tasks 36 and 37, carry it |
+| 35 | The reason given for the stacked pane is false above a battery block (suggestion) | RESOLVED — option A. Spec line 1853 states the two limits |
+| 36 | The range sentence is exact at `decimals = 1` only (suggestion) | RESOLVED — option A. Spec lines 1866-1880. Measured: the six strings are 15, 17, 19, 16, 18 and 20 characters, and `99.95`, `99.995` and `999.5` over `qnorm(0.975)` are 50.996, 51.019 and 509.958 |
+
+### Measurements
+
+**1a. An all-NA group item keeps its group.** On every design, with `sata_a`
+and `bat_1` set to `NA_integer_`,
+`classify_question_type(d, c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3))`
+gives `sata_a` type `sata`, group 2, and `bat_1` type `battery`, group 3. The
+metadata stays on the column. `.build_freq_frame(..., banner_resolved =
+"group")` gives 0 rows for `sata_a` and `bat_1`, so no `"total"` row. `sata_b`
+has 8 rows, 2 of them `"total"`. The rule "no `"total"` row" picks exactly
+`sata_a` and `bat_1`. The call raises `surveycore_warning_all_na_freqs`.
+
+**1b. A battery cut to one item renders.** With `bat_1` and `bat_2` all-NA,
+the full-group classification gives `bat_3` type `battery`, group 1.
+`classify_question_type(d, "bat_3")` alone gives `single`, which is the role
+guard difference spec VI records. A mock of `classify_question_type()` that
+returns the one-item battery row sends `bat_3` down the battery route. On every
+design, `export_crosstab()` per-question and stacked, and `export_topline()`,
+return the path with no error. The crosstab sheet is named `bat_3`, A1 holds the
+preface `Please rate the following items:`, and row 3 holds `Item` and
+`Response`. The topline A1 holds the preface and A2 holds `bat_3`. So the
+current routes need no task for this case.
+
+**1c. No kept variable reaches a zero-row frame.** A tracer on the six render
+routes logged `nrow(frame)` on entry. Each call passed only the variables that
+have a `"total"` row, as the drop will. On every design, no route received a
+zero-row frame for these inputs:
+
+| Input | Kept | Route frames (rows) |
+|---|---|---|
+| `q1` `NA` for every group `A` row, `banner = group` | `q1`, `q2` | 12, 8 |
+| `show_total = FALSE`, single, SATA and battery | all 7 | 12, 24, 60 |
+| every banner level withheld (`pub_type = "external"`) | `q1`, `q2` | 3, 2 |
+| the same with `show_total = FALSE` | `q1`, `q2` | 3, 2 |
+| self-banner, `vars = c(group, q1)` | both | 3, 12 |
+| `dom_na`, all-NA inside the domain `group == "A"` | `q1` | 6 |
+| a column `NA` on every phase-2 row | both | 12, 12 |
+
+- The withheld rows go and the `"total"` rows stay. `show_total` changes the
+  column groups, not the frame.
+- **`na.rm = FALSE` on an all-NA variable does not give a frame.**
+  `surveycore::get_freqs(d, all_na_var, na.rm = FALSE)` aborts with
+  `surveycore_error_all_na`, with and without `group = group`. A column all-NA
+  inside the domain aborts the same way. A column `NA` in one banner level only
+  returns 12 rows. Issue 38.
+- An all-`FALSE` domain is not a case for the drop. Step 4 raises
+  `surveyreports_error_empty_domain` first (spec 3.11). That check is not in the
+  code yet; `R/export-utils.R:68` is `# nocov`.
+
+**1d. The collection crash.** `export_topline(coll_na_first, vars = c(q1, q3))`
+and the `TC-10` call (`all_na_var` in both waves) abort with "subscript out of
+bounds". The srcref chain is `export-topline.R:118`, `export-utils.R:302`,
+`export-utils.R:344`. `coll_na_second` returns the path. So the crash is the
+line the plan names.
+
+- The plan's fix, PR 12 task 45, was applied as a patch to line 334: take
+  `first` from the first wave frame with rows, and return no pooled row when no
+  wave frame has rows. Then both `TC-09` calls return the path. The `q3` block
+  title is `q3`, and its heading row holds `Total` and one wave heading:
+  `w2\n(n=200)` for `coll_na_first`, `w1\n(n=200)` for `coll_na_second`. Issue
+  40.
+- With the patch, the `TC-10` frame holds no row for `all_na_var`. The route
+  still returns early at `R/export-topline.R:218`, because the drop is not in
+  the code yet.
+- With the patch, `q3` all-NA in wave 1 and absent from wave 2 gives 0
+  `"total"` rows and 1 placeholder row whose `question_text` is `q3`
+  (`R/export-utils.R:358-369`). The missing-label warning then reads "Variables
+  q1 and q3 have no variable_label." Issue 43.
+
+**Other measurements.**
+
+- The `XV-15` and `TW-04` pattern works under edition 3, which `DESCRIPTION`
+  line 33 sets. `expect_no_warning(expect_warning(f(), class =
+  "surveyreports_warning_all_na_dropped"), class =
+  "surveycore_warning_all_na_freqs")` fails when `f()` raises both classes and
+  passes when it raises the new class only. Under edition 2 it passes in both
+  cases, so the test file must not change the edition.
+- `plans/error-messages.md` holds the six older error classes and the four
+  older warning classes, and holds neither `vars_all_na` nor
+  `all_na_dropped`. The PR 1 table (plan lines 169-174) is true.
+
+### The delta, check by check
+
+**2. Ordering.**
+
+- Step 15 agrees with steps 10, 13 and 17 of spec 3.11 (lines 1375-1387). The
+  role guard empties `vars` before it, classification runs before it, and the
+  abort runs before the workbook build. The topline list (11 steps) maps to
+  crosstab steps 2, 3, 4, 7, 9, 10, 13, 14, 15, 17 and 18, and the seven steps
+  that do not apply are 1, 5, 6, 8, 11, 12 and 16. Both lists check.
+- Withholding reads the design's banner columns and filters subgroup rows.
+  The drop reads `"total"` rows. Neither reads what the other removes. PR 12
+  task 28 says so.
+- The drop does not run before withholding in the plan. PR 11 tasks 19 and 20
+  (plan lines 1327-1331) put `.build_withheld()` and the row filter inside
+  `.build_freq_frame()`, which is step 14. Spec line 1496 says the all-NA
+  warning comes "before withholding at step 16". Issue 39.
+
+**3. PR 12 tasks.**
+
+- A script reads PR 12 as tasks 1 to 53, PR 15 as 1 to 51 and PR 17 as 1 to
+  53, with no gap. PR 14 has 49.
+- In PR 12, tasks 30, 34, 38 and 46 cite tasks 25, 31, 35 and 43, and task 40
+  cites task 28. The intro cites tasks 44 and 45. All are right. The notes
+  table (plan line 2753) cites tasks 28, 29 and 37, and line 2754 cites PR 13
+  tasks 18 and 19. Both are right.
+- In PR 15, task 28 cites task 25, and tasks 30 and 32 cite task 29. PR 17 task
+  37 cites PR 15 task 10 and task 32. All are right.
+- Every PR 12 criterion cites a real id. The 22 owned ids equal the coverage
+  row.
+- The write surface (plan lines 1581-1590) covers every file a task edits:
+  `R/export-utils.R` (tasks 27, 33, 37, 45), `R/export-crosstab.R` (28, 47),
+  `R/export-topline.R` (29, 48), both test files, and
+  `_snaps/export-crosstab.md` for the `XV-14` and `XE-16` snapshots. No PR 12
+  row takes a topline snapshot, and `_snaps/export-topline.md` holds no all-NA
+  text today, so its absence is right. The file table (plan lines 2671 and
+  2673) adds PR 12 to both topline files.
+- The surface misses two committed test blocks that the new error breaks.
+  Issue 37.
+
+**4. Scenarios.**
+
+- 199 ids, no duplicate. XB 14, XE 16, XV 15, XX 15, TC 10, TE 5, TW 4, and
+  the other families unchanged. The coverage table sums to 199. Each row's
+  count equals its id list. A scripted diff of its ids against the test-spec
+  ids is empty. Every "Scenarios owned" list of PRs 6 to 18 equals its row.
+  The family check (plan lines 2719-2722) gives 162 plus 37.
+- `XE-16` takes the dual pattern, the first snapshot of
+  `surveyreports_error_vars_all_na`. `XV-14` takes the first snapshot of
+  `surveyreports_warning_all_na_dropped`. Every other row on the two classes
+  asserts the class alone and names the row that snapshots it. That is the
+  `testing.md` rule.
+- No row uses `withCallingHandlers()` or `tryCatch()`.
+- Every new crosstab row and every new `TE`/`TW` row says all four designs, as
+  its neighbours do. `TC-09` and `TC-10` run on the collection, as `TC-01` to
+  `TC-08` do.
+- The inputs are reachable. 1a confirms the `sata_a` and `bat_1` snippets, 1b
+  confirms the one-item battery of `XX-14`, 1c confirms `dom_na` for `XX-16`,
+  and 1d confirms the `coll_na_*` snippets.
+- `TC-09` names a heading string the code does not write. Issue 40.
+
+**5. Counts and versions.** True, except one stale count:
+
+- Spec 2.1 lists 16 helpers for `R/export-utils.R` and 3 for
+  `R/export-crosstab.R`, 19 in all. Spec 3.17 and 3.18 hold 7 new error classes
+  and 5 new warning classes. Spec 3.11 has 18 steps.
+- Spec line 4 reads 0.26.0. Test-spec line 4 reads 0.21.0. Plan line 4 reads
+  4.8.0, and plan lines 7 and 8 cite 0.26.0 and 0.21.0. Plan lines 14 and 17
+  cite v0.23.0 and v0.25.0 as history in the "Review applied" field.
+- Plan line 47, "add fifteen internal helpers", is still true. It counts the
+  four helper PRs, and `.apply_all_na_drop()` lands in PR 12.
+- Plan line 2502, the PR 18 criterion, still reads "holds the 15 shared
+  helpers of spec 2.1". Spec VIII now reads 16. Issue 41.
+
+**6. Leftovers.** `grep -n -i` for "no rows", "zero-row", "no label AND",
+"empty block", "no response row" and ".emit_missing_label_warning(design" in
+the three files finds no text that states the empty-block rule or the
+design-column label check as current. The hits are the zero-data-column block
+of spec 3.5, the zero-row withheld and counts frames, the `-` cell, spec
+section XI and the plan header, all correct.
+
+---
+
+### New issues
+
+#### Section: PR 12 — committed tests
+
+**Issue 37: two committed tests call an all-NA variable alone and expect success**
+Severity: REQUIRED
+The suite is red after PR 12 task 33, and no task fixes it.
+
+- `tests/testthat/test-export-crosstab.R:1024-1037`, "export_crosstab()
+  handles all-NA variable without crashing", calls
+  `export_crosstab(d, vars = all_na_var, banner = group, ...)` inside
+  `suppressWarnings()` and expects the file.
+- `tests/testthat/test-export-topline.R:379-388`, "export_topline() handles
+  all-NA variable without crashing", wraps the same call in
+  `expect_no_error()`.
+- After task 33 both calls abort with `surveyreports_error_vars_all_na` (spec
+  3.19, line 1944). `suppressWarnings()` does not stop an error. Task 49 says
+  "Confirm the suite is green". `grep -n -i "all-na\|all_na"` on the plan finds
+  no task that deletes or rewrites the two blocks.
+
+Options:
+- **A** Add a task to PR 12 after task 33: delete the two blocks. `XX-03` (both
+  functions), `XE-16` and `TE-05` replace them. Cite them by test name, since
+  earlier PRs move the lines. — Effort: low, Risk: low, Impact: task 49 can be
+  green.
+- **B** Rewrite the two blocks to expect the new error. — Effort: low, Risk:
+  low, Impact: duplicates `XE-16` and `TE-05`.
+- **C** Do nothing — PR 12 fails its own suite gate, and the builder must
+  guess which tests to change.
+
+**Recommendation: A** — the two blocks test the old behavior, and three new
+rows cover the new one.
+
+---
+
+#### Section: spec 2.2 and 3.19 — `na.rm = FALSE`
+
+**Issue 38: under `na.rm = FALSE` an all-NA variable aborts in surveycore, and the spec says it keeps a row**
+Severity: REQUIRED
+A stated edge-case behavior is false at surveycore 1.2.0 (measured), and no
+scenario covers it.
+
+- Spec lines 466-468 and line 1943 say that under `na.rm = FALSE` an all-NA
+  variable "keeps its na_label row, so it has a row and is not dropped". The
+  decisions log (lines 1531-1533) marks this reading as the assistant's, and
+  says it "needs the user's check".
+- Measured (1c): `get_freqs(d, all_na_var, na.rm = FALSE)` aborts with
+  `surveycore_error_all_na`, class vector `surveycore_error_all_na`,
+  `rlang_error`, `error`, `condition`. It aborts with `group = group` too, and
+  for a column all-NA inside the domain.
+- Spec 3.13 passes `na.rm` straight to the three frequency helpers. So in PR
+  18, any `na.rm = FALSE` call that holds one all-NA column aborts at step 14
+  with a surveycore error. Step 15 never runs, and no file is written. That
+  includes a SATA group with one all-NA item.
+- The `XH-11` to `XH-14` inputs hold no all-NA column, so no row sees it.
+
+Options:
+- **A** Under `na.rm = FALSE`, the three frequency helpers catch
+  `surveycore_error_all_na` by class and return zero rows. Step 15 then drops
+  the variable with the same warning, whose `"i"` bullet ("no non-missing
+  value") stays true. Rewrite the two spec sentences, and add a PR 18 task and
+  a scenario. — Effort: low, Risk: low, Impact: one rule for both `na.rm`
+  values.
+- **B** Keep the variable as one `na_label` row at 100 percent. The helpers
+  must recode `NA` before `get_freqs()`. — Effort: medium, Risk: medium,
+  Impact: matches the spec's current intent.
+- **C** Let it abort. State in spec 3.19 that `surveycore_error_all_na`
+  reaches the caller, and add a scenario. — Effort: low, Risk: low, Impact: a
+  call that is valid at `na.rm = TRUE` fails at `FALSE`.
+
+**Recommendation: A** — the user decides. A is the smallest change that keeps
+the drop rule true for both `na.rm` values.
+
+---
+
+#### Section: spec 3.11 and PR 13 — where the withholding warnings fire
+
+**Issue 39: the plan builds withholding inside estimation, so its warnings can fire before the all-NA drop**
+Severity: REQUIRED
+The delta states an order that the plan's code structure does not produce, and
+no task says where to raise the three withholding warnings.
+
+- Spec line 1384 puts withholding at step 16, after the drop. Spec line 1496
+  says the all-NA warning comes "before withholding at step 16". Spec line 1944
+  says a call whose every variable is all-NA raises no warning.
+- PR 11 tasks 19 and 20 (plan lines 1327-1331) put `.build_withheld()` and the
+  row filter inside `.build_freq_frame()`, which is step 14. PR 12 task 28
+  accepts that. PR 13 tasks 11, 15 and 16 (lines 1622-1631) raise the three
+  warnings and do not say where. Today the old class fires inside
+  `.build_freq_frame()` (`R/export-utils.R:462`), before the missing-label
+  warning at line 546.
+- A builder who raises the warnings where the withheld frame is built gets two
+  faults. First, they fire before `surveyreports_warning_all_na_dropped`, so
+  `XV-11` fails. PR 13 task 19 says "fix the emission order" but not that the
+  fix must leave `.build_freq_frame()`. Second, an all-NA call at the default
+  `min_eff_n = 100` with `banner = group` (about 67 rows a level, so every
+  level falls below the floor, as 1c shows) raises
+  `subgroup_withheld` and `banner_all_withheld` before
+  `surveyreports_error_vars_all_na`. `XE-16` runs at `min_eff_n = 0`, so no row
+  sees this.
+- The banner half of the missing-label warning (PR 12 tasks 4 and 5) must also
+  fire before step 15 for the order of spec 3.11 to hold. No task says where it
+  fires.
+
+Options:
+- **A** In PR 13 tasks 11, 15 and 16, raise the three warnings in
+  `export_crosstab()` after the `.apply_all_na_drop()` call, from the withheld
+  frame that `.build_freq_frame()` returns. In PR 12 task 4, raise the banner
+  missing-label warning before the drop. Reword spec 3.11 step 16 to say the
+  row filter runs inside estimation and the warnings run at step 16. Add a
+  second `XE-16` call at the default `min_eff_n`, whose snapshot holds the error
+  alone. — Effort: low, Risk: low, Impact: the order of spec 3.11 is built, not
+  repaired.
+- **B** Move `.build_withheld()` out of `.build_freq_frame()` to step 16, and
+  filter the frame there. — Effort: medium, Risk: medium, Impact: rewrites PR
+  11 tasks 19 and 20.
+- **C** Do nothing — `XV-11` fails first time, and the abort case breaks spec
+  3.19 with no test to show it.
+
+**Recommendation: A** — it moves three `cli_warn()` calls and adds one test
+call.
+
+---
+
+#### Section: test-spec — `TC-09`
+
+**Issue 40: `TC-09` names a wave heading that the code writes with a count**
+Severity: REQUIRED
+An oracle that a literal test fails on correct code.
+
+- `TC-09` (test-spec line 702) reads "Its headings are `Total` and the wave
+  with values only — `w2` for `coll_na_first`, `w1` for `coll_na_second`".
+- `R/export-topline.R:303-308` writes a wave heading as the label, then
+  `"\n(n="`, the count and `")"`. Measured (1d, with the task 45 patch): the
+  cells are `Total` and `w2\n(n=200)`, and `Total` and `w1\n(n=200)`.
+  `export_topline()` gets no presentation change (spec 4.1), so the count stays.
+- An `expect_identical()` on `c("Total", "w2")` fails. A test that checks only
+  that `w1` is absent passes. The row does not say which.
+
+Options:
+- **A** State the cell strings: `Total` and `w2\n(n=200)` for
+  `coll_na_first`, `Total` and `w1\n(n=200)` for `coll_na_second`, and no
+  third heading. — Effort: low, Risk: low, Impact: exact oracle.
+- **B** Say "compare the text before `\n`". — Effort: low, Risk: low, Impact:
+  exact oracle, and independent of the count.
+- **C** Do nothing — the tester guesses.
+
+**Recommendation: B** — the row tests which waves have a column, not the count.
+
+---
+
+#### Section: PR 18 — a stale count
+
+**Issue 41: the PR 18 criterion still counts 15 shared helpers**
+Severity: REQUIRED
+A criterion that reads false on correct code.
+
+- Plan line 2502 reads "`R/export-utils.R` holds the 15 shared helpers of spec
+  2.1". Spec 2.1 now lists 16, and spec VIII reads 16, because
+  `.apply_all_na_drop()` was added.
+
+Options:
+- **A** Change "15" to "16". — Effort: low, Risk: low, Impact: the criterion
+  and spec VIII agree.
+- **B** Do nothing — the PR 18 reviewer counts 16 and fails the criterion.
+
+**Recommendation: A** — one character.
+
+---
+
+#### Section: PR 12 — task order
+
+**Issue 42: the first snapshots of `XV-14` and `XE-16` are taken before the muffle lands**
+Severity: SUGGESTION
+
+- Task 25 writes `XV-14` and task 31 writes `XE-16`, both with a snapshot. Task
+  37 adds the muffle. So both first snapshots record
+  `surveycore_warning_all_na_freqs` (measured in 1a), and both move at task 38.
+  At task 34, `XE-16`'s "the snapshot records the error alone" is false. Task 49
+  reviews moved snapshots, so nothing is lost.
+
+Options:
+- **A** Move tasks 35 to 38 before task 25. — Effort: low, Risk: low, Impact:
+  each snapshot is right when first written.
+- **B** Do nothing — task 49 catches the move.
+
+**Recommendation: A** — the first snapshot should be the one that ships.
+
+---
+
+#### Section: spec 3.18 — a collection edge
+
+**Issue 43: on a collection, a dropped variable that a later wave lacks is still named in the missing-label warning**
+Severity: SUGGESTION
+
+- Spec line 1914 says "a variable dropped at step 15 of section 3.11 is not
+  named here". `TW-03` checks it on a single design only.
+- The collection path writes a placeholder row for a wave that lacks the
+  column, with `question_text = var` (`R/export-utils.R:358-369`). Measured
+  (1d): `q3` all-NA in wave 1 and absent from wave 2 is dropped by the rule,
+  and the warning still names `q3`. The placeholder sets `question_text = var`
+  whatever the label, so a labelled `q3` is named too. For a kept variable this
+  is older behavior and out of scope.
+
+Options:
+- **A** State the limit in spec 3.18 and spec 3.19. — Effort: low, Risk: low,
+  Impact: the sentence is true.
+- **B** Do nothing — the case needs a variable absent from one wave and all-NA
+  in every other.
+
+**Recommendation: A** — one clause.
+
+---
+
+#### Section: PR 12 — task 48
+
+**Issue 44: task 48 cites topline line numbers without the grep note that task 47 gives**
+Severity: SUGGESTION
+
+- Task 47 says the crosstab line numbers are those on `develop` today and to
+  find each return with `grep -n "nrow(frame) == 0L"`. Task 48 cites
+  `R/export-topline.R:218`, `:482` and `:612` with no note. PRs 6 to 9 edit
+  that file first (plan line 2671).
+
+Options:
+- **A** Add the same sentence to task 48. — Effort: low, Risk: low, Impact: no
+  stale line numbers.
+- **B** Do nothing — the grep criterion still finds all six.
+
+**Recommendation: A** — one sentence.
+
+---
+
+#### Section: PR 1, PR 13, PR 14, PR 15 and PR 17 — the rest of the delta
+
+No new issues found beyond issues 39 and 41. PR 1 tasks 2 to 4 and its
+criterion are true against `plans/error-messages.md`. PR 13 task 18 orders
+seven classes. The PR 14 note (plan lines 1775-1778) holds. PR 15 tasks 27 to
+32 and PR 17 tasks 36 and 37 match `XB-12` to `XB-14` and spec 3.16.
+
+#### Section: Scenario coverage
+
+No new issues found beyond issue 40.
+
+---
+
+## Summary (Pass 6)
+
+| Severity | Count |
+|---|---|
+| BLOCKING | 0 |
+| REQUIRED | 5 |
+| SUGGESTION | 3 |
+
+**Total issues:** 8 (issues 37 to 44).
+
+**Prior issues 33 to 36:** 4 RESOLVED, 0 open.
+
+**Verdict: BLOCK.**
+
+**Overall assessment:** The drop is sound where it was measured: group items
+keep their group, a one-item battery renders, no kept variable reaches a
+zero-row frame, and the task 45 fix stops the line 344 crash. The counts and
+cross-references check. But PR 12 leaves two committed tests red, the
+`na.rm = FALSE` sentence is false at surveycore 1.2.0, and the plan does not say
+where the withholding warnings fire, so issues 37 to 41 need an edit before
+`PLAN_READY`.

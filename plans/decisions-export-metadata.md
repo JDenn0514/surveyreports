@@ -1021,3 +1021,682 @@ involved, so this entry records facts.
 The spec is v0.21.0, dated 2026-11-04, and stays at `SPEC_READY`. The plan is
 v4.1.0 and stays at `PLAN_DRAFT`. The test-spec did not mention the pin and is
 unchanged at v0.15.0.
+
+---
+
+## [2026-11-04] — Plan review Pass 2: issues 22 and 23 resolved
+
+### Context
+
+Pass 2 of `plans/plan-review-export-metadata.md` gave BLOCK on one blocking
+issue (22) and one required issue (23). This entry records the two choices.
+
+### Questions & Decisions
+
+**Q: Issue 22 — `air format --check .` fails on `develop` for seven files, and
+six of them are in no PR's write surface. How does PR 1 pass its own gate?**
+- Options considered:
+  - **A:** Add the six files to the write surface of
+    `chore/export-metadata-infra`, and format them in the formatting commit of
+    task 19.
+  - **B:** Add an `air.toml` that excludes `data-raw/`, and add
+    `tests/testthat/test-pool-pvals.R` alone. This adds a formatter config that
+    no spec asks for, and it leaves five files unformatted.
+- **Decision:** A.
+- **Rationale:** Measured again on 2026-11-04 at `6b83e5f`: the same seven
+  files fail. One declared formatting commit at the head of the chain makes the
+  gate true for all nineteen PRs, and the write surface names every file the
+  command writes.
+
+**Q: Issue 23 — the plan's `XE-07` criterion names three removed arguments, and
+the test-spec row names two. Which document changes?**
+- Options considered:
+  - **A:** Add `show_eff_n = TRUE` to the `XE-07` row of the test-spec.
+  - **B:** Drop `show_eff_n` from the plan's criterion, and rely on the grep
+    that shows the argument is gone.
+- **Decision:** A.
+- **Rationale:** The tester reads only the test-spec. Option B leaves no test
+  that asserts a call passing `show_eff_n` gets an error.
+
+### Changes
+
+- Plan v4.2.0: PR 1 task 19 names the six extra files. The PR 1 write surface
+  and the file-by-file table list them. The header and the scenario-coverage
+  section cite test-spec v0.16.0.
+- Test-spec v0.16.0: the `XE-07` row, the removed-arguments paragraph and the
+  template-coverage row 9 name `show_eff_n`. The scenario count is unchanged.
+
+### Outcome
+
+Issues 22 and 23 are resolved. Suggestions 24 and 25 are open and do not block.
+The Pass 3 delta review gave PASS on 2026-11-04. Its two suggestions were
+applied: line 17 no longer cites a spec version, and task 19 says the
+formatting commit holds seven files. The plan is v4.3.0 at `PLAN_READY`.
+
+## [2026-11-05] — Variance cells: width, wrapping and row height
+
+### Context
+
+A mockup review of the rebuilt crosstab showed a gap in spec v0.21.0. Under
+`variance_display = "cell"`, section 3.12 puts the variance on a second line
+inside the estimate cell. Section 3.16 turned wrapping on only for the label
+column and the heading row, and set a height only for the heading row. Excel
+shows a line break in a cell without wrapping on one line, as
+`35.6%(32.6% – 38.6%)`. With wrapping and the default 15-point height, the
+second line is hidden.
+
+Section 3.16 also fixed each data column at 12 characters. An interval string
+at `decimals = 1` is 15 characters, as in `(10.3% – 14.5%)`, and up to 17 with
+a negative or a three-digit bound, as in `(-10.5% – 100.4%)`. Section 3.12 does
+not clip the bounds. Under `variance_display = "row"` the interval sits in the
+same column, so the gap exists under both displays.
+
+### Questions & Decisions
+
+**Q: How should a two-line variance cell and a 15-character interval fit a
+12-character column?**
+- Options considered:
+  - **A:** Three rules. Under `variance = "ci"`, each data column is
+    `15 + 2 * decimals` characters wide, under both displays. When `variance`
+    is set and `variance_display = "cell"`, every data cell of an estimate row
+    wraps, and every estimate row is fixed at 30 points. In every other case
+    the width stays 12 and the old wrapping and height rules stand.
+  - **B:** Keep the width at 12, and let the interval wrap onto a third line.
+    The cell then needs a third line of height, and one interval reads across
+    two lines.
+  - **C:** Do nothing. The cell shows both lines run together, and the
+    interval is cut off at the column edge.
+- **Decision:** A, chosen by the user after the mockup review showed the gap.
+- **Rationale:** the width depends on the arguments only, never on cell
+  content, so it stays fixed and snapshots stay stable, for the reason section
+  3.16 already gives. At `decimals >= 1` a bound prints at most
+  `5 + decimals` characters, and the parentheses and the separator add 5, so
+  the widest interval is `15 + 2 * decimals`: 17 at `decimals = 1`, 19 at
+  `decimals = 2`. At `decimals = 0` the widest interval, `(-10% – 100%)`, is 13
+  characters, and the formula gives 15. One formula is kept for every
+  `decimals` value. A standard error needs no change: `(100.0%)` is 8
+  characters at `decimals = 1`.
+
+### Changes
+
+- Spec v0.22.0: section 3.16 changes the Column widths and Wrapping rows, adds
+  an Estimate row height row, and adds the derivation of `15 + 2 * decimals`.
+  The Heading row height row gains one sentence: a wider data column holds the
+  same heading in two lines or fewer. Section 3.12 cites the three rules.
+- Test-spec v0.17.0: six new rows, `XB-05` to `XB-10`. Template-coverage row 8
+  cites them. The scenario count goes from 178 to 184.
+- Plan v4.4.0: PR 17, `feature/crosstab-variance-strings`, owns the three
+  rules, because all three depend on `variance_display`, which PR 17 adds. It
+  gains 13 tasks, four acceptance criteria and the six scenario ids. The
+  scenario-coverage table and the family check give 184. The status returns
+  to `PLAN_DRAFT`.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.4.0 at `PLAN_DRAFT` and needs a delta review of PR 17 before it returns to
+`PLAN_READY`.
+
+### Pass 4 fixes
+
+The delta review, `plans/plan-review-export-metadata.md` Pass 4, gave a BLOCK
+with issues 28 to 32. The user chose the recommended option, A, for all five.
+The versions stay at spec 0.22.0, test-spec 0.17.0 and plan 4.4.0.
+
+- **28.** `XB-01` and `XB-05` to `XB-07` compare `floor()` of the stored
+  width, and `XB-01` states that openxlsx2 1.28 adds `0.711` to a set width.
+  PR 15 task 8 and PR 17 task 30 say "has the integer part".
+- **29.** PR 15 names two sites in `R/export-crosstab.R`: `export_crosstab()`
+  for the widths and the label-column wrap, and `.render_block_preamble()`
+  for the heading wrap, the heading height and the freeze pane. PR 17 task 32
+  names `export_crosstab()`. `R/export-utils.R` leaves PR 15's write surface
+  and its row in the file table, because no PR 15 task changes it.
+- **30.** The PR 17 note says that the `"ci"` width depends on `variance` and
+  `decimals` only, and that it lands in PR 17 because PR 17 first writes the
+  interval. This corrects the reason in the Changes list above. The PR 15
+  width criterion gains "at `variance = NULL`".
+- **31.** Spec 3.16 says a bound prints at most 5 characters at
+  `decimals = 0`, and that `(-100% – 1000%)`, 15 characters, fills the width
+  exactly. The `"se"` paragraph adds `(100.00%)` at `decimals = 2` and says the
+  width of 12 holds up to `decimals = 5`.
+- **32.** PR 17 tasks 38 and 39 become tasks 38 to 43, one per render route,
+  as tasks 7 to 9 are. Each later task number goes up by 4, so PR 17 has 51
+  tasks.
+- Review notes: spec 3.12's line of 89 characters is rewrapped, and the
+  Changes list above names the Heading row height sentence.
+- **Found while applying 31.** The derivation's range sentence read as a limit
+  before rounding. `round(-99.96, 1)` prints `-100.0%`, 7 characters, and the
+  worst string is then 19 characters against 17. The sentence now limits the
+  bound as printed: `-99.9%` to `999.9%` at `decimals >= 1`. It states that a
+  wider string is not fully visible, and that the export raises no condition.
+- **Open: the freeze pane on the stacked sheet.** The spec does not say where
+  the pane goes on the `"Crosstab"` sheet. With the pane set in
+  `.render_block_preamble()`, each block resets it and the last block wins.
+  The user has not decided this yet.
+
+---
+
+## [2026-11-05] — Freeze pane on the stacked sheet
+
+### Context
+
+Spec v0.22.0, section 3.16, puts the freeze pane below the last heading or
+sample-size row, and writes none under `sample_size_display == "bottom"`. It
+does not say where the pane goes on the stacked layout. There, every question
+block goes on one sheet named `"Crosstab"`. Plan v4.4.0, PR 15 task 21, sets
+the pane in `.render_block_preamble()`, which runs once per block. So each
+block resets the pane and the last block's position wins. The Pass 4 fixes
+above logged this as open.
+
+### Questions & Decisions
+
+**Q: Where does the freeze pane go on the stacked sheet?**
+- Options considered:
+  - **A:** The first block only, below that block's last heading or
+    sample-size row. Later blocks set no pane.
+  - **B:** No pane on the stacked sheet.
+  - **C:** The last block wins, as the plan now does.
+- **Decision:** A, chosen by the user.
+- **Rationale:** every block on the stacked sheet uses the same banner
+  columns, so the first block's headings describe every column below them.
+  Under C, the pane falls deep in the sheet, so the frozen rows can be
+  taller than the window.
+  The per-question layout is unchanged: each sheet gets its pane from its own
+  block. The `"bottom"` rule, no pane, is unchanged on both layouts.
+- **Mechanism:** `.render_block_preamble()` sets the pane only when
+  `start_row == 1L`. The first block on every question sheet starts at row 1:
+  `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question
+  layout, and `:275` sets `current_row <- 1L` on the stacked sheet. The
+  helper needs no new argument, so its signature in spec 2.2 and PR 14 stay
+  as they are. A `set_freeze` argument was rejected: the three render routes
+  call the preamble, so the flag would pass through three route signatures
+  and four call sites, and each caller would compute it from the row anyway.
+
+### Changes
+
+- Spec v0.23.0: the Freeze pane row of section 3.16 states the rule and the
+  `start_row == 1L` condition. The `.render_block_preamble()` comment in
+  section 2.2 cites it. The signature does not change.
+- Test-spec v0.18.0: one new row, `XB-11`, for the stacked sheet. It expects
+  the pane's top-left cell at `A7` and reads it from the sheet's
+  `freezePane` field, measured on openxlsx2 1.28. Template-coverage row 3
+  cites it. The scenario count goes from 184 to 185, and the XB family from
+  10 to 11.
+- Plan v4.5.0: PR 15 gains tasks 23 to 26, one acceptance criterion and the
+  id `XB-11`. Its later tasks move up by 4, so PR 15 has 45 tasks. The
+  scenario-coverage table and the family check give 185. PR 14 does not
+  change.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.5.0 at `PLAN_DRAFT` and needs a delta review of PR 15 before it returns to
+`PLAN_READY`.
+
+---
+
+## [2026-11-05] — Plan review Pass 5: issues 33 to 36
+
+### Context
+
+Pass 5 of `plans/plan-review-export-metadata.md` is a delta review of
+`886cee4` and `b3c73a0`, against plan v4.5.0, spec v0.23.0 and test-spec
+v0.18.0. Its verdict is BLOCK. It raises two REQUIRED issues, 33 and 34, and
+two suggestions, 35 and 36. It also notes that the tolerance column of `XB-02`
+says "rounded" where `XB-01` uses `floor()`.
+
+### Questions & Decisions
+
+**Q (issue 33): What does a question write when its frequency frame has no
+rows?**
+- Context: each render route returns early on a zero-row frame and writes
+  nothing (`R/export-crosstab.R:506-508`, `:661-663`, `:781-783`). Pass 5
+  measured it on the fixture's `all_na_var`. So `XX-03` fails in PR 15, and a
+  stacked sheet whose first question is all-NA has no block at row 1 and gets
+  no freeze pane.
+- Options considered:
+  - **A:** Write the block with no response rows, and take the question text
+    from the design.
+  - **B:** Keep the return, and advance the stacked row cursor only after a
+    block that wrote a row. `XX-03` still fails.
+  - **C:** Do nothing.
+- **Decision:** A, chosen by the user.
+- **Rationale:** one change makes `XX-03` pass, and the first block on every
+  sheet starts at row 1, so the stacked pane rule stands.
+- **Mechanism:** the block keeps the title, the base note and the legend when
+  present, the spanner and heading rows, and the sample-size rows. It has no
+  response row. The withheld lines under `withheld_note = "every"` follow as
+  usual. The question text comes from the design, in the order
+  `.extract_var_meta()` uses (`R/export-utils.R:172-188`): the variable
+  label, then the question preface, then the column name. The column groups
+  cannot come from the frame: `.build_col_groups()` reads its levels from the
+  frequency frame (`R/export-crosstab.R:358-398`), so an empty frame gives
+  none. They come from the kept levels of spec 3.5, which the caller already
+  holds: the `.resolve_eff_n()` levels of each banner column and interaction,
+  less the withheld ones. The counts ignore the tabulated variable (spec 3.4),
+  so the sample-size cells are the same as for any other question.
+  `export_topline()` keeps its own early return (spec 4.1).
+
+**Q (issue 34): How wide is the second label column of a battery block?**
+- Context: spec 3.16 set 44 for "the label column" and 12 for each data
+  column. A battery block has two label columns, `Item` and `Response`. No
+  rule named the width or the wrap of the second, and no scenario ran a
+  battery.
+- Options considered:
+  - **A:** State the width and the wrap, and a rule for a stacked sheet.
+  - **B:** Give it the data width, with no wrap.
+  - **C:** Do nothing.
+- **Decision:** A, at **20 characters**, with wrapping on for its cells. The
+  assistant proposed the width of 20. It is applied pending the user's
+  objection.
+- **Rationale:** 12 cuts off a long response label, which is the risk the
+  review names for option B. 44 doubles the label area of every battery
+  block. With the wrap on, a label longer than 20 characters goes onto a
+  second line.
+- **Mechanism:** a width is set per column. On a per-question battery sheet,
+  column B is a label column only and is 20. On a stacked sheet that holds a
+  battery block, column B is a label column in the battery block and a data
+  column in other blocks. So it takes the larger of 20 and the data-column
+  width in force: 12, or `15 + 2 * decimals` under `variance = "ci"`. That is
+  20 up to `decimals = 2` and `15 + 2 * decimals` from 3. The wrap is set on
+  the battery's `Response` cells by `.render_crosstab_battery()`, not on the
+  whole column.
+
+**Q (issue 35): Is the stated reason for the stacked pane true?**
+- Context: the entry above, "Freeze pane on the stacked sheet", gives the
+  reason "every block on the stacked sheet uses the same banner columns". The
+  banner levels are the same in every block. Their positions are not: a
+  battery block is one column wider. The frozen title also names the first
+  question only.
+- Options considered: **A** keep the rule and reword the reason; **B** change
+  the rule; **C** do nothing.
+- **Decision:** A. The rule does not change.
+- **Rewording:** the frozen rows show the first block's title and headings.
+  The floor ignores the tabulated variable, so every block withholds the same
+  banner levels. Above a battery block, which is one column wider, the frozen
+  headings sit one column to the left of its data. The frozen title names the
+  first question only. The rule is kept with these limits. This replaces the
+  rationale of the entry above, which is not edited.
+
+**Q (issue 36): Is the width range sentence of spec 3.16 exact?**
+- Context: it was exact at `decimals = 1` only.
+- Options considered: **A** rewrite it with the limits at 0, 1 and 2; **B** do
+  nothing.
+- **Decision:** A, with one correction to the review's wording. The review
+  proposed "a standard error of at least 51 percentage points". Rechecked in
+  R 4.6.1: the threshold at `decimals = 1` and an estimate of 0 is
+  `99.95 / qnorm(0.975)`, which is 50.996. A standard error between 50.996 and
+  51 also breaks the width, so "at least 51" is not exact. The spec states
+  50.996, and 51.019 at `decimals = 2` and 509.958 at `decimals = 0`.
+- **Measured:** the widest strings inside the limits, `(-999% – 9999%)`,
+  `(-99.9% – 999.9%)` and `(-99.99% – 999.99%)`, are 15, 17 and 19
+  characters. The first strings outside, `(-1000% – 9999%)`,
+  `(-100.0% – 999.9%)` and `(-100.00% – 999.99%)`, are 16, 18 and 20.
+
+**Q: Where does the stacked all-NA case go, `XB-11` or a new row?**
+- **Decision:** a new row, `XB-12`. `XB-11` tests that a later block sets no
+  pane. `XB-12` tests that a first block with no data rows is still written
+  and sets the pane. A failure of either id then names its cause, and each
+  maps to its own tasks.
+
+**Q: Which PR owns `XX-03`?**
+- **Decision:** PR 14, `feature/crosstab-label-cols-and-sizes`. The fix lands
+  there, before tasks 35 to 37 adopt `.render_block_preamble()`, so the test
+  that fails without it lands there too. `XX-03` runs against
+  `export_topline()` as well, so PR 14's write surface gains
+  `tests/testthat/test-export-topline.R`.
+
+### Changes
+
+- Spec v0.24.0, section 3.16: a paragraph on the zero-row frame states the
+  block, the question-text source and the column-group source. Rows 8…k and
+  k+2 of the row table name their conditions. The Column widths row adds the
+  battery's `Response` column at 20 and the stacked larger-of rule. The
+  Wrapping row adds the battery's `Response` cells. The Freeze pane row
+  carries the reworded reason and cites `XB-12`. The range sentence is
+  rewritten. Section 2.2's `.render_block_preamble()` comment and the all-NA
+  row of section 3.19 cite the zero-row rule.
+- Test-spec v0.19.0: `XB-01` gains a per-question battery call. `XB-02`'s
+  tolerance reads `floor()`, as `XB-01`. `XX-03` expects the written block, the
+  sample-size cells of a `q1` call, and the topline half as call and path only.
+  New rows `XB-12`, `XB-13` and `XB-14`. Template-coverage rows 3, 7 and 8 cite
+  them. The XB family goes from 11 to 14, and the scenario count from 185 to
+  188.
+- Plan v4.6.0: PR 14 gains tasks 28 to 34, one note, two criteria, `XX-03`
+  and `tests/testthat/test-export-topline.R`. It has 56 tasks and owns 13
+  scenarios. PR 15 gains tasks 27 to 32, two criteria, `XB-12` and `XB-13`,
+  and changes tasks 8 and 10, its site note and its `XB-01` criterion. It
+  loses `XX-03`. It has 51 tasks and owns 17 scenarios. PR 17 gains tasks 36
+  and 37, one criterion and `XB-14`. It has 53 tasks and owns 16 scenarios.
+  The coverage table gives 188, and the family check 156 plus 32.
+
+### Open
+
+- **The missing-label warning reads the frame.** Spec 3.18 triggers
+  `surveyreports_warning_missing_variable_label` on a `vars` column with no
+  variable label. The code tests the frame (`.emit_missing_label_warning()`,
+  `R/export-utils.R:574-590`, called from `.build_freq_frame()`). A column
+  with a zero-row frame is never tested. `all_na_var` has no label, so its
+  block title is the column name and no warning names it. The helper is
+  shared with `export_topline()`, so a fix changes topline output as well.
+  Not resolved here.
+- **surveycore's "Returning 0 rows" warning.** Pass 5 saw it raised from
+  `.build_freq_frame()` on `all_na_var`. No spec section says whether it
+  reaches the caller. Not resolved here.
+
+### Outcome
+
+The spec stays at `SPEC_READY` and the test-spec at `SPEC_READY`. The plan is
+v4.6.0 at `PLAN_DRAFT` and needs a delta review of PRs 14, 15 and 17 before it
+returns to `PLAN_READY`.
+
+### Open items decided
+
+The user decided both items of **Open** above on 2026-11-05, as the assistant
+recommended.
+
+**Q: What does the missing-label warning check?**
+- **Decision:** the design, not the frequency frame. The warning checks each
+  resolved `vars` column and each `banner` column. It still raises one
+  warning per call, listing every affected column.
+- **Mechanism:** `.emit_missing_label_warning(design, vars, banner = NULL)`,
+  called once from `.build_freq_frame()`. A `vars` column is named when
+  `surveycore::extract_var_label()` gives no label and
+  `surveycore::extract_question_preface()` gives no preface. A `banner`
+  column is named when `.banner_heading()` falls back. On a collection the
+  helper reads each member, and a column is named when it falls back in any
+  member.
+- **Measured** (surveycore 1.2.0, `make_all_designs(seed = 42)`):
+  - Today's check names `q1` and not the SATA or battery members. Those
+    members carry a preface and no label. The new rule keeps that result.
+  - Both extractors abort on a `survey_collection` with
+    `surveycore_error_not_survey_or_df`.
+  - On a two-wave collection, today's check names `q1` when `q1` has a label
+    in one wave only. The any-member rule keeps that result.
+  - `extract_var_label(d, col)`, with `col` a character variable, raises
+    `lifecycle_warning_deprecated`. `tidyselect::all_of(col)` raises nothing.
+- **Effect on `export_topline()`:** the helper is shared, so a topline call on
+  `all_na_var` now names it. No cell moves and no line of
+  `R/export-topline.R` changes. This is a deliberate change (spec 4.1).
+
+**Q: Does surveycore's "Returning 0 rows" warning reach the caller?**
+- **Decision:** no. The three frequency helpers muffle it by class, beside
+  `surveycore_warning_small_cell`. The crosstab block with no response row
+  shows that the question has no data.
+- **Measured class:** `surveycore_warning_all_na_freqs`, then
+  `rlang_warning`, `warning`, `condition`. The message reads "All values of
+  all_na_var are `NA` with `na.rm = TRUE`. Returning 0 rows." The class is the
+  same on the taylor, replicate and twophase designs, with and without
+  `group`. The fixture has no nonprob design yet.
+- **Cost:** `export_topline()` keeps its early return, so it writes no block
+  for an all-NA column. A labelled all-NA column then leaves no sign in a
+  topline call (spec VI).
+
+**Found while measuring, not decided here.** `export_topline()` on a
+two-wave collection with `vars = c(q1, q2, all_na_var)` aborts today:
+"subscript out of bounds" at `first$question_text[[1L]]`
+(`R/export-utils.R:344`). Spec 3.19 says an all-NA call succeeds.
+
+### Changes for the open items
+
+- Spec v0.25.0: section 2.1 adds the changed helpers. Section 2.2 corrects
+  "two frequency helpers" to three in the `.resolve_eff_n()` comment, and the
+  `.banner_heading()` comment names the warning helper. Section 2.3 gives the
+  new `.emit_missing_label_warning()` signature and the muffle. Section 3.16
+  points to 3.18. Section 3.18 extends the missing-label row and adds a table
+  of the two muffled surveycore classes. The all-NA row of section 3.19 states
+  both warnings. Section 4.1 gains a row, and its count goes from three to
+  five. Section V states that the change is not breaking. Section VI gains a
+  row for the topline cost.
+- Test-spec v0.20.0: new rows `XV-14`, `XV-15`, `TW-03` and `TW-04`. Topline
+  template section 7 is covered, so the totals read 20 covered and 2 N/A. The
+  behavior list gains items 7 and 8, and the crosstab items become 9 to 16.
+  The XV family goes from 13 to 15, TW from 2 to 4, and the scenario count
+  from 188 to 192.
+- Plan v4.7.0: PR 12 gains tasks 2 to 9 and a rewritten task 13. The old
+  tasks 2 to 29 become 10 to 37. It gains three criteria, `XV-14`, `XV-15`,
+  `TW-03`, `TW-04` and `tests/testthat/test-export-topline.R`. It has 37 tasks
+  and owns 14 scenarios. The coverage table gives 192, and the family check
+  158 plus 34.
+
+The plan stays at `PLAN_DRAFT`. The next delta review covers PR 12 as well as
+PRs 14, 15 and 17.
+
+---
+
+## [2026-11-05] — An all-NA variable is dropped, with a warning
+
+### Context
+
+The entry above, "Plan review Pass 5: issues 33 to 36", chose option A for
+issue 33: `export_crosstab()` writes a block with no response row for a
+question whose frequency frame has no rows. Its "Open items decided" made the
+missing-label warning read the design, and muffled
+`surveycore_warning_all_na_freqs`. Commit `bb84e8d` applied both, in spec
+v0.25.0, test-spec v0.20.0 and plan v4.7.0. The user then replaced the empty
+block. That entry is not edited.
+
+### Questions & Decisions
+
+**Q: What does the output hold for an all-NA variable?**
+- Options considered:
+  - **A:** An empty block, as `bb84e8d` wrote it: the title, the headings and
+    the sample-size rows, with no response row. The question text comes from
+    the design, and the column groups from the kept levels.
+  - **B:** Nothing. The variable is dropped from the output, and the caller
+    gets a warning.
+- **Decision:** B, chosen by the user. It applies to `export_topline()` and to
+  `export_crosstab()`.
+- **Effect:** every rendered block has at least one response row. The
+  preamble reads its question text and its column groups from the frame on
+  every call. The missing-label warning can read the frame again. The new
+  warning gives back the signal that the muffle takes away.
+
+**Q: What rules does the drop follow?**
+- **Decision:** five rules. The assistant recommended them, and the user
+  accepted them.
+  1. One classed warning per call, `surveyreports_warning_all_na_dropped`,
+     listing every dropped variable, with a `"!"` and an `"i"` bullet.
+  2. When no variable is left, the call aborts with
+     `surveyreports_error_vars_all_na`. The name follows
+     `surveyreports_error_vars_all_dropped`, the class the role guard raises
+     when it empties `vars` (spec 3.10).
+  3. A SATA or battery item is dropped only when that item is all-NA. The
+     group is dropped only when every item is. The warning names each dropped
+     item.
+  4. On a domain-restricted design, all-NA means inside the domain. On a
+     `survey_collection`, a variable is dropped only when it is all-NA in every
+     wave. A variable all-NA in some waves keeps its block, and those waves
+     follow the existing rule for a wave with no rows.
+  5. The muffle of `surveycore_warning_all_na_freqs` stays, so the caller gets
+     one warning, not two.
+
+**Q: Where in spec 3.11 does the drop run?**
+- **Decision:** a new step 15, after estimation (step 14) and before
+  withholding, the workbook build and rendering, which become steps 16 to 18.
+  In `export_topline()` it is step 9 of 11. The abort runs in the same step,
+  before the workbook build, so no file is written. The assistant chose the
+  step; it follows from the user's rule that the drop runs before the render
+  loop.
+- **Rationale:** the test reads the frequency frame. A variable is all-NA
+  when the frame holds no `"total"` row for it. So the test uses the row scope
+  and the `na.rm` value of `get_freqs()`, and it cannot disagree with the frame
+  a route would receive. A test on the design columns would need its own reader
+  for the domain, the twophase subset, each wave of a collection and `na.rm`.
+- **Before the render loop:** the variable leaves `vars` and `classify_out`,
+  so no block is written for it, the row cursor does not move, and no
+  per-question sheet is added. The first block of every sheet starts at row 1,
+  so the freeze pane rule of spec 3.16 (`start_row == 1L`) is unchanged.
+- **Three consequences, stated in the spec:**
+  - Under `na.rm = FALSE` an all-NA variable keeps its `na_label` row, so it
+    has a row and is not dropped (spec 2.2). This reading of rule 4 is the
+    assistant's and needs the user's check.
+  - Classification runs first, so a group cut to one item keeps its group
+    type, id and preface. A group cut to one item by the role guard does not
+    (spec 3.10). Spec VI records the difference.
+  - A dropped variable leaves a gap in the group ids. The render loop reads a
+    group id as a key only (`R/export-crosstab.R:200-345`).
+
+**Q: What happens to the `nrow(frame) == 0L` early returns?**
+- **Decision:** all six are deleted: `R/export-crosstab.R:506`, `:661` and
+  `:781`, and `R/export-topline.R:218`, `:482` and `:612`.
+- **Rationale:** after the drop no input reaches them. A variable that
+  survives has a `"total"` row. Withholding removes subgroup rows only, by
+  `subgroup_value` (`R/export-utils.R:498`), and `show_total = FALSE`
+  keeps every response row (spec 3.19). Decision 1 of 2026-09-16 deleted an
+  unreachable topline branch rather than mark it `# nocov`, because a marker
+  keeps the branch for the next reader to re-derive. The same rule applies.
+  The deletion is the sixth item of the `R/export-topline.R` write surface
+  (spec 4.1).
+
+**Q: What happens to the scenarios that `bb84e8d` added?**
+- `XB-12` is rewritten: `all_na_var` writes nothing, `q1` starts at row 1, the
+  pane sits at `A7`, and the warning fires.
+- `XV-14` and `TW-03` are repurposed for several variables dropped at once.
+  `bb84e8d` added both ids, and no code implements them, so none is retired.
+- `XV-15` and `TW-04` keep the muffle and also assert the new warning.
+- `XX-03` is rewritten for the drop and moves from PR 14 back to PR 12.
+
+**Measured** (2026-11-05, surveycore 1.2.0, R 4.6.1, `make_all_designs(seed =
+42)$taylor`):
+- `export_topline(d, vars = all_na_var)` writes a `"Topline"` sheet with no
+  data. `export_crosstab(d, vars = all_na_var, banner = group)` writes an empty
+  `all_na_var` sheet. Both calls now abort (spec V).
+- On a two-wave collection, `q3` all-NA in wave 1 and with values in wave 2
+  aborts `export_topline()` with "subscript out of bounds" at
+  `R/export-utils.R:344`. The reverse order returns the path, and the `q3`
+  block has the headings `Total` and `w1` only. So the drop alone does not
+  remove the crash: the pooled `Total` must take its question text from the
+  first wave with rows (spec 2.3).
+- `classify_question_type()` keeps `bat_1` in battery group 1 when `bat_1` is
+  all-NA.
+- `get_freqs()` on a column that is `NA` on every in-domain row and has values
+  outside the domain raises `surveycore_warning_all_na_freqs`.
+
+### What it reverts
+
+- Spec: the empty-block paragraph of 3.16, the condition on rows 8…k, the
+  question-text comment of `.render_block_preamble()` in 2.2, the all-NA row of
+  3.19 and the empty-block sentence of the Freeze pane row.
+- Spec: the design-reading missing-label rule — the
+  `.emit_missing_label_warning(design, vars, banner = NULL)` signature, the
+  rule on a column with no label and no preface, the 4.1 row, the paragraph of
+  V and the topline cost row of VI. The `banner` extension of 3.18 stays: it
+  was in spec v0.23.0, before `bb84e8d`.
+- Plan: PR 14 tasks 28 to 34, its two criteria, `XX-03` and
+  `tests/testthat/test-export-topline.R`. PR 12 tasks 2 to 5 and the rewritten
+  task 13.
+
+### Changes
+
+- Spec v0.26.0: section 1.2 names the drop as a behavior in neither part.
+  Section 2.1 adds `.apply_all_na_drop()`, the six deleted returns and the
+  `.build_freq_frame()` change, and counts 19 new helpers, 16 shared, 7 new
+  error classes and 5 new warning classes. Section 2.2 gives the new helper;
+  2.3 gives the collection change and the muffle. Section 3.11 adds step 15,
+  and its list grows to 18 steps, 11 for topline, and 7 warnings in order.
+  Sections 3.16 to 3.19 state the drop, the two classes and five edge-case
+  rows. Section 4.1 widens the topline write surface to six items. Section V
+  adds one breaking change. Section VI replaces one cost row with two. Section
+  VIII adds two checks and one invariant. Section XI records the replacement.
+- Test-spec v0.21.0: new `XE-16`, `XX-14`, `XX-15`, `XX-16`, `TC-09`, `TC-10`
+  and `TE-05`. `XB-12`, `XV-14`, `XV-15`, `XX-03`, `TW-03` and `TW-04` are
+  rewritten, and `XV-11` gains the new warning. Topline template section 7 is
+  N/A again: 19 covered, 3 N/A. XE goes from 15 to 16, XX from 12 to 15, TC
+  from 8 to 10, TE from 4 to 5, and the count from 192 to 199.
+- Plan v4.8.0: PR 1 tasks 2 to 4 add the two rows to
+  `plans/error-messages.md`. PR 12 lands the drop, with tasks 25 to 49; its
+  banner tasks return to 2 to 24. It has 53 tasks, owns 22 scenarios and
+  gains `R/export-topline.R`. PR 13 task 18 orders seven classes. PR 14 has 49
+  tasks and owns 12 scenarios. PR 15 rewrites tasks 27, 28 and 39 and the
+  `XB-12` criterion. The coverage table gives 199, and the family check 162
+  plus 37.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.8.0 at
+`PLAN_DRAFT`. The next delta review covers PRs 1, 12, 13, 14 and 15, and still
+PR 17.
+
+## [2026-11-05] — Plan review Pass 6: issues 37 to 41, and the plan is ready
+
+### Context
+
+Pass 6 of `plans/plan-review-export-metadata.md` is a delta review of
+`b3c73a0..c6f5220`, against plan v4.8.0, spec v0.26.0 and test-spec v0.21.0.
+Its verdict is BLOCK. It raises five REQUIRED issues, 37 to 41, and three
+suggestions, 42 to 44. The user agreed that the plan is ready once the
+REQUIRED issues of this pass are fixed, with no further review pass.
+
+### Questions & Decisions
+
+**Q (issue 38): What does an all-NA variable do under `na.rm = FALSE`?**
+- Context: the entry above, "An all-NA variable is dropped, with a warning",
+  says that under `na.rm = FALSE` an all-NA variable keeps its `na_label` row
+  and is not dropped. It marks that reading as the assistant's, pending the
+  user's check. That entry is not edited. This entry replaces its choice.
+- The premise is false. Pass 6 measured it on surveycore 1.2.0 and
+  `make_all_designs(seed = 42)`: `get_freqs(d, all_na_var, na.rm = FALSE)`
+  aborts with `surveycore_error_all_na`, with and without `group = group`,
+  and for a column all-NA inside the domain. The class vector is
+  `surveycore_error_all_na`, `rlang_error`, `error`, `condition`. So in PR 18
+  such a call aborts at step 14, before the drop, and writes no file.
+- Options considered:
+  - **Drop it too:** under `na.rm = FALSE` the three frequency helpers catch
+    `surveycore_error_all_na` by class and return zero rows. Step 15 drops the
+    variable with the same warning. When no variable is left,
+    `surveyreports_error_vars_all_na` applies.
+  - **Let surveycore's error through:** spec 3.19 states that
+    `surveycore_error_all_na` reaches the caller. A call that is valid at
+    `na.rm = TRUE` then fails at `FALSE`.
+  - Pass 6 also listed a third option: recode `NA` before `get_freqs()` and
+    keep one `na_label` row. It was not chosen.
+- **Decision:** drop it too, chosen by the user.
+- **Mechanism:** the helpers catch by class, never all errors, and only under
+  `na.rm = FALSE`. Under `na.rm = TRUE` they catch nothing. A SATA or battery
+  item and a column all-NA inside the domain follow the same rule.
+  `export_topline()` takes no `na.rm`, so the rule does not reach it, and the
+  collection case does not arise.
+- **Effect:** an all-NA variable is dropped whatever the `na.rm` value. Spec
+  2.2, 2.3, 3.13, 3.18, 3.19 and XI state it. New scenario `XX-17`. PR 18
+  tasks 32 to 35 and one criterion.
+
+**The other four issues take the review's recommendation.**
+- Issue 37, option A: PR 12 task 34 deletes the two committed blocks named
+  "handles all-NA variable without crashing", one in each export test file.
+  `XX-03`, `XE-16` and `TE-05` replace them.
+- Issue 39, option A: spec 3.11 step 16 and the warning-order paragraph give
+  each warning its site. `export_crosstab()` raises the three withholding
+  warnings after the `.apply_all_na_drop()` call, and the missing-label
+  warning before it. PR 12 task 5 and PR 13 tasks 11, 15 and 16 name the
+  site. PR 13 tasks 18 and 19 add a second `XE-16` call at the default floor.
+- Issue 39, one more change: `XE-16` moves from `banner = group` to the
+  labelled `gen` banner. `group` has no variable label, so the banner half of
+  the missing-label warning would fire before the abort.
+- Issue 40, option B: `TC-09` compares the text of each heading cell before
+  the first `\n`. It also states the measured cells, `w2\n(n=200)` and
+  `w1\n(n=200)`.
+- Issue 41, option A: the PR 18 criterion reads 16 shared helpers, as spec
+  VIII does. No other stale helper count was found.
+
+### Open items
+
+- Suggestions 24 and 25 (Pass 2) and 42, 43 and 44 (Pass 6) are open.
+- Issues 7, 17 and 20 stay PARTIAL.
+
+### Changes
+
+- Spec v0.27.0: sections 2.1, 2.2, 2.3, 3.11, 3.13, 3.18, 3.19 and XI. Section
+  3.19 gains one row. No helper, error class or warning class is added.
+- Test-spec v0.22.0: new `XX-17`. `XE-16`, `XV-11` and `TC-09` are rewritten.
+  Behavior item 15, the edge-case note and crosstab template section 7 name
+  the new rule. XX goes from 15 to 16, and the count from 199 to 200.
+- Plan v4.9.0: PR 12 has 54 tasks, PR 13 has 46 and PR 18 has 55. PR 18 owns
+  18 scenarios. The coverage table gives 200, and the family check 163 plus
+  37. The ordering table gains two rows. The notes count four test edits that
+  cross a PR boundary.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.9.0 at
+`PLAN_READY`, with no further review pass, by the user's decision.
