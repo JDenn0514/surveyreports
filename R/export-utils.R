@@ -166,6 +166,152 @@
   n / deff
 }
 
+# Raw N and effective N per subgroup, delegated to
+# surveycore::get_effective_n(). One source for both counts.
+#
+# Returns a tibble of `level` (chr), `n` (int) and `n_eff` (dbl):
+# - group_var = NULL on a single design: one row, level = NA_character_.
+# - group_var = NULL on a survey_collection: one row per member, and level is
+#   the wave name from the `.survey` column. The caller joins on the wave name.
+# - group_var set: one row per observed level. Levels are labels, in the
+#   vocabulary of surveycore::get_freqs(). group_var may name a banner column
+#   or the synthetic interaction column.
+# na.rm goes to get_effective_n() unchanged. The caller passes the value it
+# passes to get_freqs(), so a missing-value banner level has a row here when
+# it has a column there.
+# Muffles surveycore_warning_small_cell, as the frequency helpers do, and
+# raises no warning of its own.
+#' @keywords internal
+#' @noRd
+.resolve_eff_n <- function(design, group_var = NULL, na.rm = TRUE) {
+  out <- withCallingHandlers(
+    if (is.null(group_var)) {
+      surveycore::get_effective_n(design, na.rm = na.rm)
+    } else {
+      surveycore::get_effective_n(
+        design,
+        group = !!rlang::sym(group_var),
+        na.rm = na.rm
+      )
+    },
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+  )
+
+  level <- if (S7::S7_inherits(design, surveycore::survey_collection)) {
+    as.character(out[[".survey"]])
+  } else if (is.null(group_var)) {
+    rep(NA_character_, nrow(out))
+  } else {
+    as.character(out[[group_var]])
+  }
+
+  tibble::tibble(
+    level = level,
+    n = as.integer(out$n),
+    n_eff = as.double(out$n_eff)
+  )
+}
+
+# -- Metadata readers ----------------------------------------------------------
+
+# TRUE when the design is restricted to a domain. surveycore exports no domain
+# accessor, so this is a direct test of the column name. A domain that selects
+# every row still counts as a restriction.
+#' @keywords internal
+#' @noRd
+.has_domain <- function(design) {
+  surveycore::SURVEYCORE_DOMAIN_COL %in% names(design@data)
+}
+
+# A banner column translated from codes to value labels, so its levels match
+# the vocabulary of surveycore::get_freqs().
+#
+# Returns a vector of length nrow(design@data), with NA kept:
+# - a factor comes back unchanged, with its level order intact. A character
+#   return would let interaction() sort the levels alphabetically.
+# - a column with value labels comes back as character labels. A code with no
+#   label becomes NA_character_, as it does in get_freqs().
+# - any other column comes back as character.
+#' @keywords internal
+#' @noRd
+.banner_levels_labelled <- function(design, col) {
+  x <- design@data[[col]]
+  if (is.factor(x)) {
+    return(x)
+  }
+
+  labels <- surveycore::extract_val_labels(
+    design,
+    tidyselect::all_of(col)
+  )[[col]]
+  if (is.null(labels)) {
+    return(as.character(x))
+  }
+
+  names(labels)[match(as.vector(x), unname(labels))]
+}
+
+# The display heading for a banner column: its variable label, or the column
+# name when no label is set.
+#
+# Returns list(heading = chr(1), fell_back = lgl(1)). It raises no warning.
+# The caller collects fell_back across columns and raises one warning.
+#' @keywords internal
+#' @noRd
+.banner_heading <- function(design, col) {
+  label <- unname(
+    surveycore::extract_var_label(design, tidyselect::all_of(col))[col]
+  )
+  has_label <- !is.na(label) && nzchar(label)
+
+  list(
+    heading = if (has_label) label else col,
+    fell_back = !has_label
+  )
+}
+
+# The keys whose value is the same, and not missing, in every member.
+#
+# entries is a list of named character vectors, one per member. A key that
+# disagrees anywhere, or is missing or NA in any member, is omitted. Returns a
+# named character vector, in the key order of the first member.
+# For a battery, the shape is transposed (one vector, several variables).
+# Reshape it so every member shares one key before the call.
+#' @keywords internal
+#' @noRd
+.unanimous_across <- function(entries) {
+  empty <- structure(character(0), names = character(0))
+  if (length(entries) == 0L) {
+    return(empty)
+  }
+
+  first <- entries[[1L]]
+  keys <- names(first)
+  if (is.null(keys)) {
+    return(empty)
+  }
+
+  agrees <- vapply(
+    keys,
+    function(key) {
+      all(vapply(
+        entries,
+        function(e) {
+          key %in%
+            names(e) &&
+            !is.na(e[[key]]) &&
+            identical(e[[key]], first[[key]])
+        },
+        logical(1)
+      ))
+    },
+    logical(1),
+    USE.NAMES = FALSE
+  )
+
+  first[agrees]
+}
+
 # -- Frequency computation helpers ---------------------------------------------
 
 # Extract question_text and var_label from get_freqs meta.

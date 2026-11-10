@@ -1639,3 +1639,362 @@ test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA t
     label = "zero row stays blank where never asked"
   )
 })
+
+# 19. Metadata readers: unwired helpers ---------------------------------------
+# These five helpers have no caller yet, so the coverage floor has no indirect
+# path to them. Later PRs wire them into export_crosstab() and
+# export_topline(). Until then they are tested directly.
+
+# Adds a labelled numeric banner `gen` (codes 1 and 2, some NA) to a design.
+add_labelled_banner <- function(d) {
+  n <- nrow(d@data)
+  d@data$gen <- rep(c(1, 2, NA, 2, 1), length.out = n)
+  surveycore::set_val_labels(d, gen = c(Male = 1, Female = 2))
+}
+
+test_that(".unanimous_across() keeps a key that agrees across every member", {
+  entries <- list(
+    c(q1 = "Adults", q2 = "Voters"),
+    c(q1 = "Adults", q2 = "Voters"),
+    c(q1 = "Adults", q2 = "Voters")
+  )
+
+  result <- surveyreports:::.unanimous_across(entries)
+
+  expect_identical(result, c(q1 = "Adults", q2 = "Voters"))
+})
+
+test_that(".unanimous_across() omits a key that disagrees in one member", {
+  entries <- list(
+    c(q1 = "Adults", q2 = "Voters"),
+    c(q1 = "Adults", q2 = "Parents")
+  )
+
+  result <- surveyreports:::.unanimous_across(entries)
+
+  expect_identical(result, c(q1 = "Adults"))
+})
+
+test_that(".unanimous_across() omits a key that is missing in one member", {
+  entries <- list(
+    c(q1 = "Adults", q2 = "Voters"),
+    c(q2 = "Voters"),
+    c(q1 = "Adults", q2 = "Voters")
+  )
+
+  result <- surveyreports:::.unanimous_across(entries)
+
+  expect_identical(result, c(q2 = "Voters"))
+})
+
+test_that(".unanimous_across() omits a key whose value is NA", {
+  entries <- list(
+    c(q1 = NA_character_, q2 = "Voters"),
+    c(q1 = NA_character_, q2 = "Voters")
+  )
+
+  result <- surveyreports:::.unanimous_across(entries)
+
+  expect_identical(result, c(q2 = "Voters"))
+})
+
+test_that(".unanimous_across() returns an empty named vector when nothing agrees", {
+  empty <- structure(character(0), names = character(0))
+
+  expect_identical(surveyreports:::.unanimous_across(list()), empty)
+  expect_identical(
+    surveyreports:::.unanimous_across(list(c(q1 = "a"), character(0))),
+    empty
+  )
+  expect_identical(
+    surveyreports:::.unanimous_across(list(character(0), c(q1 = "a"))),
+    empty
+  )
+  expect_identical(
+    surveyreports:::.unanimous_across(list(c(q1 = "a"), c(q1 = "b"))),
+    empty
+  )
+})
+
+test_that(".has_domain() is FALSE on every design without a domain column", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    result <- surveyreports:::.has_domain(designs[[nm]])
+    expect_identical(result, FALSE, label = paste0(nm, ": no domain"))
+  }
+})
+
+test_that(".has_domain() is TRUE on every design with a domain column", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d@data$group == "A"
+    expect_identical(
+      surveyreports:::.has_domain(d),
+      TRUE,
+      label = paste0(nm, ": restricted domain")
+    )
+  }
+})
+
+test_that(".has_domain() is TRUE when the domain selects every row", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- TRUE
+
+  expect_identical(surveyreports:::.has_domain(d), TRUE)
+})
+
+test_that(".resolve_eff_n() returns one row with no group, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    result <- surveyreports:::.resolve_eff_n(d)
+    ref <- surveycore::get_effective_n(d)
+
+    expect_s3_class(result, "tbl_df")
+    expect_identical(names(result), c("level", "n", "n_eff"))
+    expect_identical(nrow(result), 1L, label = paste0(nm, ": one row"))
+    expect_identical(result$level, NA_character_, label = paste0(nm, ": level"))
+    expect_identical(result$n, as.integer(ref$n), label = paste0(nm, ": n"))
+    expect_true(is.double(result$n_eff), label = paste0(nm, ": n_eff type"))
+    expect_equal(
+      result$n_eff,
+      ref$n_eff,
+      tolerance = 1e-8,
+      label = paste0(nm, ": n_eff")
+    )
+  }
+})
+
+test_that(".resolve_eff_n() returns one row per observed level, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    result <- surveyreports:::.resolve_eff_n(d, group_var = "group")
+    ref <- surveycore::get_effective_n(d, group = group)
+    freqs <- suppressWarnings(surveycore::get_freqs(d, q1, group = group))
+
+    expect_identical(names(result), c("level", "n", "n_eff"))
+    expect_true(is.character(result$level), label = paste0(nm, ": level type"))
+    expect_identical(
+      sort(result$level),
+      sort(unique(as.character(freqs$group))),
+      label = paste0(nm, ": levels match get_freqs()")
+    )
+    expect_identical(result$n, as.integer(ref$n), label = paste0(nm, ": n"))
+    expect_equal(
+      result$n_eff,
+      ref$n_eff,
+      tolerance = 1e-8,
+      label = paste0(nm, ": n_eff")
+    )
+  }
+})
+
+test_that(".resolve_eff_n() returns label levels for a labelled banner", {
+  skip_if_not_installed("surveycore")
+  d <- add_labelled_banner(make_all_designs(seed = 42)$taylor)
+
+  result <- surveyreports:::.resolve_eff_n(d, group_var = "gen")
+  freqs <- suppressWarnings(surveycore::get_freqs(d, q1, group = gen))
+
+  expect_identical(result$level, c("Male", "Female"))
+  expect_identical(result$level, unique(as.character(freqs$gen)))
+})
+
+test_that(".resolve_eff_n() counts the in-domain rows on a restricted design", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d@data$group == "A"
+
+  result <- surveyreports:::.resolve_eff_n(d)
+
+  expect_identical(result$n, sum(d@data$group == "A"))
+  expect_lt(result$n_eff, result$n)
+})
+
+test_that(".resolve_eff_n() passes na.rm to get_effective_n()", {
+  skip_if_not_installed("surveycore")
+  d <- add_labelled_banner(make_all_designs(seed = 42)$taylor)
+
+  kept <- surveyreports:::.resolve_eff_n(d, group_var = "gen", na.rm = FALSE)
+  dropped <- surveyreports:::.resolve_eff_n(d, group_var = "gen", na.rm = TRUE)
+  ref <- surveycore::get_effective_n(d, group = gen, na.rm = FALSE)
+
+  expect_identical(kept$level, as.character(ref$gen))
+  expect_identical(kept$n, as.integer(ref$n))
+  expect_true(anyNA(kept$level))
+  expect_false(anyNA(dropped$level))
+})
+
+test_that(".resolve_eff_n() returns one row per member of a survey_collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = designs$taylor,
+    w2 = designs$twophase
+  )
+
+  result <- surveyreports:::.resolve_eff_n(coll)
+  ref <- surveycore::get_effective_n(coll)
+
+  expect_identical(names(result), c("level", "n", "n_eff"))
+  expect_identical(result$level, c("w1", "w2"))
+  expect_identical(result$n, as.integer(ref$n))
+  expect_equal(result$n_eff, ref$n_eff, tolerance = 1e-8)
+})
+
+test_that(".resolve_eff_n() muffles surveycore's small-cell warning", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data$tiny <- c(rep("x", 3L), rep("y", nrow(d@data) - 3L))
+
+  expect_no_warning(
+    result <- surveyreports:::.resolve_eff_n(d, group_var = "tiny")
+  )
+  expect_identical(result$level, c("x", "y"))
+})
+
+test_that(".banner_levels_labelled() keeps a factor and its level order", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    n <- nrow(d@data)
+    d@data$lik <- factor(
+      rep(c("Low", "High", NA, "Medium"), length.out = n),
+      levels = c("Low", "Medium", "High")
+    )
+
+    result <- surveyreports:::.banner_levels_labelled(d, "lik")
+
+    expect_true(is.factor(result), label = paste0(nm, ": factor"))
+    expect_identical(length(result), n, label = paste0(nm, ": length"))
+    expect_identical(
+      levels(result),
+      c("Low", "Medium", "High"),
+      label = paste0(nm, ": level order")
+    )
+    expect_identical(
+      is.na(result),
+      is.na(d@data$lik),
+      label = paste0(nm, ": NA kept")
+    )
+  }
+})
+
+test_that(".banner_levels_labelled() translates codes to value labels", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_labelled_banner(designs[[nm]])
+    codes <- as.vector(d@data$gen)
+
+    result <- surveyreports:::.banner_levels_labelled(d, "gen")
+
+    expect_true(is.character(result), label = paste0(nm, ": character"))
+    expect_identical(length(result), nrow(d@data), label = paste0(nm, ": len"))
+    expect_identical(
+      result[!is.na(codes) & codes == 1],
+      rep("Male", sum(codes == 1, na.rm = TRUE)),
+      label = paste0(nm, ": code 1")
+    )
+    expect_identical(
+      result[!is.na(codes) & codes == 2],
+      rep("Female", sum(codes == 2, na.rm = TRUE)),
+      label = paste0(nm, ": code 2")
+    )
+    expect_identical(is.na(result), is.na(codes), label = paste0(nm, ": NA"))
+  }
+})
+
+test_that(".banner_levels_labelled() returns a plain column as character", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    d@data$group[1:5] <- NA_character_
+    d@data$code <- rep(c(1L, 2L, NA_integer_), length.out = nrow(d@data))
+
+    grp <- surveyreports:::.banner_levels_labelled(d, "group")
+    code <- surveyreports:::.banner_levels_labelled(d, "code")
+
+    expect_identical(grp, d@data$group, label = paste0(nm, ": group"))
+    expect_identical(
+      code,
+      as.character(d@data$code),
+      label = paste0(nm, ": unlabelled integer")
+    )
+  }
+})
+
+test_that(".banner_levels_labelled() maps an unlabelled code to NA, as get_freqs() does", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data$gen <- rep(c(1, 2, 3), length.out = nrow(d@data))
+  d <- suppressWarnings(
+    surveycore::set_val_labels(d, gen = c(Male = 1, Female = 2))
+  )
+
+  result <- surveyreports:::.banner_levels_labelled(d, "gen")
+  ref <- suppressWarnings(surveycore::get_effective_n(d, group = gen))
+
+  expect_true(all(is.na(result[as.vector(d@data$gen) == 3])))
+  expect_setequal(unique(result), as.character(ref$gen))
+})
+
+test_that(".banner_heading() returns the variable label when one is set", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_label(designs[[nm]], group = "Region")
+
+    expect_no_warning(
+      result <- surveyreports:::.banner_heading(d, "group")
+    )
+    expect_identical(
+      result,
+      list(heading = "Region", fell_back = FALSE),
+      label = paste0(nm, ": label")
+    )
+  }
+})
+
+test_that(".banner_heading() falls back to the column name with no label", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    expect_no_warning(
+      result <- surveyreports:::.banner_heading(designs[[nm]], "group")
+    )
+    expect_identical(
+      result,
+      list(heading = "group", fell_back = TRUE),
+      label = paste0(nm, ": fallback")
+    )
+  }
+})
+
+test_that(".banner_heading() falls back when the label is an empty string", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  d@data$group <- structure(d@data$group, label = "")
+
+  result <- surveyreports:::.banner_heading(d, "group")
+
+  expect_identical(result, list(heading = "group", fell_back = TRUE))
+})
