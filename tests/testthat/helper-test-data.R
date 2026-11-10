@@ -63,7 +63,10 @@ make_all_designs <- function(seed = 42L) {
     method = "approx"
   )
 
-  # Apply SATA and battery metadata to all three designs
+  # Non-probability design: calibration weights only
+  nonprob <- surveycore::as_survey_nonprob(df, weights = wt)
+
+  # Apply SATA and battery metadata to all four designs
   sata_vars    <- c("sata_a", "sata_b", "sata_c")
   bat_vars     <- c("bat_1", "bat_2", "bat_3")
   sata_preface <- rep("Which of the following apply to you?", length(sata_vars))
@@ -79,6 +82,7 @@ make_all_designs <- function(seed = 42L) {
   list(
     taylor    = apply_meta(taylor),
     replicate = apply_meta(replicate),
-    twophase  = apply_meta(twophase)
+    twophase  = apply_meta(twophase),
+    nonprob   = apply_meta(nonprob)
   )
 }

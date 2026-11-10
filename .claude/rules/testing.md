@@ -130,10 +130,6 @@ block.
 `pool_pvals()` takes a list of tibbles, not a design, so this rule does not
 apply to it.
 
-**Gap to close:** `make_all_designs()` returns no `nonprob` design yet. It must
-gain one, built with `surveycore::as_survey_nonprob()`. Until it does, the
-loops above cover every subclass in the table except `survey_nonprob`.
-
 ### Result structure assertions
 
 Assert structure before numerical checks in every block:

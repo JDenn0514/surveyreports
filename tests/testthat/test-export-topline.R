@@ -2,7 +2,18 @@
 
 # 1. Happy paths ------------------------------------------------------------------
 
-test_that("export_topline() creates a non-empty .xlsx file for all 3 design types", {
+test_that("make_all_designs() returns one design per survey_base subclass", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  expect_identical(
+    names(designs),
+    c("taylor", "replicate", "twophase", "nonprob")
+  )
+  expect_true(S7::S7_inherits(designs$nonprob, surveycore::survey_nonprob))
+})
+
+test_that("export_topline() creates a non-empty .xlsx file for all 4 design types", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
   out <- withr::local_tempfile(fileext = ".xlsx")

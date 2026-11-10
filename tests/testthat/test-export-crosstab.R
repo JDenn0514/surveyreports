@@ -2,7 +2,7 @@
 
 # 1. Happy paths ------------------------------------------------------------------
 
-test_that("export_crosstab() creates a non-empty .xlsx file for all 3 design types", {
+test_that("export_crosstab() creates a non-empty .xlsx file for all 4 design types", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
   out <- withr::local_tempfile(fileext = ".xlsx")
