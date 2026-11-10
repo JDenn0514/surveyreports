@@ -7,7 +7,9 @@
 
 as_plain <- function(df) {
   df[] <- lapply(df, function(x) {
-    if (!inherits(x, "haven_labelled")) return(x)
+    if (!inherits(x, "haven_labelled")) {
+      return(x)
+    }
     raw <- as.vector(x)
     for (attr_nm in c("label", "labels", "question_preface")) {
       a <- attr(x, attr_nm, exact = TRUE)
@@ -25,7 +27,9 @@ as_plain <- function(df) {
 ## each phase's battery tables rather than relying on this function.
 
 to_sentence_case <- function(x) {
-  if (is.null(x) || !nzchar(x)) return(x)
+  if (is.null(x) || !nzchar(x)) {
+    return(x)
+  }
   result <- stringr::str_to_sentence(x)
   caps <- regmatches(x, gregexpr("\\b[A-Z]{2,}\\b", x))[[1]]
   for (cap in caps) {
@@ -46,32 +50,66 @@ to_sentence_case <- function(x) {
 
 PROPER_NOUN_LABELS <- c(
   ## Candidates / political figures
-  "Joe Biden", "Bernie Sanders", "Elizabeth Warren", "Kamala Harris",
-  "Pete Buttigieg", "Cory Booker", "Julian Castro", "Tulsi Gabbard",
-  "Kirsten Gillibrand", "Beto O'Rourke", "Mike Pence", "Donald Trump",
-  "Barack Obama", "Alexandria Ocasio Cortez", "Hillary Clinton",
-  "Gary Johnson", "Jill Stein", "Amy Klobuchar", "Stacey Abrams",
+  "Joe Biden",
+  "Bernie Sanders",
+  "Elizabeth Warren",
+  "Kamala Harris",
+  "Pete Buttigieg",
+  "Cory Booker",
+  "Julian Castro",
+  "Tulsi Gabbard",
+  "Kirsten Gillibrand",
+  "Beto O'Rourke",
+  "Mike Pence",
+  "Donald Trump",
+  "Barack Obama",
+  "Alexandria Ocasio Cortez",
+  "Hillary Clinton",
+  "Gary Johnson",
+  "Jill Stein",
+  "Amy Klobuchar",
+  "Stacey Abrams",
   "Michael Bloomberg",
   ## Judicial figures
-  "John Roberts", "Sandra Day O'Connor", "William Rehnquist",
-  "Paul Ryan", "Elena Kagan",
+  "John Roberts",
+  "Sandra Day O'Connor",
+  "William Rehnquist",
+  "Paul Ryan",
+  "Elena Kagan",
   ## Party / ideology labels
-  "Democrat", "Republican", "Democrats", "Republicans",
-  "Strong Democrat", "Weak Democrat", "Lean Democrat",
-  "Lean Republican", "Weak Republican", "Strong Republican",
-  "The Democratic Primary/Caucus", "The Republican Primary/Caucus",
-  "The Democratic candidate", "The Republican candidate",
+  "Democrat",
+  "Republican",
+  "Democrats",
+  "Republicans",
+  "Strong Democrat",
+  "Weak Democrat",
+  "Lean Democrat",
+  "Lean Republican",
+  "Weak Republican",
+  "Strong Republican",
+  "The Democratic Primary/Caucus",
+  "The Republican Primary/Caucus",
+  "The Democratic candidate",
+  "The Republican candidate",
   ## Geographic / group
-  "The United States", "Puerto Rican",
+  "The United States",
+  "Puerto Rican",
   "Black, or African American",
   "American Indian or Alaska Native",
-  "Pacific Islander (Native Hawaiian)", "Pacific Islander (Guamanian)",
-  "Pacific Islander (Samoan)", "Pacific Islander (Other)",
-  "Asian (Asian Indian)", "Asian (Chinese)", "Asian (Filipino)",
-  "Asian (Japanese)", "Asian (Korean)", "Asian (Vietnamese)",
+  "Pacific Islander (Native Hawaiian)",
+  "Pacific Islander (Guamanian)",
+  "Pacific Islander (Samoan)",
+  "Pacific Islander (Other)",
+  "Asian (Asian Indian)",
+  "Asian (Chinese)",
+  "Asian (Filipino)",
+  "Asian (Japanese)",
+  "Asian (Korean)",
+  "Asian (Vietnamese)",
   "Asian (Other)",
   ## Education labels (contain proper abbreviations)
-  "Middle School - Grades 4 - 8", "Associate Degree",
+  "Middle School - Grades 4 - 8",
+  "Associate Degree",
   "College Degree (such as B.A., B.S.)"
 )
 
@@ -81,10 +119,16 @@ PROPER_NOUN_LABELS <- c(
 ## labels in PROPER_NOUN_LABELS (returned unchanged).
 
 fix_value_label_names <- function(lbl_vec) {
-  if (is.null(lbl_vec) || is.null(names(lbl_vec))) return(lbl_vec)
-  new_names <- vapply(names(lbl_vec), function(nm) {
-    if (nm %in% PROPER_NOUN_LABELS) nm else to_sentence_case(nm)
-  }, character(1L))
+  if (is.null(lbl_vec) || is.null(names(lbl_vec))) {
+    return(lbl_vec)
+  }
+  new_names <- vapply(
+    names(lbl_vec),
+    function(nm) {
+      if (nm %in% PROPER_NOUN_LABELS) nm else to_sentence_case(nm)
+    },
+    character(1L)
+  )
   names(lbl_vec) <- new_names
   lbl_vec
 }
@@ -98,8 +142,10 @@ fix_value_label_names <- function(lbl_vec) {
 apply_batteries <- function(df, batteries) {
   for (bat in batteries) {
     for (var_nm in names(bat$vars)) {
-      if (!var_nm %in% names(df)) next
-      attr(df[[var_nm]], "label")            <- bat$vars[[var_nm]]
+      if (!var_nm %in% names(df)) {
+        next
+      }
+      attr(df[[var_nm]], "label") <- bat$vars[[var_nm]]
       attr(df[[var_nm]], "question_preface") <- bat$preface
     }
   }
@@ -152,7 +198,7 @@ load_phase_waves <- function(phase_dir, batteries, phase_label) {
   names(result) <- basename(wave_dirs)
 
   for (i in seq_along(wave_dirs)) {
-    wave_id  <- basename(wave_dirs[[i]])
+    wave_id <- basename(wave_dirs[[i]])
     sav_file <- file.path(wave_dirs[[i]], paste0(wave_id, ".sav"))
 
     if (!file.exists(sav_file)) {
@@ -161,8 +207,15 @@ load_phase_waves <- function(phase_dir, batteries, phase_label) {
     }
 
     message(
-      "Processing ", wave_id,
-      " (", i, "/", length(wave_dirs), " — ", phase_label, ")..."
+      "Processing ",
+      wave_id,
+      " (",
+      i,
+      "/",
+      length(wave_dirs),
+      " — ",
+      phase_label,
+      ")..."
     )
     raw <- haven::read_sav(sav_file)
     result[[wave_id]] <- process_wave(raw, wave_id, batteries)

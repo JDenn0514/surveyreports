@@ -19,7 +19,9 @@ test_that("pool_pvals() returns a tibble with expected row count and columns", {
   out <- pool_pvals(res)
   expect_s3_class(out, "tbl_df")
   expect_equal(nrow(out), 3L)
-  expect_true(all(c("term", "source", "p_value", "p_value_adj") %in% names(out)))
+  expect_true(all(
+    c("term", "source", "p_value", "p_value_adj") %in% names(out)
+  ))
 })
 
 test_that("pool_pvals() result has expected S3 class hierarchy", {
@@ -42,8 +44,14 @@ test_that("pool_pvals() attaches a .meta attribute with the eight required keys"
   expect_setequal(
     names(meta),
     c(
-      "method", "family_size", "n_total", "n_na",
-      "n_significant_05", "id_col", "p_col", "new_col"
+      "method",
+      "family_size",
+      "n_total",
+      "n_na",
+      "n_significant_05",
+      "id_col",
+      "p_col",
+      "new_col"
     )
   )
   expect_identical(meta$method, "BH")
@@ -193,66 +201,57 @@ test_that("pool_pvals() honors custom p_col, new_col, and id_col", {
 
 # ── 4. strip_within_adj ───────────────────────────────────────────────────────
 
-test_that(
-  "pool_pvals() warns and renames pre-existing new_col when strip_within_adj = FALSE",
-  {
-    res <- list(
-      a = tibble::tibble(
-        p_value = c(0.01, 0.04),
-        p_value_adj = c(0.02, 0.04)
-      ),
-      b = tibble::tibble(p_value = c(0.02, 0.05))
-    )
-    expect_warning(
-      out <- pool_pvals(res),
-      class = "surveyreports_warning_pool_pvals_input_pre_adjusted"
-    )
-    expect_true("p_value_adj" %in% names(out))
-    expect_true("p_value_adj_within" %in% names(out))
-    expect_true(all(is.na(out$p_value_adj_within[out$source == "b"])))
-    expect_equal(
-      out$p_value_adj_within[out$source == "a"],
-      c(0.02, 0.04)
-    )
-  }
-)
+test_that("pool_pvals() warns and renames pre-existing new_col when strip_within_adj = FALSE", {
+  res <- list(
+    a = tibble::tibble(
+      p_value = c(0.01, 0.04),
+      p_value_adj = c(0.02, 0.04)
+    ),
+    b = tibble::tibble(p_value = c(0.02, 0.05))
+  )
+  expect_warning(
+    out <- pool_pvals(res),
+    class = "surveyreports_warning_pool_pvals_input_pre_adjusted"
+  )
+  expect_true("p_value_adj" %in% names(out))
+  expect_true("p_value_adj_within" %in% names(out))
+  expect_true(all(is.na(out$p_value_adj_within[out$source == "b"])))
+  expect_equal(
+    out$p_value_adj_within[out$source == "a"],
+    c(0.02, 0.04)
+  )
+})
 
-test_that(
-  "pool_pvals() silently drops pre-existing new_col when strip_within_adj = TRUE",
-  {
-    res <- list(
-      a = tibble::tibble(
-        p_value = c(0.01, 0.04),
-        p_value_adj = c(0.02, 0.04)
-      ),
-      b = tibble::tibble(p_value = c(0.02, 0.05))
-    )
-    expect_no_warning(
-      out <- pool_pvals(res, strip_within_adj = TRUE)
-    )
-    expect_true("p_value_adj" %in% names(out))
-    expect_false("p_value_adj_within" %in% names(out))
-    expect_equal(
-      out$p_value_adj,
-      stats::p.adjust(c(0.01, 0.04, 0.02, 0.05), "BH")
-    )
-  }
-)
+test_that("pool_pvals() silently drops pre-existing new_col when strip_within_adj = TRUE", {
+  res <- list(
+    a = tibble::tibble(
+      p_value = c(0.01, 0.04),
+      p_value_adj = c(0.02, 0.04)
+    ),
+    b = tibble::tibble(p_value = c(0.02, 0.05))
+  )
+  expect_no_warning(
+    out <- pool_pvals(res, strip_within_adj = TRUE)
+  )
+  expect_true("p_value_adj" %in% names(out))
+  expect_false("p_value_adj_within" %in% names(out))
+  expect_equal(
+    out$p_value_adj,
+    stats::p.adjust(c(0.01, 0.04, 0.02, 0.05), "BH")
+  )
+})
 
-test_that(
-  "pool_pvals() collision pattern works with custom new_col name",
-  {
-    res <- list(
-      a = tibble::tibble(p_value = c(0.01, 0.04), fdr_q = c(0.02, 0.04)),
-      b = tibble::tibble(p_value = c(0.5, 0.2))
-    )
-    expect_warning(
-      out <- pool_pvals(res, new_col = "fdr_q"),
-      class = "surveyreports_warning_pool_pvals_input_pre_adjusted"
-    )
-    expect_true(all(c("fdr_q", "fdr_q_within") %in% names(out)))
-  }
-)
+test_that("pool_pvals() collision pattern works with custom new_col name", {
+  res <- list(
+    a = tibble::tibble(p_value = c(0.01, 0.04), fdr_q = c(0.02, 0.04)),
+    b = tibble::tibble(p_value = c(0.5, 0.2))
+  )
+  expect_warning(
+    out <- pool_pvals(res, new_col = "fdr_q"),
+    class = "surveyreports_warning_pool_pvals_input_pre_adjusted"
+  )
+  expect_true(all(c("fdr_q", "fdr_q_within") %in% names(out)))
+})
 
 
 # ── 5. Error paths ───────────────────────────────────────────────────────────
@@ -301,84 +300,69 @@ test_that("pool_pvals() rejects invalid method (string) with invalid_method", {
   expect_snapshot(error = TRUE, pool_pvals(res, method = "fancy"))
 })
 
-test_that(
-  "pool_pvals() rejects invalid method (length > 1) with invalid_method",
-  {
-    res <- list(tibble::tibble(p_value = 0.5))
-    expect_error(
-      pool_pvals(res, method = c("BH", "holm")),
-      class = "surveyreports_error_pool_pvals_invalid_method"
-    )
-    expect_snapshot(
-      error = TRUE,
-      pool_pvals(res, method = c("BH", "holm"))
-    )
-  }
-)
+test_that("pool_pvals() rejects invalid method (length > 1) with invalid_method", {
+  res <- list(tibble::tibble(p_value = 0.5))
+  expect_error(
+    pool_pvals(res, method = c("BH", "holm")),
+    class = "surveyreports_error_pool_pvals_invalid_method"
+  )
+  expect_snapshot(
+    error = TRUE,
+    pool_pvals(res, method = c("BH", "holm"))
+  )
+})
 
-test_that(
-  "pool_pvals() reports element missing p_col with missing_pcol class",
-  {
-    res <- list(
-      a = tibble::tibble(p_value = c(0.01, 0.04)),
-      b = tibble::tibble(other = c(0.02, 0.05))
-    )
-    expect_error(
-      pool_pvals(res),
-      class = "surveyreports_error_pool_pvals_missing_pcol"
-    )
-    expect_snapshot(error = TRUE, pool_pvals(res))
-  }
-)
+test_that("pool_pvals() reports element missing p_col with missing_pcol class", {
+  res <- list(
+    a = tibble::tibble(p_value = c(0.01, 0.04)),
+    b = tibble::tibble(other = c(0.02, 0.05))
+  )
+  expect_error(
+    pool_pvals(res),
+    class = "surveyreports_error_pool_pvals_missing_pcol"
+  )
+  expect_snapshot(error = TRUE, pool_pvals(res))
+})
 
-test_that(
-  "pool_pvals() reports id_col collision with id_col_collision class",
-  {
-    res <- list(
-      tibble::tibble(p_value = c(0.01, 0.04), source = "a"),
-      tibble::tibble(p_value = c(0.02, 0.05))
-    )
-    expect_error(
-      pool_pvals(res),
-      class = "surveyreports_error_pool_pvals_id_col_collision"
-    )
-    expect_snapshot(error = TRUE, pool_pvals(res))
-  }
-)
+test_that("pool_pvals() reports id_col collision with id_col_collision class", {
+  res <- list(
+    tibble::tibble(p_value = c(0.01, 0.04), source = "a"),
+    tibble::tibble(p_value = c(0.02, 0.05))
+  )
+  expect_error(
+    pool_pvals(res),
+    class = "surveyreports_error_pool_pvals_id_col_collision"
+  )
+  expect_snapshot(error = TRUE, pool_pvals(res))
+})
 
-test_that(
-  "pool_pvals() reports out-of-range pooled p-values with invalid_pvalues",
-  {
-    res <- list(
-      tibble::tibble(p_value = c(0.5, 1.5)),
-      tibble::tibble(p_value = c(0.1, 0.2))
-    )
-    expect_error(
-      pool_pvals(res),
-      class = "surveyreports_error_pool_pvals_invalid_pvalues"
-    )
-    expect_snapshot(error = TRUE, pool_pvals(res))
-  }
-)
+test_that("pool_pvals() reports out-of-range pooled p-values with invalid_pvalues", {
+  res <- list(
+    tibble::tibble(p_value = c(0.5, 1.5)),
+    tibble::tibble(p_value = c(0.1, 0.2))
+  )
+  expect_error(
+    pool_pvals(res),
+    class = "surveyreports_error_pool_pvals_invalid_pvalues"
+  )
+  expect_snapshot(error = TRUE, pool_pvals(res))
+})
 
 
 # ── 6. Edge cases ─────────────────────────────────────────────────────────────
 
-test_that(
-  "pool_pvals() warns and returns when all pooled p-values are NA",
-  {
-    res <- list(
-      tibble::tibble(p_value = c(NA_real_, NA_real_)),
-      tibble::tibble(p_value = NA_real_)
-    )
-    expect_warning(
-      out <- pool_pvals(res),
-      class = "surveyreports_warning_pool_pvals_no_pvalues_available"
-    )
-    expect_true(all(is.na(out$p_value_adj)))
-    expect_equal(nrow(out), 3L)
-  }
-)
+test_that("pool_pvals() warns and returns when all pooled p-values are NA", {
+  res <- list(
+    tibble::tibble(p_value = c(NA_real_, NA_real_)),
+    tibble::tibble(p_value = NA_real_)
+  )
+  expect_warning(
+    out <- pool_pvals(res),
+    class = "surveyreports_warning_pool_pvals_no_pvalues_available"
+  )
+  expect_true(all(is.na(out$p_value_adj)))
+  expect_equal(nrow(out), 3L)
+})
 
 test_that("pool_pvals() handles a single-element list", {
   res <- list(tibble::tibble(p_value = c(0.01, 0.05, 0.2)))
@@ -489,30 +473,27 @@ test_that("pool_pvals() sequential calls with different methods are independent"
   expect_equal(out_bh$p_value_adj, out_bh_again$p_value_adj)
 })
 
-test_that(
-  "pool_pvals() pools heterogeneous-shape get_diffs() and get_pairwise() rows",
-  {
-    diffs_shape <- tibble::tibble(
-      term = c("a", "b"),
-      estimate = c(0.5, -0.2),
-      p_value = c(0.04, 0.2)
-    )
-    pairwise_shape <- tibble::tibble(
-      level_a = c("g1", "g1"),
-      level_b = c("g2", "g3"),
-      estimate = c(0.1, 0.3),
-      p_value = c(0.01, 0.5)
-    )
-    out <- pool_pvals(list(diffs = diffs_shape, pair = pairwise_shape))
-    nm <- names(out)
-    expect_true(all(
-      c("term", "level_a", "level_b", "estimate", "p_value") %in% nm
-    ))
-    expect_equal(tail(nm, 2L), c("source", "p_value_adj"))
-    expect_true(all(is.na(out$level_a[1:2])))
-    expect_true(all(is.na(out$term[3:4])))
-  }
-)
+test_that("pool_pvals() pools heterogeneous-shape get_diffs() and get_pairwise() rows", {
+  diffs_shape <- tibble::tibble(
+    term = c("a", "b"),
+    estimate = c(0.5, -0.2),
+    p_value = c(0.04, 0.2)
+  )
+  pairwise_shape <- tibble::tibble(
+    level_a = c("g1", "g1"),
+    level_b = c("g2", "g3"),
+    estimate = c(0.1, 0.3),
+    p_value = c(0.01, 0.5)
+  )
+  out <- pool_pvals(list(diffs = diffs_shape, pair = pairwise_shape))
+  nm <- names(out)
+  expect_true(all(
+    c("term", "level_a", "level_b", "estimate", "p_value") %in% nm
+  ))
+  expect_equal(tail(nm, 2L), c("source", "p_value_adj"))
+  expect_true(all(is.na(out$level_a[1:2])))
+  expect_true(all(is.na(out$term[3:4])))
+})
 
 
 # ── print.survey_pooled_pvals() ───────────────────────────────────────────────
@@ -527,24 +508,21 @@ test_that("print.survey_pooled_pvals() snapshot for a representative input", {
   expect_snapshot(print(out))
 })
 
-test_that(
-  "print.survey_pooled_pvals() prints NA footer only when n_na > 0",
-  {
-    res_no_na <- list(
-      a = tibble::tibble(p_value = c(0.01, 0.04)),
-      b = tibble::tibble(p_value = 0.5)
-    )
-    out_no_na <- pool_pvals(res_no_na)
-    expect_snapshot(print(out_no_na))
+test_that("print.survey_pooled_pvals() prints NA footer only when n_na > 0", {
+  res_no_na <- list(
+    a = tibble::tibble(p_value = c(0.01, 0.04)),
+    b = tibble::tibble(p_value = 0.5)
+  )
+  out_no_na <- pool_pvals(res_no_na)
+  expect_snapshot(print(out_no_na))
 
-    res_with_na <- list(
-      a = tibble::tibble(p_value = c(0.01, NA_real_)),
-      b = tibble::tibble(p_value = c(NA_real_, 0.5))
-    )
-    out_with_na <- pool_pvals(res_with_na)
-    expect_snapshot(print(out_with_na))
-  }
-)
+  res_with_na <- list(
+    a = tibble::tibble(p_value = c(0.01, NA_real_)),
+    b = tibble::tibble(p_value = c(NA_real_, 0.5))
+  )
+  out_with_na <- pool_pvals(res_with_na)
+  expect_snapshot(print(out_with_na))
+})
 
 test_that("print.survey_pooled_pvals() returns invisible(x)", {
   out <- pool_pvals(list(tibble::tibble(p_value = c(0.01, 0.05))))

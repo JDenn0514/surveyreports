@@ -19,11 +19,19 @@ library(haven)
 library(janitor)
 library(usethis)
 
-SAV_FILE <- file.path(here::here(), "data-raw", "gss", "gss-2024", "GSS2024.sav")
+SAV_FILE <- file.path(
+  here::here(),
+  "data-raw",
+  "gss",
+  "gss-2024",
+  "GSS2024.sav"
+)
 
 if (!file.exists(SAV_FILE)) {
   stop(
-    "Raw file not found: ", SAV_FILE, "\n",
+    "Raw file not found: ",
+    SAV_FILE,
+    "\n",
     "Download the GSS 2024 SPSS file from:\n",
     "  https://gss.norc.org/get-the-data\n",
     "(free account required) and place it at the path above."
@@ -73,20 +81,44 @@ message("Read ", nrow(gss_raw), " rows x ", ncol(gss_raw), " cols")
 
 keep_cols <- c(
   # Design
-  "vpsu", "vstrat", "wtssps", "wtssnrps", "ballot",
+  "vpsu",
+  "vstrat",
+  "wtssps",
+  "wtssnrps",
+  "ballot",
   # ID / admin
-  "year", "id",
+  "year",
+  "id",
   # Demographics
-  "age", "sex", "race", "hispanic", "educ", "degree",
-  "income16", "marital", "wrkstat", "hrs1", "adults",
+  "age",
+  "sex",
+  "race",
+  "hispanic",
+  "educ",
+  "degree",
+  "income16",
+  "marital",
+  "wrkstat",
+  "hrs1",
+  "adults",
   # Social/political attitudes
-  "partyid", "polviews", "happy", "health", "trust",
-  "natfare", "abany", "attend", "relig"
+  "partyid",
+  "polviews",
+  "happy",
+  "health",
+  "trust",
+  "natfare",
+  "abany",
+  "attend",
+  "relig"
 )
 
 missing_cols <- setdiff(keep_cols, names(gss_raw))
 if (length(missing_cols) > 0) {
-  warning("These expected columns were not found: ", paste(missing_cols, collapse = ", "))
+  warning(
+    "These expected columns were not found: ",
+    paste(missing_cols, collapse = ", ")
+  )
   keep_cols <- intersect(keep_cols, names(gss_raw))
 }
 
@@ -97,12 +129,18 @@ rownames(gss_sub) <- NULL
 
 as_plain <- function(df) {
   df[] <- lapply(df, function(x) {
-    if (!inherits(x, "haven_labelled")) return(x)
-    raw  <- as.vector(x)
-    lbl  <- attr(x, "label",  exact = TRUE)
+    if (!inherits(x, "haven_labelled")) {
+      return(x)
+    }
+    raw <- as.vector(x)
+    lbl <- attr(x, "label", exact = TRUE)
     lbvl <- attr(x, "labels", exact = TRUE)
-    if (!is.null(lbl))  attr(raw, "label")  <- lbl
-    if (!is.null(lbvl)) attr(raw, "labels") <- lbvl
+    if (!is.null(lbl)) {
+      attr(raw, "label") <- lbl
+    }
+    if (!is.null(lbvl)) {
+      attr(raw, "labels") <- lbvl
+    }
     raw
   })
   df

@@ -79,7 +79,7 @@ stands.** Only the formal arguments come forward.
 
 ## PR map
 
-- [ ] PR 1: `chore/export-metadata-infra` — check the surveycore floor, add the
+- [x] PR 1: `chore/export-metadata-infra` — check the surveycore floor, add the
       `survey_nonprob` design to the generator, confirm the class table.
 - [ ] PR 2: `feature/metadata-readers` — the five helpers that read a design.
 - [ ] PR 3: `feature/metadata-unanimity` — the two resolvers that apply the

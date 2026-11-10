@@ -17,6 +17,7 @@ All `cli_abort()` and `cli_warn()` calls must use a class from this table.
 | `surveyreports_error_var_not_found` | `export_topline()`, `export_crosstab()` | A variable in `vars` does not exist in the design |
 | `surveyreports_error_vars_empty_selection` | `export_topline()`, `export_crosstab()` | `vars` tidyselect resolves to zero columns |
 | `surveyreports_error_vars_all_dropped` | `export_topline()`, `export_crosstab()` | Every `vars` column was dropped by the role guard |
+| `surveyreports_error_vars_all_na` | `export_topline()`, `export_crosstab()` | Every `vars` column that reached estimation has no non-missing value, so the all-NA drop leaves none; raised under either `na.rm` value, and no workbook is built |
 | `surveyreports_error_empty_domain` | `export_topline()`, `export_crosstab()` | The design data has zero rows. The check is defensive: it cannot be reached with surveycore >= 1.2.0, whose S7 validator rejects zero-row data. An empty `filter()` domain keeps every row and does not raise this class |
 | `surveyreports_error_invalid_file_name` | `export_topline()`, `export_crosstab()` | `file_name` does not end in `.xlsx` |
 | `surveyreports_error_invalid_conf_level` | `export_topline()`, `export_crosstab()` | `conf_level` outside `(0, 1)` |
@@ -45,3 +46,4 @@ All `cli_abort()` and `cli_warn()` calls must use a class from this table.
 | `surveyreports_warning_role_dropped` | `export_topline()`, `export_crosstab()` | One or more columns dropped from `vars` or `banner` for a non-substantive role; one warning per argument, listing every column and its role |
 | `surveyreports_warning_unknown_role` | `export_topline()`, `export_crosstab()` | A column's `role` is outside the seven known values, or is not a length-1 character; one warning per call, listing every affected column; the column is kept |
 | `surveyreports_warning_missing_variable_label` | `export_topline()`, `export_crosstab()` | A `vars` column or a `banner` column has no variable label; one warning per call, listing every affected column |
+| `surveyreports_warning_all_na_dropped` | `export_topline()`, `export_crosstab()` | One or more `vars` columns have no non-missing value and are dropped from the output; one warning per call, listing every dropped column in input order. Not raised when every column is dropped: `surveyreports_error_vars_all_na` fires instead |
