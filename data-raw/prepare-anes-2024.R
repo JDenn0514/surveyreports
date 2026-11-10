@@ -22,14 +22,18 @@ library(janitor)
 library(usethis)
 
 DTA_FILE <- file.path(
-  here::here(), "data-raw", "anes",
+  here::here(),
+  "data-raw",
+  "anes",
   "anes_timeseries_2024_stata_20250808",
   "anes_timeseries_2024_stata_20250808.dta"
 )
 
 if (!file.exists(DTA_FILE)) {
   stop(
-    "Raw file not found: ", DTA_FILE, "\n",
+    "Raw file not found: ",
+    DTA_FILE,
+    "\n",
     "Download the ANES 2024 Time Series Stata file from:\n",
     "  https://electionstudies.org/data-center/2024-time-series-study/\n",
     "(free account required) and place it at the path above."
@@ -69,20 +73,36 @@ message("Read ", nrow(anes_raw), " rows x ", ncol(anes_raw), " cols")
 
 keep_cols <- c(
   # Design
-  "V240001",  "V240003",  "V240002c",
-  "V240103a", "V240103b", "V240103c", "V240103d",
+  "V240001",
+  "V240003",
+  "V240002c",
+  "V240103a",
+  "V240103b",
+  "V240103c",
+  "V240103d",
   # Geography
-  "V243002",  "V243007",
+  "V243002",
+  "V243007",
   # Demographics
-  "V241458x", "V241550",  "V241501x", "V241465x", "V241566x",
+  "V241458x",
+  "V241550",
+  "V241501x",
+  "V241465x",
+  "V241566x",
   # Political
-  "V241177",  "V241222",  "V241223",
-  "V242066",  "V242067"
+  "V241177",
+  "V241222",
+  "V241223",
+  "V242066",
+  "V242067"
 )
 
 missing_cols <- setdiff(keep_cols, names(anes_raw))
 if (length(missing_cols) > 0) {
-  warning("These expected columns were not found: ", paste(missing_cols, collapse = ", "))
+  warning(
+    "These expected columns were not found: ",
+    paste(missing_cols, collapse = ", ")
+  )
   keep_cols <- intersect(keep_cols, names(anes_raw))
 }
 
@@ -92,12 +112,18 @@ anes_sub <- anes_raw[, keep_cols]
 
 as_plain <- function(df) {
   df[] <- lapply(df, function(x) {
-    if (!inherits(x, "haven_labelled")) return(x)
-    raw  <- as.vector(x)
-    lbl  <- attr(x, "label",  exact = TRUE)
+    if (!inherits(x, "haven_labelled")) {
+      return(x)
+    }
+    raw <- as.vector(x)
+    lbl <- attr(x, "label", exact = TRUE)
     lbvl <- attr(x, "labels", exact = TRUE)
-    if (!is.null(lbl))  attr(raw, "label")  <- lbl
-    if (!is.null(lbvl)) attr(raw, "labels") <- lbvl
+    if (!is.null(lbl)) {
+      attr(raw, "label") <- lbl
+    }
+    if (!is.null(lbvl)) {
+      attr(raw, "labels") <- lbvl
+    }
     raw
   })
   df
@@ -131,7 +157,13 @@ anes_2024 <- clean_names(anes_2024)
 message("Saving anes_2024 to data/...")
 usethis::use_data(anes_2024, overwrite = TRUE)
 
-message("Done. anes_2024: ", nrow(anes_2024), " rows x ", ncol(anes_2024), " cols")
+message(
+  "Done. anes_2024: ",
+  nrow(anes_2024),
+  " rows x ",
+  ncol(anes_2024),
+  " cols"
+)
 message("  Design: psu = v240103c, stratum = v240103d")
 message("  Weights: v240103a (pre-election), v240103b (post-election)")
 message("Document with: ?anes_2024")

@@ -49,8 +49,8 @@ parse_page <- function(page_text) {
   ## Split into lines; trim trailing whitespace but preserve leading
   ## (we need leading whitespace to detect page-number-only lines)
   lines <- strsplit(page_text, "\n")[[1]]
-  lines <- gsub("\\s+$", "", lines)          # trim trailing only
-  lines <- lines[nchar(trimws(lines)) > 0]   # drop blank lines
+  lines <- gsub("\\s+$", "", lines) # trim trailing only
+  lines <- lines[nchar(trimws(lines)) > 0] # drop blank lines
 
   ## Remove header lines (wave title, date/N line)
   ## Pattern: starts with "Nationscape" or contains "(N =" or is just digits
@@ -61,7 +61,9 @@ parse_page <- function(page_text) {
     lines
   )
   lines <- lines[!is_header]
-  if (length(lines) == 0) return(NULL)
+  if (length(lines) == 0) {
+    return(NULL)
+  }
 
   ## Trim remaining lines for easier matching
   trimmed <- trimws(lines)
@@ -70,39 +72,44 @@ parse_page <- function(page_text) {
   ## Appears as the first non-blank non-header line after stripping the header.
   ## Allow names with double underscores (e.g. start__date in some waves).
   var_idx <- which(grepl("^[a-z][a-z0-9_]+$", trimmed))[1]
-  if (is.na(var_idx)) return(NULL)
+  if (is.na(var_idx)) {
+    return(NULL)
+  }
   variable <- trimmed[var_idx]
 
   ## Question prompt: starts with "Question Prompt:"
   ## May span multiple lines; ends at the "Choice    Value" table header or EOF.
   prompt_start <- which(grepl("^Question Prompt:", trimmed))[1]
-  if (is.na(prompt_start)) return(NULL)
+  if (is.na(prompt_start)) {
+    return(NULL)
+  }
 
-  table_start  <- which(grepl("^Choice\\s+Value", trimmed))[1]
-  prompt_end   <- if (!is.na(table_start)) table_start - 1L else length(trimmed)
+  table_start <- which(grepl("^Choice\\s+Value", trimmed))[1]
+  prompt_end <- if (!is.na(table_start)) table_start - 1L else length(trimmed)
 
   ## Split annotation lines (Display Condition, Randomization, Note) out of the
   ## prompt range — these appear after the question text but before the table.
   ann_pat <- "^(Display Condition|Randomization|Note):"
   ann_pos <- which(grepl(ann_pat, trimmed[prompt_start:prompt_end])) +
-    prompt_start - 1L
+    prompt_start -
+    1L
 
   ## Question text ends just before the first annotation line (or at prompt_end)
   q_end <- if (length(ann_pos) > 0) ann_pos[1] - 1L else prompt_end
 
-  prompt_lines  <- trimmed[prompt_start:q_end]
+  prompt_lines <- trimmed[prompt_start:q_end]
   question_text <- paste(prompt_lines, collapse = " ")
   question_text <- trimws(sub("^Question Prompt:\\s*", "", question_text))
 
   ## Extract each annotation segment
   display_condition <- ""
-  randomization     <- ""
-  note              <- ""
+  randomization <- ""
+  note <- ""
 
   for (k in seq_along(ann_pos)) {
     seg_start <- ann_pos[k]
-    seg_end   <- if (k < length(ann_pos)) ann_pos[k + 1L] - 1L else prompt_end
-    seg_text  <- trimws(paste(trimmed[seg_start:seg_end], collapse = " "))
+    seg_end <- if (k < length(ann_pos)) ann_pos[k + 1L] - 1L else prompt_end
+    seg_text <- trimws(paste(trimmed[seg_start:seg_end], collapse = " "))
 
     if (grepl("^Display Condition:", seg_text)) {
       display_condition <- trimws(sub("^Display Condition:\\s*", "", seg_text))
@@ -120,17 +127,25 @@ parse_page <- function(page_text) {
     for (i in (table_start + 1L):length(trimmed)) {
       ln <- trimmed[i]
       ## Skip blank, header repeat, or page-number-only lines
-      if (!nzchar(ln)) next
-      if (grepl("^Choice\\s+Value", ln)) next
-      if (grepl("Respondent Skipped", ln, ignore.case = TRUE)) next
+      if (!nzchar(ln)) {
+        next
+      }
+      if (grepl("^Choice\\s+Value", ln)) {
+        next
+      }
+      if (grepl("Respondent Skipped", ln, ignore.case = TRUE)) {
+        next
+      }
 
       ## Detect rows that end with a bare integer or "."
       ## e.g. "Generally headed in the right direction   1"
       ##      "Not sure   999"
       m <- regexpr("(\\d+|\\.)\\s*$", ln)
-      if (m == -1L) next
+      if (m == -1L) {
+        next
+      }
 
-      value  <- trimws(regmatches(ln, m))
+      value <- trimws(regmatches(ln, m))
       choice <- trimws(substr(ln, 1L, m - 1L))
       if (nzchar(choice) && nzchar(value)) {
         response_parts <- c(response_parts, paste0(value, "=", choice))
@@ -139,12 +154,12 @@ parse_page <- function(page_text) {
   }
 
   list(
-    variable          = variable,
-    question_text     = question_text,
-    response_options  = paste(response_parts, collapse = " | "),
+    variable = variable,
+    question_text = question_text,
+    response_options = paste(response_parts, collapse = " | "),
     display_condition = display_condition,
-    randomization     = randomization,
-    note              = note
+    randomization = randomization,
+    note = note
   )
 }
 
@@ -160,17 +175,24 @@ parse_codebook <- function(pdf_path, wave_id) {
   results <- lapply(pages, parse_page)
   results <- Filter(Negate(is.null), results)
 
-  if (length(results) == 0) return(data.frame())
+  if (length(results) == 0) {
+    return(data.frame())
+  }
 
   df <- data.frame(
-    wave_id           = wave_id,
-    variable          = vapply(results, `[[`, character(1L), "variable"),
-    question_text     = vapply(results, `[[`, character(1L), "question_text"),
-    response_options  = vapply(results, `[[`, character(1L), "response_options"),
-    display_condition = vapply(results, `[[`, character(1L), "display_condition"),
-    randomization     = vapply(results, `[[`, character(1L), "randomization"),
-    note              = vapply(results, `[[`, character(1L), "note"),
-    stringsAsFactors  = FALSE
+    wave_id = wave_id,
+    variable = vapply(results, `[[`, character(1L), "variable"),
+    question_text = vapply(results, `[[`, character(1L), "question_text"),
+    response_options = vapply(results, `[[`, character(1L), "response_options"),
+    display_condition = vapply(
+      results,
+      `[[`,
+      character(1L),
+      "display_condition"
+    ),
+    randomization = vapply(results, `[[`, character(1L), "randomization"),
+    note = vapply(results, `[[`, character(1L), "note"),
+    stringsAsFactors = FALSE
   )
   df
 }
@@ -192,7 +214,7 @@ collate_phase <- function(phase_dir, phase_label) {
   all_rows <- vector("list", length(wave_dirs))
 
   for (i in seq_along(wave_dirs)) {
-    wave_id  <- basename(wave_dirs[[i]])
+    wave_id <- basename(wave_dirs[[i]])
     pdf_path <- file.path(wave_dirs[[i]], paste0("codebook_", wave_id, ".pdf"))
 
     if (!file.exists(pdf_path)) {
@@ -200,40 +222,51 @@ collate_phase <- function(phase_dir, phase_label) {
       next
     }
 
-    message("  Parsing ", wave_id, " (", i, "/", length(wave_dirs),
-            " — ", phase_label, ")...")
+    message(
+      "  Parsing ",
+      wave_id,
+      " (",
+      i,
+      "/",
+      length(wave_dirs),
+      " — ",
+      phase_label,
+      ")..."
+    )
     all_rows[[i]] <- parse_codebook(pdf_path, wave_id)
   }
 
   raw <- do.call(rbind, Filter(Negate(is.null), all_rows))
-  if (nrow(raw) == 0) return(list(variables = data.frame(), changes = data.frame()))
+  if (nrow(raw) == 0) {
+    return(list(variables = data.frame(), changes = data.frame()))
+  }
 
   ## Build per-variable summary
   vars <- unique(raw$variable)
   summary_rows <- lapply(vars, function(v) {
-    sub_df    <- raw[raw$variable == v, ]
-    waves     <- sub_df$wave_id
-    texts     <- sub_df$question_text
+    sub_df <- raw[raw$variable == v, ]
+    waves <- sub_df$wave_id
+    texts <- sub_df$question_text
     responses <- sub_df$response_options
 
     ## Use the first wave's values as canonical
-    canonical_text  <- texts[1]
-    canonical_resp  <- responses[1]
-    changed         <- any(texts != canonical_text)
+    canonical_text <- texts[1]
+    canonical_resp <- responses[1]
+    changed <- any(texts != canonical_text)
 
     data.frame(
-      variable          = v,
-      question_text     = canonical_text,
-      response_options  = canonical_resp,
+      variable = v,
+      question_text = canonical_text,
+      response_options = canonical_resp,
       display_condition = sub_df$display_condition[1],
-      randomization     = sub_df$randomization[1],
-      note              = sub_df$note[1],
-      first_wave        = waves[1],
-      last_wave         = waves[length(waves)],
-      n_waves           = length(waves),
-      changed           = changed,
-      waves_present     = paste(waves, collapse = ", "),
-      stringsAsFactors  = FALSE
+      randomization = sub_df$randomization[1],
+      note = sub_df$note[1],
+      first_wave = waves[1],
+      last_wave = waves[length(waves)],
+      n_waves = length(waves),
+      changed = changed,
+      waves_present = paste(waves, collapse = ", "),
+      stringsAsFactors = FALSE
     )
   })
 
@@ -249,8 +282,10 @@ collate_phase <- function(phase_dir, phase_label) {
     do.call(rbind, changes_rows)
   } else {
     data.frame(
-      wave_id = character(0), variable = character(0),
-      question_text = character(0), response_options = character(0)
+      wave_id = character(0),
+      variable = character(0),
+      question_text = character(0),
+      response_options = character(0)
     )
   }
 
@@ -261,23 +296,23 @@ collate_phase <- function(phase_dir, phase_label) {
 
 phases <- list(
   list(
-    dir    = file.path(NS_DIR, "phase_1_v20210301"),
-    label  = "Phase 1",
+    dir = file.path(NS_DIR, "phase_1_v20210301"),
+    label = "Phase 1",
     output = file.path(NS_DIR, "codebook_phase1.xlsx")
   ),
   list(
-    dir    = file.path(NS_DIR, "phase_2_v20210301"),
-    label  = "Phase 2",
+    dir = file.path(NS_DIR, "phase_2_v20210301"),
+    label = "Phase 2",
     output = file.path(NS_DIR, "codebook_phase2.xlsx")
   ),
   list(
-    dir    = file.path(NS_DIR, "phase_3_v20210301"),
-    label  = "Phase 3",
+    dir = file.path(NS_DIR, "phase_3_v20210301"),
+    label = "Phase 3",
     output = file.path(NS_DIR, "codebook_phase3.xlsx")
   ),
   list(
-    dir    = file.path(NS_DIR, "phase_parallel_v20210301"),
-    label  = "Parallel waves",
+    dir = file.path(NS_DIR, "phase_parallel_v20210301"),
+    label = "Parallel waves",
     output = file.path(NS_DIR, "codebook_parallel.xlsx")
   )
 )
@@ -299,18 +334,26 @@ for (phase in phases) {
   write_xlsx(
     list(
       Variables = result$variables,
-      Changes   = result$changes
+      Changes = result$changes
     ),
     path = phase$output
   )
 
   message(
-    "  Written: ", basename(phase$output),
-    "  (", nrow(result$variables), " unique variables",
-    if (nrow(result$changes) > 0)
-      paste0(", ", length(unique(result$changes$variable)),
-             " with question text changes)")
-    else ")"
+    "  Written: ",
+    basename(phase$output),
+    "  (",
+    nrow(result$variables),
+    " unique variables",
+    if (nrow(result$changes) > 0) {
+      paste0(
+        ", ",
+        length(unique(result$changes$variable)),
+        " with question text changes)"
+      )
+    } else {
+      ")"
+    }
   )
 }
 
