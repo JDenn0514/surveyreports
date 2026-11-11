@@ -314,20 +314,16 @@
 
 # -- Metadata resolvers ---------------------------------------------------------
 
-# A metadata reader applied to a design, or to every member of a collection.
-#
-# reader takes one survey_base design and returns a named character vector.
-# On a single design the result of reader() comes back unchanged. On a
-# survey_collection, reader() runs on each member and .unanimous_across()
-# keeps the keys that agree in every member. The surveycore readers abort on a
-# collection, so this branch is the only route to them for one.
+# The designs to read: every member of a survey_collection, or the one
+# survey_base design in a list of length 1. The surveycore metadata readers
+# abort on a collection, so this is the only route to them for one.
 #' @keywords internal
 #' @noRd
-.extract_unanimous <- function(design, reader) {
+.design_members <- function(design) {
   if (S7::S7_inherits(design, surveycore::survey_collection)) {
-    return(.unanimous_across(lapply(design@surveys, reader)))
+    return(design@surveys)
   }
-  reader(design)
+  list(design)
 }
 
 # The role of each column in cols, for one survey_base design.
@@ -338,24 +334,31 @@
 # a length-2 or longer vector and a non-character value all become
 # NA_character_. The coercion runs before vapply(), so vapply() only ever sees
 # one string and cannot abort on a foreign payload.
+# The result carries attr(, "malformed"): the cols whose payload is a length-2
+# or longer vector, or a length-1 non-character value. An absent key and a
+# length-0 value are not malformed. It is character(0) when there are none.
 #' @keywords internal
 #' @noRd
 .extract_roles_single <- function(design, cols) {
   extra <- surveycore::extract_var_extra(design)
-  vapply(
-    cols,
-    function(col) {
-      entry <- extra[[col]]
-      role <- if (is.list(entry)) entry[["role"]] else NULL
-      if (is.character(role) && length(role) == 1L) {
-        unname(role)
-      } else {
-        NA_character_
-      }
-    },
-    character(1),
-    USE.NAMES = TRUE
+  payloads <- lapply(cols, function(col) {
+    entry <- extra[[col]]
+    if (is.list(entry)) entry[["role"]] else NULL
+  })
+  is_role <- vapply(
+    payloads,
+    function(p) is.character(p) && length(p) == 1L,
+    logical(1)
   )
+
+  roles <- vapply(
+    seq_along(cols),
+    function(i) if (is_role[[i]]) unname(payloads[[i]]) else NA_character_,
+    character(1)
+  )
+  names(roles) <- cols
+  attr(roles, "malformed") <- cols[lengths(payloads) > 0L & !is_role]
+  roles
 }
 
 # The universe text of every variable that has one, for one survey_base
@@ -385,14 +388,28 @@
 # On a survey_collection it reads each member and keeps a role only when every
 # member carries the same one (spec section 3.6). A role that disagrees, or
 # that is missing in any member, becomes NA_character_.
+#
+# The result carries attr(, "malformed"), the cols whose payload is a length-2
+# or longer vector or a non-character value, in the order of cols. It is
+# character(0) when there are none. On a collection, a column is malformed
+# when it is malformed in ANY member. The value of a malformed column stays
+# NA_character_: only the attribute tells .apply_role_guard() which NA columns
+# warn, because an absent role and a malformed one give the same NA.
+# Each member is read once, for the roles and the malformed flags together.
+# .unanimous_across() drops the attribute, so it is rebuilt here.
 #' @keywords internal
 #' @noRd
 .resolve_roles <- function(design, cols) {
-  found <- .extract_unanimous(
-    design,
+  per_member <- lapply(
+    .design_members(design),
     function(d) .extract_roles_single(d, cols)
   )
-  stats::setNames(unname(found[cols]), cols)
+  found <- .unanimous_across(per_member)
+  malformed <- unlist(lapply(per_member, attr, "malformed"))
+
+  result <- stats::setNames(unname(found[cols]), cols)
+  attr(result, "malformed") <- cols[cols %in% malformed]
+  result
 }
 
 # The caller's base_notes and the design's universe, kept SEPARATE.
@@ -412,12 +429,199 @@
 #' @noRd
 .resolve_base_notes <- function(design, base_notes) {
   caller <- if (length(base_notes) > 0L) base_notes else NULL
-  universe <- .extract_unanimous(design, .extract_universe_single)
+  # On a single design, .unanimous_across() of one member returns that
+  # member's entries unchanged.
+  universe <- .unanimous_across(
+    lapply(.design_members(design), .extract_universe_single)
+  )
 
   if (is.null(caller) && length(universe) == 0L) {
     return(NULL)
   }
   list(caller = caller, universe = universe)
+}
+
+# -- Selection guards -----------------------------------------------------------
+
+# The warn-and-drop policy of spec section 3.10, for one argument.
+#
+# Both export functions call it for `vars`; export_crosstab() calls it again
+# for `banner`. arg ("vars" or "banner") names the argument in every message.
+# empty_class is the error class raised when nothing survives.
+# - A column with a non-substantive role is dropped. One
+#   surveyreports_warning_role_dropped lists every dropped column and its role.
+# - A column with a length-1 role outside the seven known values, or with a
+#   malformed payload, is kept. One surveyreports_warning_unknown_role lists
+#   every such column. The drop warning comes first (spec section 3.11).
+# - A column with no role (NA and not malformed) is kept with no warning.
+# - When every column is dropped, it aborts with empty_class and raises no
+#   drop warning: the error lists every dropped column and its role.
+# It reads var_extra through .resolve_roles() and never reads @variables.
+# A design-named column is .reject_design_vars()'s case, which runs first.
+# Returns the surviving names as a character vector, in the order of cols.
+#' @keywords internal
+#' @noRd
+.apply_role_guard <- function(design, cols, arg, empty_class) {
+  non_substantive <- c("weight", "identifier", "paradata", "free_text")
+  substantive <- c("item", "demographic", "treatment")
+
+  roles <- .resolve_roles(design, cols)
+  malformed <- cols %in% attr(roles, "malformed")
+  roles <- unname(roles)
+
+  dropped <- !is.na(roles) & roles %in% non_substantive
+  unknown <- malformed |
+    (!is.na(roles) & !roles %in% c(non_substantive, substantive))
+  kept <- cols[!dropped]
+  dropped_roles <- paste0(cols[dropped], " (", roles[dropped], ")")
+
+  if (length(kept) == 0L) {
+    cli::cli_abort(
+      c(
+        "x" = "Every column in {.arg {arg}} has a non-substantive role.",
+        "i" = "Dropped: {dropped_roles}.",
+        "v" = paste0(
+          "Select a column with a substantive role, or clear the ",
+          "{.field role} of a column to keep it."
+        )
+      ),
+      class = empty_class
+    )
+  }
+
+  if (any(dropped)) {
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "Dropped {sum(dropped)} column{?s} from {.arg {arg}} for a ",
+          "non-substantive role."
+        ),
+        "i" = "Dropped: {dropped_roles}."
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+  }
+
+  if (any(unknown)) {
+    unknown_roles <- paste0(
+      cols[unknown],
+      " (",
+      ifelse(malformed[unknown], "not a single string", roles[unknown]),
+      ")"
+    )
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "{.arg {arg}} has {sum(unknown)} column{?s} with an unrecognized ",
+          "{.field role}: {unknown_roles}."
+        ),
+        "i" = paste0(
+          "Each one is kept as a substantive column. The known roles are ",
+          "{.val {c(substantive, non_substantive)}}."
+        )
+      ),
+      class = "surveyreports_warning_unknown_role"
+    )
+  }
+
+  kept
+}
+
+# Every column the design itself names, checked against one selection.
+#
+# cols is the resolved `vars` or `banner`, in input order; arg ("vars" or
+# "banner") names the argument in the message. Returns invisible(TRUE) when no
+# column matches. Otherwise it aborts with
+# surveyreports_error_design_variable_selected for the first match in the
+# order of cols, naming the column, arg and the slot (spec section 3.17).
+# It runs before the role guard (spec section 3.11). It reads @variables and
+# never reads var_extra.
+# On a survey_collection, every member is checked: export_topline() accepts a
+# collection, and a column any wave uses as a design variable is not a
+# question in that wave. The message then names the member.
+#
+# The reader, design_columns(), returns the column names one survey_base
+# design holds in @variables, as a named character vector: the value is a
+# column name, the name is its slot. @variables is not a flat list of column
+# names, and its slots differ by subclass (surveycore 1.2.0). The reader takes
+# only the slots that can hold a column name, and keeps only character values,
+# so no comparison runs against TRUE, 0.9 or "JK1":
+# - survey_taylor: ids, weights, strata, fpc.
+# - survey_replicate: weights, repweights, fpc. Its fpc is a number, never a
+#   column, so the character filter removes it.
+# - survey_twophase: ids, weights, strata, fpc nested in phase1; ids, strata,
+#   probs, fpc nested in phase2; and subset. A flat read finds none of them.
+# - survey_nonprob: weights, repweights, ids, strata, fpc.
+# Skipped, because they hold no column name: nest, probs_provided,
+# visible_vars, type, scale, rscales, fpctype, fpc_applied, fpc_fraction, mse,
+# rho, method. A NULL slot is dropped.
+# A Taylor design built from probs stores an internal weight column, not the
+# probs column, so the probs column is not reachable from @variables.
+#' @keywords internal
+#' @noRd
+.reject_design_vars <- function(design, cols, arg) {
+  design_columns <- function(d) {
+    v <- d@variables
+    slots <- if (S7::S7_inherits(d, surveycore::survey_twophase)) {
+      c(
+        stats::setNames(
+          v$phase1[c("ids", "weights", "strata", "fpc")],
+          paste0("phase1$", c("ids", "weights", "strata", "fpc"))
+        ),
+        stats::setNames(
+          v$phase2[c("ids", "strata", "probs", "fpc")],
+          paste0("phase2$", c("ids", "strata", "probs", "fpc"))
+        ),
+        list(subset = v$subset)
+      )
+    } else if (S7::S7_inherits(d, surveycore::survey_replicate)) {
+      v[c("weights", "repweights", "fpc")]
+    } else if (S7::S7_inherits(d, surveycore::survey_nonprob)) {
+      v[c("weights", "repweights", "ids", "strata", "fpc")]
+    } else {
+      # survey_taylor, the fourth subclass of the cross-design table.
+      v[c("ids", "weights", "strata", "fpc")]
+    }
+
+    slots <- slots[vapply(slots, is.character, logical(1))]
+    stats::setNames(
+      unlist(slots, use.names = FALSE),
+      rep(names(slots), lengths(slots))
+    )
+  }
+
+  members <- .design_members(design)
+  is_collection <- S7::S7_inherits(design, surveycore::survey_collection)
+  design_cols <- lapply(members, design_columns)
+
+  for (col in cols) {
+    for (m in seq_along(design_cols)) {
+      hit <- match(col, design_cols[[m]])
+      if (is.na(hit)) {
+        next
+      }
+      slot <- names(design_cols[[m]])[[hit]]
+      where <- if (is_collection) {
+        member <- names(members)[[m]]
+        "Member {.val {member}} names it in its {.field {slot}} slot."
+      } else {
+        "The design names it in its {.field {slot}} slot."
+      }
+      cli::cli_abort(
+        c(
+          "x" = paste0(
+            "Column {.field {col}} in {.arg {arg}} is a design variable, ",
+            "not a question."
+          ),
+          "i" = where,
+          "v" = "Remove {.field {col}} from {.arg {arg}}."
+        ),
+        class = "surveyreports_error_design_variable_selected"
+      )
+    }
+  }
+
+  invisible(TRUE)
 }
 
 # -- Frequency computation helpers ---------------------------------------------

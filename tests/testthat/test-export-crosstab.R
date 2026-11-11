@@ -2002,7 +2002,8 @@ test_that(".banner_heading() falls back when the label is an empty string", {
 # 20. Metadata resolvers: unwired helpers -------------------------------------
 # .resolve_roles() and .resolve_base_notes() have no caller yet. Later PRs
 # wire them into export_crosstab() and export_topline(). Until then they are
-# tested directly.
+# tested directly. c(result) drops the "malformed" attribute of
+# .resolve_roles(), which section 21 tests.
 
 # Sets one role payload of each shape that surveycore accepts unchanged.
 add_role_payloads <- function(d) {
@@ -2024,7 +2025,7 @@ test_that(".resolve_roles() returns a length-1 character role, on every design",
   for (nm in names(designs)) {
     d <- add_role_payloads(designs[[nm]])
     result <- surveyreports:::.resolve_roles(d, "q1")
-    expect_identical(result, c(q1 = "item"), label = nm)
+    expect_identical(c(result), c(q1 = "item"), label = nm)
   }
 })
 
@@ -2035,7 +2036,7 @@ test_that(".resolve_roles() returns an unrecognized role string as-is, on every 
   for (nm in names(designs)) {
     d <- add_role_payloads(designs[[nm]])
     result <- surveyreports:::.resolve_roles(d, "group")
-    expect_identical(result, c(group = "banana"), label = nm)
+    expect_identical(c(result), c(group = "banana"), label = nm)
   }
 })
 
@@ -2048,7 +2049,7 @@ test_that(".resolve_roles() returns NA for an absent role key, on every design",
     # y3 has a var_extra entry without a role; bat_1 has no entry at all.
     result <- surveyreports:::.resolve_roles(d, c("y3", "bat_1"))
     expect_identical(
-      result,
+      c(result),
       c(y3 = NA_character_, bat_1 = NA_character_),
       label = nm
     )
@@ -2062,7 +2063,7 @@ test_that(".resolve_roles() returns NA for a length-0 role, on every design", {
   for (nm in names(designs)) {
     d <- add_role_payloads(designs[[nm]])
     expect_no_error(result <- surveyreports:::.resolve_roles(d, "y2"))
-    expect_identical(result, c(y2 = NA_character_), label = nm)
+    expect_identical(c(result), c(y2 = NA_character_), label = nm)
   }
 })
 
@@ -2073,7 +2074,7 @@ test_that(".resolve_roles() returns NA for a length-2 role, on every design", {
   for (nm in names(designs)) {
     d <- add_role_payloads(designs[[nm]])
     expect_no_error(result <- surveyreports:::.resolve_roles(d, "q2"))
-    expect_identical(result, c(q2 = NA_character_), label = nm)
+    expect_identical(c(result), c(q2 = NA_character_), label = nm)
   }
 })
 
@@ -2084,7 +2085,7 @@ test_that(".resolve_roles() returns NA for a non-character role, on every design
   for (nm in names(designs)) {
     d <- add_role_payloads(designs[[nm]])
     expect_no_error(result <- surveyreports:::.resolve_roles(d, "y1"))
-    expect_identical(result, c(y1 = NA_character_), label = nm)
+    expect_identical(c(result), c(y1 = NA_character_), label = nm)
   }
 })
 
@@ -2097,7 +2098,7 @@ test_that(".resolve_roles() names and orders its result by cols, on every design
     d <- add_role_payloads(designs[[nm]])
     result <- surveyreports:::.resolve_roles(d, cols)
     expect_identical(
-      result,
+      c(result),
       c(
         group = "banana",
         y3 = NA_character_,
@@ -2126,7 +2127,11 @@ test_that(".resolve_roles() returns an empty named vector for no cols", {
 
   result <- surveyreports:::.resolve_roles(d, character(0))
 
-  expect_identical(result, structure(character(0), names = character(0)))
+  # c() drops an empty names attribute, so this one compares in full.
+  expect_identical(
+    result,
+    structure(character(0), names = character(0), malformed = character(0))
+  )
 })
 
 test_that(".resolve_roles() resolves a role that agrees across a collection", {
@@ -2138,7 +2143,7 @@ test_that(".resolve_roles() resolves a role that agrees across a collection", {
   )
 
   expect_no_error(result <- surveyreports:::.resolve_roles(coll, "q1"))
-  expect_identical(result, c(q1 = "item"))
+  expect_identical(c(result), c(q1 = "item"))
 })
 
 test_that(".resolve_roles() returns NA for a role that disagrees across a collection", {
@@ -2153,7 +2158,7 @@ test_that(".resolve_roles() returns NA for a role that disagrees across a collec
   )
 
   expect_no_error(result <- surveyreports:::.resolve_roles(coll, "q1"))
-  expect_identical(result, c(q1 = NA_character_))
+  expect_identical(c(result), c(q1 = NA_character_))
 })
 
 test_that(".resolve_roles() returns NA for a role missing in one member", {
@@ -2171,7 +2176,7 @@ test_that(".resolve_roles() returns NA for a role missing in one member", {
   expect_no_error(
     result <- surveyreports:::.resolve_roles(coll, c("q2", "q1"))
   )
-  expect_identical(result, c(q2 = NA_character_, q1 = NA_character_))
+  expect_identical(c(result), c(q2 = NA_character_, q1 = NA_character_))
 })
 
 test_that(".resolve_base_notes() returns the caller and the universe separately, on every design", {
@@ -2338,4 +2343,498 @@ test_that(".resolve_base_notes() returns NULL on a collection with no agreeing u
 
   expect_no_error(result <- surveyreports:::.resolve_base_notes(coll, NULL))
   expect_identical(result, NULL)
+})
+
+# 21. Selection guards: unwired helpers ---------------------------------------
+# .apply_role_guard() and .reject_design_vars() have no caller yet. Later PRs
+# wire them into export_crosstab() and export_topline(). Until then they are
+# tested directly, with the malformed attribute of .resolve_roles() that the
+# role guard reads.
+
+# Calls the role guard on vars with the vars empty class.
+guard_vars <- function(d, cols) {
+  surveyreports:::.apply_role_guard(
+    d,
+    cols,
+    "vars",
+    "surveyreports_error_vars_all_dropped"
+  )
+}
+
+test_that(".resolve_roles() lists length-2 and non-character payloads as malformed, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    result <- surveyreports:::.resolve_roles(d, c("y1", "q1", "q2", "group"))
+    expect_identical(attr(result, "malformed"), c("y1", "q2"), label = nm)
+  }
+})
+
+test_that(".resolve_roles() does not list an absent key or a length-0 payload as malformed, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    # y2 has a length-0 role, y3 has no role key, bat_1 has no entry at all.
+    result <- surveyreports:::.resolve_roles(d, c("y2", "y3", "bat_1"))
+    expect_identical(attr(result, "malformed"), character(0), label = nm)
+  }
+})
+
+test_that(".resolve_roles() sets an empty malformed attribute on a design with no var_extra, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    result <- surveyreports:::.resolve_roles(designs[[nm]], c("q1", "q2"))
+    expect_identical(attr(result, "malformed"), character(0), label = nm)
+  }
+})
+
+test_that(".resolve_roles() lists a column malformed in one collection member", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(
+      designs$taylor,
+      q1 = list(role = "item"),
+      q2 = list(role = "item")
+    ),
+    w2 = surveycore::set_var_extra(
+      designs$replicate,
+      q1 = list(role = "item"),
+      q2 = list(role = c("item", "demographic"))
+    )
+  )
+
+  expect_no_error(result <- surveyreports:::.resolve_roles(coll, c("q1", "q2")))
+  expect_identical(c(result), c(q1 = "item", q2 = NA_character_))
+  expect_identical(attr(result, "malformed"), "q2")
+})
+
+test_that(".apply_role_guard() drops each non-substantive role with a warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (role in c("weight", "identifier", "paradata", "free_text")) {
+    for (nm in names(designs)) {
+      d <- surveycore::set_var_extra(designs[[nm]], q2 = list(role = role))
+      expect_warning(
+        result <- guard_vars(d, c("q1", "q2")),
+        class = "surveyreports_warning_role_dropped"
+      )
+      expect_identical(result, "q1", label = paste0(nm, ": ", role))
+    }
+  }
+})
+
+test_that(".apply_role_guard() keeps the substantive roles with no warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_extra(
+      designs[[nm]],
+      q1 = list(role = "item"),
+      q2 = list(role = "demographic"),
+      group = list(role = "treatment")
+    )
+    expect_no_warning(result <- guard_vars(d, c("q1", "q2", "group")))
+    expect_identical(result, c("q1", "q2", "group"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() keeps an unrecognized role string with a warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_warning(
+      result <- guard_vars(d, c("q1", "group")),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, c("q1", "group"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() keeps a length-2 role with a warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_warning(
+      result <- guard_vars(d, c("q1", "q2")),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, c("q1", "q2"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() keeps a non-character role with a warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_warning(
+      result <- guard_vars(d, c("y1", "q1")),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, c("y1", "q1"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() keeps an absent or length-0 role with no warning, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- add_role_payloads(designs[[nm]])
+    expect_no_warning(result <- guard_vars(d, c("y2", "y3", "bat_1")))
+    expect_identical(result, c("y2", "y3", "bat_1"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() returns the survivors in input order, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_extra(
+      designs[[nm]],
+      bat_1 = list(role = "paradata"),
+      q1 = list(role = "item")
+    )
+    expect_warning(
+      result <- guard_vars(d, c("bat_1", "q2", "q1")),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_identical(result, c("q2", "q1"), label = nm)
+  }
+})
+
+test_that(".apply_role_guard() aborts with the vars class when every column is dropped, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_extra(
+      designs[[nm]],
+      q1 = list(role = "free_text"),
+      q2 = list(role = "identifier")
+    )
+    expect_error(
+      guard_vars(d, c("q1", "q2")),
+      class = "surveyreports_error_vars_all_dropped",
+      label = nm
+    )
+  }
+})
+
+test_that(".apply_role_guard() aborts with the banner class when every column is dropped, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_extra(designs[[nm]], group = list(role = "weight"))
+    expect_error(
+      surveyreports:::.apply_role_guard(
+        d,
+        "group",
+        "banner",
+        "surveyreports_error_banner_empty_selection"
+      ),
+      class = "surveyreports_error_banner_empty_selection",
+      label = nm
+    )
+  }
+})
+
+test_that(".apply_role_guard() raises one drop warning that lists every dropped column", {
+  skip_if_not_installed("surveycore")
+  d <- surveycore::set_var_extra(
+    make_all_designs(seed = 42)$taylor,
+    q1 = list(role = "free_text"),
+    q2 = list(role = "paradata")
+  )
+
+  msgs <- testthat::capture_warnings(
+    result <- guard_vars(d, c("q1", "q2", "group"))
+  )
+
+  expect_length(msgs, 1L)
+  expect_match(msgs, "q1 (free_text)", fixed = TRUE)
+  expect_match(msgs, "q2 (paradata)", fixed = TRUE)
+  expect_match(msgs, "vars", fixed = TRUE)
+  expect_identical(result, "group")
+})
+
+test_that(".apply_role_guard() raises one unknown-role warning that lists every affected column", {
+  skip_if_not_installed("surveycore")
+  d <- add_role_payloads(make_all_designs(seed = 42)$taylor)
+
+  msgs <- testthat::capture_warnings(
+    result <- guard_vars(d, c("group", "q2", "y1", "q1"))
+  )
+
+  expect_length(msgs, 1L)
+  expect_match(msgs, "group (banana)", fixed = TRUE)
+  expect_match(msgs, "q2", fixed = TRUE)
+  expect_match(msgs, "y1", fixed = TRUE)
+  expect_identical(result, c("group", "q2", "y1", "q1"))
+})
+
+test_that(".apply_role_guard() raises the drop warning and the unknown-role warning in one call", {
+  skip_if_not_installed("surveycore")
+  d <- surveycore::set_var_extra(
+    make_all_designs(seed = 42)$taylor,
+    q1 = list(role = "free_text"),
+    group = list(role = "banana")
+  )
+
+  expect_warning(
+    expect_warning(
+      result <- guard_vars(d, c("q1", "q2", "group")),
+      class = "surveyreports_warning_unknown_role"
+    ),
+    class = "surveyreports_warning_role_dropped"
+  )
+  expect_identical(result, c("q2", "group"))
+})
+
+test_that(".apply_role_guard() drops a role that agrees across a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(
+      designs$taylor,
+      q2 = list(role = "paradata")
+    ),
+    w2 = surveycore::set_var_extra(
+      designs$nonprob,
+      q2 = list(role = "paradata")
+    )
+  )
+
+  expect_warning(
+    result <- guard_vars(coll, c("q1", "q2")),
+    class = "surveyreports_warning_role_dropped"
+  )
+  expect_identical(result, "q1")
+})
+
+test_that(".apply_role_guard() keeps a role that disagrees across a collection with no warning", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(
+      designs$taylor,
+      q2 = list(role = "paradata")
+    ),
+    w2 = surveycore::set_var_extra(designs$replicate, q2 = list(role = "item"))
+  )
+
+  expect_no_warning(result <- guard_vars(coll, c("q1", "q2")))
+  expect_identical(result, c("q1", "q2"))
+})
+
+test_that(".apply_role_guard() warns on a role malformed in one collection member", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = surveycore::set_var_extra(designs$taylor, q2 = list(role = "item")),
+    w2 = surveycore::set_var_extra(designs$twophase, q2 = list(role = 3L))
+  )
+
+  expect_warning(
+    result <- guard_vars(coll, c("q1", "q2")),
+    class = "surveyreports_warning_unknown_role"
+  )
+  expect_identical(result, c("q1", "q2"))
+})
+
+test_that(".reject_design_vars() aborts on each Taylor design column", {
+  skip_if_not_installed("surveycore")
+  # The fixture's Taylor design sets no FPC, so this design adds one.
+  d <- surveycore::as_survey(
+    make_survey_data(seed = 42),
+    ids = psu,
+    strata = strata,
+    weights = wt,
+    fpc = fpc,
+    nest = TRUE
+  )
+
+  for (col in c("wt", "psu", "strata", "fpc")) {
+    expect_error(
+      surveyreports:::.reject_design_vars(d, c("q1", col), "vars"),
+      class = "surveyreports_error_design_variable_selected",
+      label = col
+    )
+  }
+})
+
+test_that(".reject_design_vars() aborts on the weight and every replicate weight", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$replicate
+
+  for (col in c("wt", paste0("rwt", 1:10))) {
+    expect_error(
+      surveyreports:::.reject_design_vars(d, col, "banner"),
+      class = "surveyreports_error_design_variable_selected",
+      label = col
+    )
+  }
+})
+
+test_that(".reject_design_vars() aborts on the twophase subset and phase-1 columns", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$twophase
+
+  for (col in c("in_phase2", "psu", "wt", "strata")) {
+    expect_error(
+      surveyreports:::.reject_design_vars(d, col, "vars"),
+      class = "surveyreports_error_design_variable_selected",
+      label = col
+    )
+  }
+})
+
+test_that(".reject_design_vars() aborts on each twophase phase-2 column", {
+  skip_if_not_installed("surveycore")
+  # The fixture's twophase design uses method = "approx" and sets no phase-2
+  # column, so this design sets all four.
+  df <- make_survey_data(seed = 42)
+  df$id2 <- seq_len(nrow(df))
+  df$st2 <- rep(1:2, length.out = nrow(df))
+  df$pr2 <- 0.5
+  df$fpc2 <- 1000L
+  phase1 <- surveycore::as_survey(
+    df,
+    ids = psu,
+    strata = strata,
+    weights = wt,
+    fpc = fpc,
+    nest = TRUE
+  )
+  d <- surveycore::as_survey_twophase(
+    phase1,
+    ids2 = id2,
+    strata2 = st2,
+    probs2 = pr2,
+    fpc2 = fpc2,
+    subset = in_phase2,
+    method = "full"
+  )
+
+  for (col in c("id2", "st2", "pr2", "fpc2")) {
+    expect_error(
+      surveyreports:::.reject_design_vars(d, col, "vars"),
+      class = "surveyreports_error_design_variable_selected",
+      label = col
+    )
+  }
+})
+
+test_that(".reject_design_vars() aborts on the nonprob weight", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$nonprob
+
+  expect_error(
+    surveyreports:::.reject_design_vars(d, c("q1", "wt"), "vars"),
+    class = "surveyreports_error_design_variable_selected"
+  )
+})
+
+test_that(".reject_design_vars() aborts on each nonprob replicate weight", {
+  skip_if_not_installed("surveycore")
+  # The fixture's nonprob design sets no replicate weights, so this design
+  # adds them.
+  df <- make_all_designs(seed = 42)$replicate@data
+  d <- surveycore::as_survey_nonprob(
+    df,
+    weights = wt,
+    repweights = tidyselect::starts_with("rwt"),
+    type = "bootstrap"
+  )
+
+  for (col in paste0("rwt", 1:10)) {
+    expect_error(
+      surveyreports:::.reject_design_vars(d, col, "vars"),
+      class = "surveyreports_error_design_variable_selected",
+      label = col
+    )
+  }
+})
+
+test_that(".reject_design_vars() returns TRUE invisibly for a clean selection, on every design", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    result <- withVisible(
+      surveyreports:::.reject_design_vars(
+        designs[[nm]],
+        c("q1", "q2", "group", "bat_1"),
+        "vars"
+      )
+    )
+    expect_false(result$visible, label = nm)
+    expect_identical(result$value, TRUE, label = nm)
+  }
+})
+
+test_that(".reject_design_vars() never matches a slot that holds no column name", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  # The value of type, fpctype and method, and the text of nest and scale.
+  cols <- c("JK1", "fraction", "approx", "TRUE", "0.9")
+
+  for (nm in names(designs)) {
+    expect_identical(
+      surveyreports:::.reject_design_vars(designs[[nm]], cols, "vars"),
+      TRUE,
+      label = nm
+    )
+  }
+})
+
+test_that(".reject_design_vars() names the column, the argument and the slot", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$replicate
+
+  expect_error(
+    surveyreports:::.reject_design_vars(d, c("q1", "rwt3"), "banner"),
+    regexp = "(?s)rwt3.*banner.*repweights",
+    perl = TRUE,
+    class = "surveyreports_error_design_variable_selected"
+  )
+})
+
+test_that(".reject_design_vars() checks every member of a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    w1 = designs$taylor,
+    w2 = designs$replicate
+  )
+
+  expect_error(
+    surveyreports:::.reject_design_vars(coll, "psu", "vars"),
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_error(
+    surveyreports:::.reject_design_vars(coll, "rwt1", "vars"),
+    regexp = "w2",
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_identical(
+    surveyreports:::.reject_design_vars(coll, c("q1", "group"), "vars"),
+    TRUE
+  )
 })

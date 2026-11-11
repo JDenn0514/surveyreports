@@ -403,6 +403,15 @@ is what satisfies section 5.2's snapshot gate.
 #    that disagrees across members, or is missing in any member, resolves
 #    to NA_character_. export_topline() accepts a collection and runs the
 #    guard on `vars`, so the branch is on a supported path.
+#    MALFORMED ATTRIBUTE (decided 2026-11-10, feature/metadata-guards): the
+#    result carries attr(, "malformed"), a character vector of the cols
+#    whose payload is a length-2 or longer vector or a non-character value.
+#    It is character(0) when there are none. An absent key and a length-0
+#    payload are NOT malformed. On a collection, a column is malformed when
+#    its payload is malformed in ANY member. The values stay NA_character_;
+#    only the attribute tells the guard which NA columns warn
+#    `unknown_role` (section 3.10). Without it, the guard sees the same NA
+#    for an absent role and a malformed one.
 
 # The warn-and-drop policy in one place. Both export functions call it for
 # `vars`; export_crosstab() calls it again for `banner`.
