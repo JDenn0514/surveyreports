@@ -1235,3 +1235,181 @@
   has_base <- nrow(total_any) > 0L && any(total_any$n > 0L, na.rm = TRUE)
   if (has_base) 0L else NA_integer_
 }
+
+# -- Cell formatters -----------------------------------------------------------
+# .fmt_pct() and .fmt_variance() have one call-site file, R/export-crosstab.R,
+# but sit here because the spec places them with the shared helpers (spec 2.1).
+
+# One percentage cell, as a string (spec 3.3). `p` is a proportion, as
+# surveycore returns it. This helper multiplies by 100, so no call site does
+# the arithmetic. The five forms:
+# - `-` when the cell has no rows (`has_rows` is FALSE), or when `p` is NA.
+#   The spec allows NA in `p` but names no form for NA with rows present;
+#   this reads NA as "no estimate" and writes the no-rows form.
+# - `0%` when the estimate is exactly 0.
+# - the floor string (`<0.1%` at decimals = 1) for 0 < pp < half a unit.
+# - the ceiling string (`>99.9%` at decimals = 1) for a value below 100 that
+#   rounds to 100.
+# - otherwise round(pp, decimals) with a `%`. round() rounds half to even and
+#   drops a decimal part that rounds away, so 41.01 prints `41%`.
+# A negative value (a lower interval bound, spec 3.12) takes the last form and
+# prints with a hyphen-minus. A negative value that rounds to zero prints `0%`,
+# because the spec defines the floor only for 0 < pp and R prints -0 as 0.
+#' @keywords internal
+#' @noRd
+.fmt_pct <- function(p, decimals, has_rows) {
+  if (!has_rows || is.na(p)) {
+    return("-")
+  }
+  pp <- p * 100
+  if (pp == 0) {
+    return("0%")
+  }
+  half_unit <- 0.5 * 10^-decimals
+  if (pp > 0 && pp < half_unit) {
+    floor_str <- formatC(10^-decimals, format = "f", digits = decimals)
+    return(paste0("<", floor_str, "%"))
+  }
+  if (pp > 100 - half_unit && pp < 100) {
+    ceiling_str <- formatC(
+      100 - 10^-decimals,
+      format = "f",
+      digits = decimals
+    )
+    return(paste0(">", ceiling_str, "%"))
+  }
+  paste0(round(pp, decimals), "%")
+}
+
+# One variance string, as it appears beside an estimate (spec 3.12). `rows`
+# holds the get_freqs() row for this cell, with `se` or `ci_low` and `ci_high`
+# as proportions. Every number goes through .fmt_pct(), so this helper does no
+# arithmetic and inherits the rounding mode and both threshold strings. The
+# interval separator is an en-dash (U+2013) with one space on each side. A
+# negative lower bound prints with the hyphen-minus that .fmt_pct() writes.
+# Returns "" when `variance` is NULL or the cell has no rows. The exported
+# function validates `variance`, so any value other than "se" is "ci" here.
+#' @keywords internal
+#' @noRd
+.fmt_variance <- function(rows, variance, decimals, has_rows) {
+  if (is.null(variance) || !has_rows) {
+    return("")
+  }
+  if (identical(variance, "se")) {
+    se <- .fmt_pct(rows$se[[1L]], decimals, has_rows)
+    return(paste0("(", se, ")"))
+  }
+  low <- .fmt_pct(rows$ci_low[[1L]], decimals, has_rows)
+  high <- .fmt_pct(rows$ci_high[[1L]], decimals, has_rows)
+  # The en-dash is built from its code point. `air format` rewrites a
+  # backslash-u escape as the literal character, and R CMD check warns on
+  # non-ASCII characters in R code.
+  en_dash <- intToUtf8(0x2013L)
+  paste0("(", low, " ", en_dash, " ", high, ")")
+}
+
+# -- Withholding ---------------------------------------------------------------
+# .build_withheld() has one call-site file, R/export-crosstab.R, but sits here
+# because the spec places it with the shared helpers (spec 2.1).
+
+# The withheld-subgroup frame for one banner column or one interaction
+# (spec 3.5). `counts` is a .resolve_eff_n() frame of level, n and n_eff.
+# Returns a tibble of level (chr), banner_var (chr) and n_eff (dbl), one row
+# per subgroup whose n_eff is strictly below `min_eff_n`, in the order of
+# `counts`. Returns a zero-row tibble of the same columns when no subgroup is
+# below the floor, and never NULL.
+# THIS IS THE ONLY FLOOR TEST. No other code compares an effective N against
+# `min_eff_n`; the caller takes the kept levels as a set difference on level.
+# A level whose n_eff is NA is not withheld: an NA comparison is not TRUE, and
+# the spec states the test as a strict less-than and nothing more.
+#' @keywords internal
+#' @noRd
+.build_withheld <- function(counts, min_eff_n, banner_var) {
+  idx <- which(counts$n_eff < min_eff_n)
+  tibble::tibble(
+    level = as.character(counts$level[idx]),
+    banner_var = rep(as.character(banner_var), length(idx)),
+    n_eff = as.numeric(counts$n_eff[idx])
+  )
+}
+
+# The withheld lines, as text (spec 3.14). One element per row of the
+# .build_withheld() frame, in frame order. Each line names the subgroup, its
+# banner variable and its effective N at one decimal, and no raw N. Returns
+# character(0) for a zero-row frame and for NULL.
+# The spec fixes what a line names but gives no exact sentence. This wording
+# uses the word "withheld" (spec VI) and the label "effective sample size" of
+# the sample-size row (spec 3.4), and states the floor so a line read alone in
+# a block footer or a console warning still explains itself.
+#' @keywords internal
+#' @noRd
+.format_withheld_lines <- function(withheld, min_eff_n) {
+  if (is.null(withheld) || nrow(withheld) == 0L) {
+    return(character(0))
+  }
+  paste0(
+    "\"",
+    withheld$level,
+    "\" (",
+    withheld$banner_var,
+    ") withheld: effective sample size ",
+    formatC(withheld$n_eff, format = "f", digits = 1L),
+    ", below the minimum of ",
+    format(min_eff_n, scientific = FALSE, trim = TRUE),
+    "."
+  )
+}
+
+# -- Sample-size rows ----------------------------------------------------------
+# .write_sample_size_rows() has one call-site file, R/export-crosstab.R, but
+# sits here because the spec places it with the shared helpers (spec 2.1).
+
+# The two sample-size rows of one block (spec 3.4). Writes the row label in
+# column A, leaves any other label column blank, and writes one cell per row
+# of `counts` from column label_cols + 1, in the order of `counts`. The
+# unweighted row carries n; the effective row carries n_eff at one decimal and
+# is written only when `show_ess` is TRUE. A zero-row `counts` frame writes the
+# labels and no data cell. Returns list(wb = , next_row = ).
+#' @keywords internal
+#' @noRd
+.write_sample_size_rows <- function(
+  wb,
+  sheet,
+  start_row,
+  label_cols,
+  counts,
+  show_ess
+) {
+  rows <- list(list(label = "Unweighted sample size", values = counts$n))
+  if (show_ess) {
+    rows[[2L]] <- list(
+      label = "Effective sample size",
+      values = round(counts$n_eff, 1L)
+    )
+  }
+
+  row <- start_row
+  for (r in rows) {
+    wb <- openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = r$label,
+      start_row = row,
+      start_col = 1L,
+      col_names = FALSE
+    )
+    if (length(r$values) > 0L) {
+      wb <- openxlsx2::wb_add_data(
+        wb,
+        sheet = sheet,
+        x = as.data.frame(matrix(r$values, nrow = 1L)),
+        start_row = row,
+        start_col = label_cols + 1L,
+        col_names = FALSE
+      )
+    }
+    row <- row + 1L
+  }
+
+  list(wb = wb, next_row = row)
+}
