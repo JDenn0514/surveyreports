@@ -84,7 +84,7 @@ stands.** Only the formal arguments come forward.
 - [x] PR 2: `feature/metadata-readers` — the five helpers that read a design.
 - [x] PR 3: `feature/metadata-unanimity` — the two resolvers that apply the
       unanimity rule.
-- [ ] PR 4: `feature/metadata-guards` — the role guard and the
+- [x] PR 4: `feature/metadata-guards` — the role guard and the
       design-variable reader.
 - [ ] PR 5: `feature/format-helpers` — the six format and write helpers.
 - [ ] PR 6: `feature/cover-sheet` — every workbook gains an `"About"` sheet.
