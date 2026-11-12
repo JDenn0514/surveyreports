@@ -351,6 +351,35 @@ export_crosstab <- function(
   invisible(file_name)
 }
 
+# -- Sheet names -------------------------------------------------------------------
+
+# A sheet name that does not collide with one already in `wb` (spec 2.2,
+# spec 3.14). The comparison folds case, because Excel and openxlsx2 treat
+# sheet names case-insensitively. The name is truncated to 31 characters
+# first; when it is taken, the suffix _2, _3, ... is added until it is free.
+# The spec says "truncate, then suffix" but does not say how long the result
+# may be. This reads it as: the result is never longer than 31 characters,
+# because Excel and openxlsx2 reject a longer name, and the spec names two
+# variables whose names share their first 31 characters as a case this helper
+# closes. So a suffixed name shortens its base until base + suffix fits.
+#' @keywords internal
+#' @noRd
+.unique_sheet_name <- function(wb, name) {
+  max_chars <- 31L
+  taken <- tolower(openxlsx2::wb_get_sheet_names(wb))
+  candidate <- substr(name, 1L, max_chars)
+  k <- 1L
+  while (tolower(candidate) %in% taken) {
+    k <- k + 1L
+    suffix <- paste0("_", k)
+    candidate <- paste0(
+      substr(name, 1L, max_chars - nchar(suffix)),
+      suffix
+    )
+  }
+  candidate
+}
+
 # -- Shared column-group helpers --------------------------------------------------
 
 #' @keywords internal

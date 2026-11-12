@@ -2838,3 +2838,457 @@ test_that(".reject_design_vars() checks every member of a collection", {
     TRUE
   )
 })
+
+# 22. Format and write helpers: unwired ---------------------------------------
+# None of these six helpers takes a design, so the cross-design loop does not
+# apply. They have no caller yet. Later PRs wire them into export_crosstab().
+# Until then they are tested directly.
+
+# .fmt_pct() ------------------------------------------------------------------
+
+test_that(".fmt_pct() writes a dash when the cell has no rows", {
+  expect_identical(surveyreports:::.fmt_pct(0.356, 1L, FALSE), "-")
+  expect_identical(surveyreports:::.fmt_pct(NA_real_, 1L, FALSE), "-")
+})
+
+test_that(".fmt_pct() writes a dash for an NA estimate in a cell with rows", {
+  expect_identical(surveyreports:::.fmt_pct(NA_real_, 1L, TRUE), "-")
+})
+
+test_that(".fmt_pct() writes 0% for an estimate of exactly zero", {
+  expect_identical(surveyreports:::.fmt_pct(0, 1L, TRUE), "0%")
+  expect_identical(surveyreports:::.fmt_pct(0, 2L, TRUE), "0%")
+})
+
+test_that(".fmt_pct() writes the floor string for a nonzero value that rounds to zero", {
+  expect_identical(surveyreports:::.fmt_pct(0.0004, 1L, TRUE), "<0.1%")
+  expect_identical(surveyreports:::.fmt_pct(1e-9, 1L, TRUE), "<0.1%")
+})
+
+test_that(".fmt_pct() writes the ceiling string for a value below 100 that rounds to 100", {
+  expect_identical(surveyreports:::.fmt_pct(0.9997, 1L, TRUE), ">99.9%")
+  expect_identical(surveyreports:::.fmt_pct(1 - 1e-9, 1L, TRUE), ">99.9%")
+})
+
+test_that(".fmt_pct() multiplies a proportion by 100 and rounds it", {
+  expect_identical(surveyreports:::.fmt_pct(0.356, 1L, TRUE), "35.6%")
+  expect_identical(surveyreports:::.fmt_pct(0.356, 0L, TRUE), "36%")
+  expect_identical(surveyreports:::.fmt_pct(0.35612, 2L, TRUE), "35.61%")
+  expect_identical(surveyreports:::.fmt_pct(1, 1L, TRUE), "100%")
+})
+
+test_that(".fmt_pct() drops a decimal part that rounds away", {
+  expect_identical(surveyreports:::.fmt_pct(0.4101, 1L, TRUE), "41%")
+  expect_identical(surveyreports:::.fmt_pct(0.3, 1L, TRUE), "30%")
+})
+
+test_that(".fmt_pct() rounds half to even", {
+  expect_identical(surveyreports:::.fmt_pct(0.4125, 1L, TRUE), "41.2%")
+})
+
+test_that(".fmt_pct() floor string follows decimals at 0, 1 and 2", {
+  expect_identical(surveyreports:::.fmt_pct(0.004, 0L, TRUE), "<1%")
+  expect_identical(surveyreports:::.fmt_pct(0.0004, 1L, TRUE), "<0.1%")
+  expect_identical(surveyreports:::.fmt_pct(0.00004, 2L, TRUE), "<0.01%")
+  # The same value leaves the floor once the precision can show it.
+  expect_identical(surveyreports:::.fmt_pct(0.0004, 2L, TRUE), "0.04%")
+})
+
+test_that(".fmt_pct() ceiling string follows decimals at 0, 1 and 2", {
+  expect_identical(surveyreports:::.fmt_pct(0.996, 0L, TRUE), ">99%")
+  expect_identical(surveyreports:::.fmt_pct(0.9996, 1L, TRUE), ">99.9%")
+  expect_identical(surveyreports:::.fmt_pct(0.99996, 2L, TRUE), ">99.99%")
+  # The same value leaves the ceiling once the precision can show it.
+  expect_identical(surveyreports:::.fmt_pct(0.9996, 2L, TRUE), "99.96%")
+})
+
+test_that(".fmt_pct() prints a negative value with a hyphen-minus", {
+  expect_identical(surveyreports:::.fmt_pct(-0.00343, 1L, TRUE), "-0.3%")
+})
+
+test_that(".fmt_pct() prints a negative value that rounds to zero as 0%", {
+  expect_identical(surveyreports:::.fmt_pct(-0.0001, 1L, TRUE), "0%")
+})
+
+# .fmt_variance() -------------------------------------------------------------
+
+test_that(".fmt_variance() writes the standard error in parentheses with one %", {
+  rows <- tibble::tibble(pct = 0.356, se = 0.0290, n = 50L)
+
+  result <- surveyreports:::.fmt_variance(rows, "se", 1L, TRUE)
+
+  expect_identical(result, "(2.9%)")
+})
+
+test_that(".fmt_variance() writes the interval bounds with an en-dash separator", {
+  rows <- tibble::tibble(
+    pct = 0.356,
+    ci_low = 0.3004,
+    ci_high = 0.413,
+    n = 50L
+  )
+
+  result <- surveyreports:::.fmt_variance(rows, "ci", 1L, TRUE)
+
+  expect_identical(result, "(30% – 41.3%)")
+  expect_identical(lengths(regmatches(result, gregexpr("%", result))), 2L)
+})
+
+test_that(".fmt_variance() prints a negative lower bound with a hyphen-minus", {
+  rows <- tibble::tibble(
+    pct = 0.0067,
+    ci_low = -0.00343,
+    ci_high = 0.0178,
+    n = 300L
+  )
+
+  result <- surveyreports:::.fmt_variance(rows, "ci", 1L, TRUE)
+
+  expect_identical(result, "(-0.3% – 1.8%)")
+  expect_identical(substr(result, 2L, 2L), "-")
+})
+
+test_that(".fmt_variance() inherits the floor string from .fmt_pct()", {
+  rows <- tibble::tibble(pct = 0.001, se = 0.000004, n = 500L)
+
+  expect_identical(
+    surveyreports:::.fmt_variance(rows, "se", 1L, TRUE),
+    "(<0.1%)"
+  )
+})
+
+test_that(".fmt_variance() returns an empty string when variance is NULL", {
+  rows <- tibble::tibble(pct = 0.356, se = 0.0290, n = 50L)
+
+  expect_identical(surveyreports:::.fmt_variance(rows, NULL, 1L, TRUE), "")
+})
+
+test_that(".fmt_variance() returns an empty string when the cell has no rows", {
+  rows <- tibble::tibble(
+    pct = 0.356,
+    se = 0.0290,
+    ci_low = 0.3,
+    ci_high = 0.413,
+    n = 50L
+  )
+
+  expect_identical(surveyreports:::.fmt_variance(rows, "se", 1L, FALSE), "")
+  expect_identical(surveyreports:::.fmt_variance(rows, "ci", 1L, FALSE), "")
+})
+
+# .format_withheld_lines() ----------------------------------------------------
+
+test_that(".format_withheld_lines() writes one line per withheld subgroup in frame order", {
+  withheld <- tibble::tibble(
+    level = c("Female", "Other"),
+    banner_var = c("gen", "gen"),
+    n_eff = c(18.347, 4)
+  )
+
+  result <- surveyreports:::.format_withheld_lines(withheld, 100)
+
+  expect_identical(
+    result,
+    c(
+      "\"Female\" (gen) withheld: effective sample size 18.3, below the minimum of 100.",
+      "\"Other\" (gen) withheld: effective sample size 4.0, below the minimum of 100."
+    )
+  )
+})
+
+test_that(".format_withheld_lines() names the effective N and no raw N", {
+  withheld <- tibble::tibble(
+    level = "North:Female",
+    banner_var = "..interaction_1..",
+    n_eff = 46.8
+  )
+
+  result <- surveyreports:::.format_withheld_lines(withheld, 50)
+
+  expect_match(result, "North:Female", fixed = TRUE)
+  expect_match(result, "..interaction_1..", fixed = TRUE)
+  expect_match(result, "46.8", fixed = TRUE)
+  expect_no_match(result, "n=", fixed = TRUE)
+  expect_no_match(result, "raw", fixed = TRUE)
+})
+
+test_that(".format_withheld_lines() returns character(0) for a zero-row frame and for NULL", {
+  empty <- tibble::tibble(
+    level = character(0),
+    banner_var = character(0),
+    n_eff = numeric(0)
+  )
+
+  expect_identical(
+    surveyreports:::.format_withheld_lines(empty, 100),
+    character(0)
+  )
+  expect_identical(
+    surveyreports:::.format_withheld_lines(NULL, 100),
+    character(0)
+  )
+})
+
+# .build_withheld() -----------------------------------------------------------
+
+test_that(".build_withheld() keeps one row per subgroup strictly below the floor", {
+  counts <- tibble::tibble(
+    level = c("Total", "Male", "Female", "Other"),
+    n = c(200L, 120L, 70L, 10L),
+    n_eff = c(185.4, 110.1, 64.2, 100)
+  )
+
+  result <- surveyreports:::.build_withheld(counts, 100, "gen")
+
+  expect_identical(names(result), c("level", "banner_var", "n_eff"))
+  expect_identical(result$level, "Female")
+  expect_identical(result$banner_var, "gen")
+  expect_equal(result$n_eff, 64.2)
+})
+
+test_that(".build_withheld() keeps the levels in the order they were resolved", {
+  counts <- tibble::tibble(
+    level = c("c", "a", "b"),
+    n = c(10L, 20L, 30L),
+    n_eff = c(9, 18, 27)
+  )
+
+  result <- surveyreports:::.build_withheld(counts, 100, "grp")
+
+  expect_identical(result$level, c("c", "a", "b"))
+  expect_identical(result$banner_var, c("grp", "grp", "grp"))
+  expect_equal(result$n_eff, c(9, 18, 27))
+})
+
+test_that(".build_withheld() returns a typed zero-row tibble when nothing is below the floor", {
+  counts <- tibble::tibble(
+    level = c("Male", "Female"),
+    n = c(120L, 110L),
+    n_eff = c(110.1, 101.5)
+  )
+
+  result <- surveyreports:::.build_withheld(counts, 100, "gen")
+
+  expect_s3_class(result, "tbl_df")
+  expect_identical(nrow(result), 0L)
+  expect_identical(names(result), c("level", "banner_var", "n_eff"))
+  expect_identical(result$level, character(0))
+  expect_identical(result$banner_var, character(0))
+  expect_identical(result$n_eff, numeric(0))
+})
+
+test_that(".build_withheld() never returns NULL", {
+  counts <- tibble::tibble(
+    level = character(0),
+    n = integer(0),
+    n_eff = numeric(0)
+  )
+
+  result_empty <- surveyreports:::.build_withheld(counts, 100, "gen")
+  result_off <- surveyreports:::.build_withheld(
+    tibble::tibble(level = "Female", n = 5L, n_eff = 4.2),
+    0,
+    "gen"
+  )
+
+  expect_false(is.null(result_empty))
+  expect_false(is.null(result_off))
+  expect_identical(nrow(result_empty), 0L)
+  expect_identical(nrow(result_off), 0L)
+})
+
+test_that(".build_withheld() converts a factor level to character", {
+  counts <- tibble::tibble(
+    level = factor(c("Male", "Female")),
+    n = c(120L, 20L),
+    n_eff = c(110.1, 18.3)
+  )
+
+  result <- surveyreports:::.build_withheld(counts, 100, "gen")
+
+  expect_identical(result$level, "Female")
+})
+
+test_that(".build_withheld() does not withhold a level whose n_eff is NA", {
+  counts <- tibble::tibble(
+    level = c("Male", "Female"),
+    n = c(120L, 20L),
+    n_eff = c(NA_real_, 18.3)
+  )
+
+  result <- surveyreports:::.build_withheld(counts, 100, "gen")
+
+  expect_identical(result$level, "Female")
+})
+
+# .write_sample_size_rows() ---------------------------------------------------
+
+# A workbook with one empty sheet named "S".
+ss_workbook <- function() {
+  openxlsx2::wb_add_worksheet(openxlsx2::wb_workbook(), "S")
+}
+
+ss_counts <- function() {
+  tibble::tibble(
+    level = c("Total", "Male", "Female"),
+    n = c(200L, 120L, 80L),
+    n_eff = c(185.43, 110.06, 72.35)
+  )
+}
+
+test_that(".write_sample_size_rows() writes two labelled rows and one cell per counts row", {
+  res <- surveyreports:::.write_sample_size_rows(
+    ss_workbook(),
+    "S",
+    start_row = 3L,
+    label_cols = 1L,
+    counts = ss_counts(),
+    show_ess = TRUE
+  )
+
+  expect_identical(names(res), c("wb", "next_row"))
+  expect_identical(res$next_row, 5L)
+
+  df <- openxlsx2::wb_to_df(res$wb, sheet = "S", col_names = FALSE)
+  expect_identical(rownames(df), c("3", "4"))
+  expect_identical(
+    df[[1L]],
+    c("Unweighted sample size", "Effective sample size")
+  )
+  expect_identical(ncol(df), 4L)
+  expect_equal(unname(unlist(df[1L, 2:4])), c(200, 120, 80))
+  expect_equal(unname(unlist(df[2L, 2:4])), c(185.4, 110.1, 72.3))
+})
+
+test_that(".write_sample_size_rows() leaves a second label column blank", {
+  res <- surveyreports:::.write_sample_size_rows(
+    ss_workbook(),
+    "S",
+    start_row = 1L,
+    label_cols = 2L,
+    counts = ss_counts(),
+    show_ess = TRUE
+  )
+
+  df <- openxlsx2::wb_to_df(res$wb, sheet = "S", col_names = FALSE)
+  expect_identical(
+    df[[1L]],
+    c("Unweighted sample size", "Effective sample size")
+  )
+  expect_true(all(is.na(df[[2L]])))
+  expect_identical(ncol(df), 5L)
+  expect_equal(unname(unlist(df[1L, 3:5])), c(200, 120, 80))
+  expect_equal(unname(unlist(df[2L, 3:5])), c(185.4, 110.1, 72.3))
+})
+
+test_that(".write_sample_size_rows() writes the cells in counts order", {
+  counts <- ss_counts()[c(3L, 1L, 2L), ]
+
+  res <- surveyreports:::.write_sample_size_rows(
+    ss_workbook(),
+    "S",
+    start_row = 1L,
+    label_cols = 1L,
+    counts = counts,
+    show_ess = TRUE
+  )
+
+  df <- openxlsx2::wb_to_df(res$wb, sheet = "S", col_names = FALSE)
+  expect_equal(unname(unlist(df[1L, 2:4])), c(80, 200, 120))
+})
+
+test_that(".write_sample_size_rows() writes only the unweighted row when show_ess is FALSE", {
+  res <- surveyreports:::.write_sample_size_rows(
+    ss_workbook(),
+    "S",
+    start_row = 3L,
+    label_cols = 1L,
+    counts = ss_counts(),
+    show_ess = FALSE
+  )
+
+  expect_identical(res$next_row, 4L)
+  df <- openxlsx2::wb_to_df(res$wb, sheet = "S", col_names = FALSE)
+  expect_identical(nrow(df), 1L)
+  expect_identical(df[[1L]], "Unweighted sample size")
+  expect_equal(unname(unlist(df[1L, 2:4])), c(200, 120, 80))
+})
+
+test_that(".write_sample_size_rows() writes the labels and no data cell for a zero-row counts frame", {
+  counts <- ss_counts()[0L, ]
+
+  res <- surveyreports:::.write_sample_size_rows(
+    ss_workbook(),
+    "S",
+    start_row = 4L,
+    label_cols = 2L,
+    counts = counts,
+    show_ess = TRUE
+  )
+
+  expect_identical(res$next_row, 6L)
+  df <- openxlsx2::wb_to_df(res$wb, sheet = "S", col_names = FALSE)
+  expect_identical(ncol(df), 1L)
+  expect_identical(rownames(df), c("4", "5"))
+  expect_identical(
+    df[[1L]],
+    c("Unweighted sample size", "Effective sample size")
+  )
+})
+
+# .unique_sheet_name() --------------------------------------------------------
+
+test_that(".unique_sheet_name() returns a free name unchanged", {
+  wb <- openxlsx2::wb_add_worksheet(openxlsx2::wb_workbook(), "About")
+
+  expect_identical(surveyreports:::.unique_sheet_name(wb, "q1"), "q1")
+  expect_identical(
+    surveyreports:::.unique_sheet_name(openxlsx2::wb_workbook(), "q1"),
+    "q1"
+  )
+})
+
+test_that(".unique_sheet_name() suffixes a taken name with _2, then _3", {
+  wb <- openxlsx2::wb_add_worksheet(openxlsx2::wb_workbook(), "About")
+
+  expect_identical(surveyreports:::.unique_sheet_name(wb, "About"), "About_2")
+
+  wb <- openxlsx2::wb_add_worksheet(wb, "About_2")
+  expect_identical(surveyreports:::.unique_sheet_name(wb, "About"), "About_3")
+})
+
+test_that(".unique_sheet_name() folds case when it compares names", {
+  wb <- openxlsx2::wb_add_worksheet(openxlsx2::wb_workbook(), "About")
+
+  expect_identical(surveyreports:::.unique_sheet_name(wb, "about"), "about_2")
+  expect_identical(surveyreports:::.unique_sheet_name(wb, "ABOUT"), "ABOUT_2")
+})
+
+test_that(".unique_sheet_name() truncates a long free name to 31 characters", {
+  name <- strrep("abcdefghij", 4L)
+
+  result <- surveyreports:::.unique_sheet_name(openxlsx2::wb_workbook(), name)
+
+  expect_identical(result, substr(name, 1L, 31L))
+  expect_identical(nchar(result), 31L)
+})
+
+test_that(".unique_sheet_name() keeps a suffixed long name at 31 characters", {
+  first <- paste0(strrep("x", 31L), "_alpha")
+  second <- paste0(strrep("x", 31L), "_beta")
+  wb <- openxlsx2::wb_workbook()
+  wb <- openxlsx2::wb_add_worksheet(
+    wb,
+    surveyreports:::.unique_sheet_name(wb, first)
+  )
+
+  result <- surveyreports:::.unique_sheet_name(wb, second)
+
+  expect_identical(result, paste0(strrep("x", 29L), "_2"))
+  expect_identical(nchar(result), 31L)
+  wb <- openxlsx2::wb_add_worksheet(wb, result)
+  expect_identical(
+    unname(openxlsx2::wb_get_sheet_names(wb)),
+    c(strrep("x", 31L), result)
+  )
+})
