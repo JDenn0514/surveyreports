@@ -190,7 +190,16 @@ export_crosstab <- function(
     pub_type = pub_type
   )
 
-  wb <- .build_workbook()
+  # The "About" cover sheet comes first. No withholding exists yet, so the
+  # withheld block is not written (spec 2.3, spec 3.14).
+  wb <- .build_workbook(
+    design,
+    withheld = NULL,
+    has_banner = TRUE,
+    string_cells = FALSE,
+    decimals = decimals,
+    variance = variance
+  )
 
   if (layout == "per_question") {
     groups_done <- character(0)
@@ -203,8 +212,11 @@ export_crosstab <- function(
         next
       }
 
+      # Each per-question sheet name goes through .unique_sheet_name() and is
+      # assigned back before the sheet is added and rendered into, so a
+      # variable named "About" cannot overwrite the cover sheet (spec 3.14).
       if (vtype == "single") {
-        sheet_name <- substr(var, 1L, 31L)
+        sheet_name <- .unique_sheet_name(wb, var)
         var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
         wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
         result <- .render_crosstab_single(
@@ -223,7 +235,7 @@ export_crosstab <- function(
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
-        sheet_name <- substr(group_vars[[1L]], 1L, 31L)
+        sheet_name <- .unique_sheet_name(wb, group_vars[[1L]])
         var_frame <- freq_result$frame[
           freq_result$frame$variable %in% group_vars,
         ]
@@ -245,7 +257,7 @@ export_crosstab <- function(
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
-        sheet_name <- substr(group_vars[[1L]], 1L, 31L)
+        sheet_name <- .unique_sheet_name(wb, group_vars[[1L]])
         var_frame <- freq_result$frame[
           freq_result$frame$variable %in% group_vars,
         ]

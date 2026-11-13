@@ -87,7 +87,7 @@ stands.** Only the formal arguments come forward.
 - [x] PR 4: `feature/metadata-guards` — the role guard and the
       design-variable reader.
 - [x] PR 5: `feature/format-helpers` — the six format and write helpers.
-- [ ] PR 6: `feature/cover-sheet` — every workbook gains an `"About"` sheet.
+- [x] PR 6: `feature/cover-sheet` — every workbook gains an `"About"` sheet.
 - [ ] PR 7: `feature/effective-n-rewiring` — the reported effective N becomes
       correct on twophase and domain-restricted designs.
 - [ ] PR 8: `feature/base-notes-adoption` — a base note falls back to the

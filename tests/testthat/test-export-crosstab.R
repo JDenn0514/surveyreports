@@ -52,7 +52,8 @@ test_that("export_crosstab() includes all variable names in workbook for multipl
   # per_question: one sheet per var
   expect_true("q1" %in% wb$sheet_names, label = "q1 sheet present")
   expect_true("q2" %in% wb$sheet_names, label = "q2 sheet present")
-  expect_equal(length(wb$sheet_names), 2L, label = "exactly 2 sheets")
+  # The About cover sheet comes first, then one sheet per variable.
+  expect_equal(length(wb$sheet_names), 3L, label = "About plus 2 sheets")
 })
 
 # 3. Layout -----------------------------------------------------------------------
@@ -75,7 +76,8 @@ test_that("export_crosstab() layout='per_question' creates one sheet per variabl
   wb <- openxlsx2::wb_load(out)
   expect_true("q1" %in% wb$sheet_names)
   expect_true("q2" %in% wb$sheet_names)
-  expect_equal(length(wb$sheet_names), 2L)
+  # The About cover sheet comes first, then one sheet per variable.
+  expect_equal(length(wb$sheet_names), 3L)
 })
 
 test_that("export_crosstab() layout='stacked' creates single sheet named 'Crosstab'", {
@@ -95,7 +97,8 @@ test_that("export_crosstab() layout='stacked' creates single sheet named 'Crosst
 
   wb <- openxlsx2::wb_load(out)
   expect_true("Crosstab" %in% wb$sheet_names, label = "Crosstab sheet present")
-  expect_equal(length(wb$sheet_names), 1L, label = "exactly 1 sheet")
+  # The About cover sheet, then the one stacked sheet.
+  expect_equal(length(wb$sheet_names), 2L, label = "About plus 1 sheet")
 })
 
 test_that("export_crosstab() stacked layout renders SATA variables", {
@@ -276,9 +279,10 @@ test_that("export_crosstab() renders SATA variables without error, with banner c
     expect_true(file.exists(out))
 
     wb <- openxlsx2::wb_load(out)
+    # Sheet 1 is the About cover sheet; the question sheet is sheet 2.
     df <- openxlsx2::wb_to_df(
       wb,
-      sheet = wb$sheet_names[[1L]],
+      sheet = wb$sheet_names[[2L]],
       col_names = FALSE
     )
     cells <- as.character(unlist(df)[!is.na(unlist(df))])
@@ -316,9 +320,10 @@ test_that("export_crosstab() renders battery variables without error, with banne
     expect_true(file.exists(out))
 
     wb <- openxlsx2::wb_load(out)
+    # Sheet 1 is the About cover sheet; the question sheet is sheet 2.
     df <- openxlsx2::wb_to_df(
       wb,
-      sheet = wb$sheet_names[[1L]],
+      sheet = wb$sheet_names[[2L]],
       col_names = FALSE
     )
     cells <- as.character(unlist(df)[!is.na(unlist(df))])
@@ -3291,4 +3296,806 @@ test_that(".unique_sheet_name() keeps a suffixed long name at 31 characters", {
     unname(openxlsx2::wb_get_sheet_names(wb)),
     c(strrep("x", 31L), result)
   )
+})
+
+# 23. Cover sheet ---------------------------------------------------------------
+# Every workbook gains an "About" sheet as sheet 1 (spec 3.14). The sheet has
+# a Key / Value header row, then the survey metadata block, the withheld block
+# and the glossary block (spec 3.15).
+
+# The About sheet as a data frame of columns A and B, one row per sheet row.
+# Blank rows stay in the frame, so a row index is a sheet row minus 1.
+about_sheet <- function(path) {
+  df <- openxlsx2::wb_to_df(
+    path,
+    sheet = "About",
+    col_names = FALSE,
+    cols = 1:2
+  )
+  data.frame(
+    A = as.character(df[[1L]]),
+    B = as.character(df[[2L]]),
+    stringsAsFactors = FALSE
+  )
+}
+
+# The glossary terms of an About sheet, in sheet order: the column A cells
+# below the "What these numbers mean" heading.
+about_glossary <- function(about) {
+  start <- match("What these numbers mean", about$A)
+  rows <- about[seq.int(start + 1L, nrow(about)), ]
+  stats::setNames(rows$B, rows$A)
+}
+
+# A design whose q1, q2 and group carry variable labels, so the missing-label
+# warning does not fire in a test about the cover sheet.
+cover_design <- function(d) {
+  surveycore::set_var_label(
+    d,
+    q1 = "Question one",
+    q2 = "Question two",
+    group = "Group"
+  )
+}
+
+test_that("export_crosstab() writes the About sheet as sheet 1 for all designs (XA-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+    wb <- openxlsx2::wb_load(out)
+    expect_identical(
+      unname(wb$get_sheet_names()),
+      c("About", "q1"),
+      label = paste0(nm, ": sheet order")
+    )
+  }
+})
+
+test_that("export_crosstab() writes the About sheet with no dataset metadata, glossary included (XA-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+    expect_identical(
+      nrow(surveycore::extract_dataset_metadata(d, format = "data_frame")),
+      0L,
+      label = paste0(nm, ": no metadata set")
+    )
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+    about <- about_sheet(out)
+    expect_identical(
+      about$A,
+      c(
+        "Key",
+        "What these numbers mean",
+        "Unweighted sample size",
+        "Effective sample size (ESS)"
+      ),
+      label = paste0(nm, ": About column A")
+    )
+    expect_identical(about$B[[1L]], "Value", label = paste0(nm, ": header B1"))
+    expect_true(
+      is.na(about$B[[2L]]),
+      label = paste0(nm, ": heading has column B empty")
+    )
+    expect_true(
+      all(nzchar(about$B[3:4])),
+      label = paste0(nm, ": each term has its text")
+    )
+  }
+})
+
+# The display label of each dataset key, in surveycore's canonical key order.
+cover_key_labels <- c(
+  survey_name = "Survey",
+  data_name = "Dataset",
+  vendor = "Vendor",
+  field_start = "Field start",
+  field_end = "Field end",
+  field_period = "Field period"
+)
+
+test_that("export_crosstab() writes every set key in canonical order (XA-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    # Set in an order that is not the canonical one, so a writer that keeps
+    # the call order fails.
+    d <- surveycore::set_dataset_metadata(
+      cover_design(designs[[nm]]),
+      field_period = "Spring 2024",
+      vendor = "Test Vendor",
+      field_end = "2024-03-31",
+      data_name = "Test Data v2",
+      field_start = "2024-03-01",
+      survey_name = "Test Survey"
+    )
+    oracle <- surveycore::extract_dataset_metadata(d, format = "data_frame")
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+    about <- about_sheet(out)
+    expect_identical(
+      about$A[2:7],
+      unname(cover_key_labels[oracle$key]),
+      label = paste0(nm, ": labels in the oracle's key order")
+    )
+    expect_identical(
+      about$A[2:7],
+      c(
+        "Survey",
+        "Dataset",
+        "Vendor",
+        "Field start",
+        "Field end",
+        "Field period"
+      ),
+      label = paste0(nm, ": the six display labels")
+    )
+    expect_identical(
+      about$B[2:7],
+      oracle$value,
+      label = paste0(nm, ": each value against its key")
+    )
+    expect_identical(
+      about$B[2:7],
+      c(
+        "Test Survey",
+        "Test Data v2",
+        "Test Vendor",
+        "2024-03-01",
+        "2024-03-31",
+        "Spring 2024"
+      ),
+      label = paste0(nm, ": the six values")
+    )
+    expect_true(
+      is.na(about$A[[8L]]) && is.na(about$B[[8L]]),
+      label = paste0(nm, ": one blank row after the block")
+    )
+  }
+})
+
+test_that("export_crosstab() writes no row for an unset key (XA-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_dataset_metadata(
+      cover_design(designs[[nm]]),
+      vendor = "Test Vendor",
+      field_end = "2024-03-31"
+    )
+    expect_false(
+      surveycore::SURVEYCORE_DOMAIN_COL %in% names(d@data),
+      label = paste0(nm, ": no domain column")
+    )
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+    about <- about_sheet(out)
+    blank <- which(is.na(about$A) & is.na(about$B))[[1L]]
+    survey_block <- about[2:(blank - 1L), ]
+    expect_identical(
+      nrow(survey_block),
+      2L,
+      label = paste0(nm, ": two rows")
+    )
+    expect_identical(
+      survey_block$A,
+      c("Vendor", "Field end"),
+      label = paste0(nm, ": the two set keys")
+    )
+    expect_false(
+      anyNA(survey_block$B),
+      label = paste0(nm, ": no blank-valued row")
+    )
+    expect_identical(
+      about$A[[blank + 1L]],
+      "What these numbers mean",
+      label = paste0(nm, ": the glossary follows")
+    )
+  }
+})
+
+test_that("export_crosstab() writes a file that opens on the About sheet (XA-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_dataset_metadata(
+      cover_design(designs[[nm]]),
+      survey_name = "Test Survey"
+    )
+
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+
+    # Read the active sheet after a save and a reload. A workbook still in
+    # memory has no active sheet set, so the check would pass vacuously.
+    wb <- openxlsx2::wb_load(out)
+    expect_identical(
+      unname(wb$get_sheet_names()),
+      c("About", "q1", "q2"),
+      label = paste0(nm, ": data sheets follow")
+    )
+    expect_equal(
+      wb$get_active_sheet(),
+      1,
+      label = paste0(nm, ": active sheet")
+    )
+  }
+})
+
+test_that("export_crosstab() writes the domain row only on a restricted design (XA-13)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_dataset_metadata(
+      cover_design(designs[[nm]]),
+      survey_name = "Test Survey"
+    )
+    d_dom <- d
+    d_dom@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d_dom@data$group == "A"
+    oracle_n <- surveycore::get_effective_n(d_dom)$n
+
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    # q2 is the banner, because `group` holds one level inside the domain.
+    export_crosstab(d_dom, vars = q1, banner = q2, file_name = out)
+    about <- about_sheet(out)
+
+    expect_identical(
+      about$A[2:3],
+      c("Survey", "Restricted to"),
+      label = paste0(nm, ": domain row below the dataset keys")
+    )
+    expect_identical(
+      about$B[[3L]],
+      paste0(oracle_n, " of ", nrow(d_dom@data), " rows"),
+      label = paste0(nm, ": in-domain count against the total")
+    )
+    expect_identical(
+      about$B[[3L]],
+      paste0(oracle_n, " of 200 rows"),
+      label = paste0(nm, ": total is the design's 200 rows")
+    )
+
+    file.remove(out)
+    export_crosstab(d, vars = q1, banner = q2, file_name = out)
+    about <- about_sheet(out)
+
+    expect_false(
+      "Restricted to" %in% about$A,
+      label = paste0(nm, ": no domain row without the domain column")
+    )
+    expect_identical(
+      about$A[2:3],
+      c("Survey", NA_character_),
+      label = paste0(nm, ": the survey block ends after its key")
+    )
+  }
+})
+
+test_that("export_crosstab() suffixes a data sheet named About (XA-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+    d@data$About <- d@data$q1
+    d <- surveycore::set_var_label(d, About = "About question")
+    expect_true("About" %in% names(d@data), label = paste0(nm, ": column"))
+
+    export_crosstab(
+      d,
+      vars = About,
+      banner = group,
+      file_name = out,
+      layout = "per_question"
+    )
+
+    wb <- openxlsx2::wb_load(out)
+    expect_identical(
+      unname(wb$get_sheet_names()),
+      c("About", "About_2"),
+      label = paste0(nm, ": cover sheet, then the suffixed data sheet")
+    )
+    about <- about_sheet(out)
+    expect_true(
+      "What these numbers mean" %in% about$A,
+      label = paste0(nm, ": cover sheet keeps its glossary")
+    )
+    expect_false(
+      "About question" %in% about$A,
+      label = paste0(nm, ": no question block on the cover sheet")
+    )
+    data_sheet <- openxlsx2::wb_to_df(
+      out,
+      sheet = "About_2",
+      col_names = FALSE
+    )
+    expect_identical(
+      as.character(data_sheet[[1L]][[1L]]),
+      "About question",
+      label = paste0(nm, ": the question block is on About_2")
+    )
+  }
+})
+
+test_that("export_crosstab() folds case when it checks a sheet name (XA-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+    d@data$about <- d@data$q1
+    d <- surveycore::set_var_label(d, about = "About question")
+
+    result <- export_crosstab(d, vars = about, banner = group, file_name = out)
+
+    expect_identical(result, out, label = paste0(nm, ": returns the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": the save succeeds"))
+    wb <- openxlsx2::wb_load(out)
+    expect_identical(
+      unname(wb$get_sheet_names()),
+      c("About", "about_2"),
+      label = paste0(nm, ": the data sheet is suffixed")
+    )
+  }
+})
+
+test_that("export_crosstab() gives two variables sharing 31 characters two sheets (XA-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  long_a <- paste0(strrep("x", 31L), "_alpha")
+  long_b <- paste0(strrep("x", 31L), "_beta")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+    d@data[[long_a]] <- d@data$q1
+    d@data[[long_b]] <- d@data$q2
+    d <- surveycore::set_var_label(
+      d,
+      variable = c(long_a, long_b),
+      label = c("Long one", "Long two")
+    )
+
+    export_crosstab(
+      d,
+      vars = tidyselect::all_of(c(long_a, long_b)),
+      banner = group,
+      file_name = out
+    )
+
+    wb <- openxlsx2::wb_load(out)
+    sheets <- unname(wb$get_sheet_names())
+    expect_identical(
+      sheets,
+      c("About", strrep("x", 31L), paste0(strrep("x", 29L), "_2")),
+      label = paste0(nm, ": both sheets exist")
+    )
+    expect_false(anyDuplicated(tolower(sheets)) > 0L, label = nm)
+  }
+})
+
+test_that("export_crosstab() writes the About sheet with no merged cell and two stored widths", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_dataset_metadata(
+      cover_design(designs[[nm]]),
+      survey_name = "Test Survey"
+    )
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+
+    wb <- openxlsx2::wb_load(out)
+    ws <- wb$worksheets[[match("About", wb$get_sheet_names())]]
+    expect_identical(
+      length(ws$mergeCells),
+      0L,
+      label = paste0(nm, ": no merged cell")
+    )
+    widths <- as.numeric(
+      sub('.*width="([0-9.]+)".*', "\\1", ws$cols_attr)
+    )
+    cols <- as.integer(sub('.*min="([0-9]+)".*', "\\1", ws$cols_attr))
+    expect_identical(cols, 1:2, label = paste0(nm, ": Key and Value widths"))
+    expect_identical(
+      floor(widths),
+      c(44, 12),
+      label = paste0(nm, ": the widths of spec 3.16")
+    )
+  }
+})
+
+# The paths below have no caller among the export functions yet: no export
+# function withholds, sets a floor or writes string cells. Later PRs wire
+# them in. Until then .write_cover_sheet() is tested directly.
+
+# An in-memory workbook with its cover sheet written from `...`.
+cover_workbook <- function(design, ...) {
+  args <- utils::modifyList(
+    list(
+      withheld = NULL,
+      min_eff_n = NULL,
+      has_banner = FALSE,
+      string_cells = FALSE,
+      decimals = 1L,
+      variance = NULL
+    ),
+    list(...)
+  )
+  wb <- openxlsx2::wb_add_worksheet(openxlsx2::wb_workbook(), "About")
+  surveyreports:::.write_cover_sheet(
+    wb,
+    design,
+    args$withheld,
+    args$min_eff_n,
+    args$has_banner,
+    args$string_cells,
+    args$decimals,
+    args$variance
+  )
+}
+
+cover_withheld <- function() {
+  tibble::tibble(
+    level = c("Female", "Other"),
+    banner_var = c("gen", "gen"),
+    n_eff = c(18.347, 4)
+  )
+}
+
+glossary_text <- list(
+  unweighted = paste(
+    "The number of people who answered. It does not change when weights are",
+    "applied. Report text writes this as N for the full sample and n for a",
+    "subgroup."
+  ),
+  ess = paste(
+    "The sample size left after weighting. Weights make some people count",
+    "for more than others, and that costs precision, so this number is",
+    "smaller than the unweighted sample size — the more the weights vary,",
+    "the smaller it gets. It adjusts for the weights alone. It does not",
+    "adjust for clustered sampling, so on a clustered survey the true",
+    "precision is lower than this number suggests."
+  ),
+  missing = paste(
+    "A subgroup whose effective sample size falls below the minimum is not",
+    "shown. The minimum for this workbook is listed above. The test is on",
+    "the size of the subgroup itself, not on how many of its members",
+    "answered any one question, so a question that many people skipped can",
+    "still be shown for a subgroup that clears the minimum."
+  ),
+  pct = paste(
+    "Each percentage is based on the people who answered that question,",
+    "which can be fewer than the sample size shown above the table. A value",
+    "that is not zero but rounds to zero at the shown precision reads <0.1%.",
+    "A value below 100 that rounds to 100 reads >99.9%. A true zero reads",
+    "0%. A dash means the answer was not chosen in that column, or was never",
+    "offered there."
+  ),
+  ci = paste(
+    "The interval is a normal approximation. For a very rare or a",
+    "near-unanimous answer a bound can fall below 0 percent or rise above 100",
+    "percent. That is a property of the approximation, not a count of people."
+  )
+)
+
+test_that(".write_cover_sheet() writes the withheld block with the minimum and one line per subgroup", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  withheld <- cover_withheld()
+
+  for (nm in names(designs)) {
+    wb <- cover_workbook(
+      designs[[nm]],
+      withheld = withheld,
+      min_eff_n = 100,
+      has_banner = TRUE
+    )
+
+    about <- about_sheet(wb)
+    expect_identical(
+      about$A[1:5],
+      c(
+        "Key",
+        "Subgroups not shown",
+        "Minimum effective sample size",
+        "Not shown",
+        "Not shown"
+      ),
+      label = paste0(nm, ": block rows")
+    )
+    expect_identical(
+      about$B[3:5],
+      c("100", surveyreports:::.format_withheld_lines(withheld, 100)),
+      label = paste0(nm, ": the minimum, then the lines")
+    )
+    expect_identical(
+      about$A[6:7],
+      c(NA_character_, "What these numbers mean"),
+      label = paste0(nm, ": one blank row, then the glossary")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() states None for a zero-row withheld frame", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    wb <- cover_workbook(
+      designs[[nm]],
+      withheld = cover_withheld()[0L, ],
+      min_eff_n = 100,
+      has_banner = TRUE
+    )
+
+    about <- about_sheet(wb)
+    expect_identical(
+      about$A[2:4],
+      c("Subgroups not shown", "Minimum effective sample size", "Not shown"),
+      label = paste0(nm, ": block rows")
+    )
+    expect_identical(
+      about$B[3:4],
+      c("100", "None"),
+      label = paste0(nm, ": the minimum, then None")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() writes no withheld block for NULL or a zero floor", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    null_frame <- about_sheet(cover_workbook(
+      designs[[nm]],
+      withheld = NULL,
+      min_eff_n = 100,
+      has_banner = TRUE
+    ))
+    zero_floor <- about_sheet(cover_workbook(
+      designs[[nm]],
+      withheld = cover_withheld()[0L, ],
+      min_eff_n = 0,
+      has_banner = TRUE
+    ))
+
+    expect_false(
+      "Subgroups not shown" %in% null_frame$A,
+      label = paste0(nm, ": NULL writes no block")
+    )
+    expect_false(
+      "Subgroups not shown" %in% zero_floor$A,
+      label = paste0(nm, ": a zero floor writes no block")
+    )
+    expect_identical(
+      zero_floor$A[[2L]],
+      "What these numbers mean",
+      label = paste0(nm, ": the glossary is still written")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() writes all five glossary terms when every condition holds", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    wb <- cover_workbook(
+      designs[[nm]],
+      min_eff_n = 100,
+      has_banner = TRUE,
+      string_cells = TRUE,
+      variance = "ci"
+    )
+
+    glossary <- about_glossary(about_sheet(wb))
+    expect_identical(
+      glossary,
+      c(
+        "Unweighted sample size" = glossary_text$unweighted,
+        "Effective sample size (ESS)" = glossary_text$ess,
+        "Why a column is missing" = glossary_text$missing,
+        "Percentages" = glossary_text$pct,
+        "Confidence intervals" = glossary_text$ci
+      ),
+      label = paste0(nm, ": five terms with their text")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() writes the missing-column entry only with a floor and a banner", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    no_banner <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      min_eff_n = 100,
+      has_banner = FALSE
+    )))
+    no_floor <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      min_eff_n = 0,
+      has_banner = TRUE
+    )))
+
+    expect_false(
+      "Why a column is missing" %in% names(no_banner),
+      label = paste0(nm, ": absent without a banner")
+    )
+    expect_false(
+      "Why a column is missing" %in% names(no_floor),
+      label = paste0(nm, ": absent at a zero floor")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() adds no sixth term under variance = 'se'", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    glossary <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      min_eff_n = 100,
+      has_banner = TRUE,
+      string_cells = TRUE,
+      variance = "se"
+    )))
+
+    expect_identical(
+      names(glossary),
+      c(
+        "Unweighted sample size",
+        "Effective sample size (ESS)",
+        "Why a column is missing",
+        "Percentages"
+      ),
+      label = paste0(nm, ": four terms, no entry for the standard error")
+    )
+  }
+})
+
+test_that(".fmt_pct_limits() returns the floor and ceiling strings at 0, 1 and 2", {
+  expect_identical(
+    surveyreports:::.fmt_pct_limits(0L),
+    c(floor = "<1%", ceiling = ">99%")
+  )
+  expect_identical(
+    surveyreports:::.fmt_pct_limits(1L),
+    c(floor = "<0.1%", ceiling = ">99.9%")
+  )
+  expect_identical(
+    surveyreports:::.fmt_pct_limits(2L),
+    c(floor = "<0.01%", ceiling = ">99.99%")
+  )
+})
+
+test_that(".write_cover_sheet() writes the Percentages limits at decimals = 0", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expected <- paste(
+    "Each percentage is based on the people who answered that question,",
+    "which can be fewer than the sample size shown above the table. A value",
+    "that is not zero but rounds to zero at the shown precision reads <1%.",
+    "A value below 100 that rounds to 100 reads >99%. A true zero reads",
+    "0%. A dash means the answer was not chosen in that column, or was never",
+    "offered there."
+  )
+
+  for (nm in names(designs)) {
+    glossary <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      string_cells = TRUE,
+      decimals = 0L
+    )))
+
+    expect_identical(
+      glossary[["Percentages"]],
+      expected,
+      label = paste0(nm, ": <1% and >99%")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() writes the Percentages limits at decimals = 2", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expected <- paste(
+    "Each percentage is based on the people who answered that question,",
+    "which can be fewer than the sample size shown above the table. A value",
+    "that is not zero but rounds to zero at the shown precision reads",
+    "<0.01%. A value below 100 that rounds to 100 reads >99.99%. A true",
+    "zero reads 0%. A dash means the answer was not chosen in that column,",
+    "or was never offered there."
+  )
+
+  for (nm in names(designs)) {
+    glossary <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      string_cells = TRUE,
+      decimals = 2L
+    )))
+
+    expect_identical(
+      glossary[["Percentages"]],
+      expected,
+      label = paste0(nm, ": <0.01% and >99.99%")
+    )
+  }
+})
+
+test_that(".write_cover_sheet() keeps the Percentages text at decimals = 1", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    glossary <- about_glossary(about_sheet(cover_workbook(
+      designs[[nm]],
+      string_cells = TRUE,
+      decimals = 1L
+    )))
+
+    expect_identical(
+      glossary[["Percentages"]],
+      glossary_text$pct,
+      label = paste0(nm, ": <0.1% and >99.9%")
+    )
+  }
 })

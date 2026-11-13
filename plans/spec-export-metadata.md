@@ -567,7 +567,8 @@ is what satisfies section 5.2's snapshot gate.
 
 # Cover sheet. Written whenever any of its three blocks has content.
 .write_cover_sheet <- function(wb, design, withheld, min_eff_n,
-                               has_banner, string_cells, variance)
+                               has_banner, string_cells, decimals,
+                               variance)
 # withheld: the .build_withheld() frame, or NULL. The caller passes NULL
 #   when withheld_note is not "once", and NULL suppresses the block. NULL
 #   never means the floor withheld nothing — a zero-row frame means that,
@@ -581,6 +582,12 @@ is what satisfies section 5.2's snapshot gate.
 #   functions call this helper, and a topline workbook withholds nothing
 #   and writes numeric cells, so an unconditional glossary would describe
 #   rules that workbook does not follow.
+# decimals: the caller's own `decimals`. It sets the precision of the two
+#   example strings in the Percentages entry (`<0.1%` and `>99.9%` at
+#   decimals = 1), so the entry matches the cells — section 3.15. It is not
+#   a fourth condition: it changes the text of an entry, not whether the
+#   entry is written. ADDED 2026-11-13 (feature/cover-sheet): the earlier
+#   seven-argument signature could not carry the precision 3.15 asks for.
 # -> wb
 
 # The opening sequence of one question block: the title, the base note,
@@ -640,8 +647,10 @@ is what satisfies section 5.2's snapshot gate.
 # After
 .build_workbook <- function(design, withheld = NULL, min_eff_n = NULL,
                             has_banner = FALSE, string_cells = FALSE,
-                            variance = NULL)
-# The last three are passed straight to .write_cover_sheet(). The defaults
+                            decimals = 1L, variance = NULL)
+# The last four are passed straight to .write_cover_sheet(). Both export
+# functions pass their own `decimals`, so the Percentages entry matches the
+# cells (section 3.15; added 2026-11-13, feature/cover-sheet). The defaults
 # are the export_topline() case for the first two: no banner, numeric
 # cells. `variance` is NOT defaulted away by that function.
 # export_topline() PASSES ITS OWN `variance` THROUGH, because it takes the
