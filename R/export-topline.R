@@ -288,20 +288,9 @@ export_topline <- function(
       data_col <- 1L + i
 
       if (label == "Total") {
-        header_txt <- if (show_eff_n && "eff_n" %in% names(frame)) {
-          eff_val <- frame$eff_n[frame$subgroup_type == "total"][[1L]]
-          if (!is.na(eff_val)) {
-            paste0(
-              "Total\n(Eff N=",
-              formatC(round(eff_val), format = "d", big.mark = ","),
-              ")"
-            )
-          } else {
-            "Total"
-          }
-        } else {
-          "Total"
-        }
+        # The pooled Total has no effective N, so the heading never carries
+        # one (spec 2.3, spec 4.2).
+        header_txt <- "Total"
       } else {
         wave_n <- sum(frame$n[frame$subgroup_label == label], na.rm = TRUE)
         header_txt <- paste0(
@@ -321,17 +310,15 @@ export_topline <- function(
       )
     }
   } else {
-    pct_header <- if (show_eff_n && "eff_n" %in% names(frame)) {
+    # Under show_eff_n, .build_freq_frame() puts the full design's effective N
+    # from .resolve_eff_n() on every "total" row, so the value is never NA.
+    pct_header <- if (show_eff_n) {
       eff_val <- frame$eff_n[frame$subgroup_type == "total"][[1L]]
-      if (!is.na(eff_val)) {
-        paste0(
-          "%\n(Eff N=",
-          formatC(round(eff_val), format = "d", big.mark = ","),
-          ")"
-        )
-      } else {
-        "%"
-      } # nocov
+      paste0(
+        "%\n(Eff N=",
+        formatC(round(eff_val), format = "d", big.mark = ","),
+        ")"
+      )
     } else {
       "%"
     }

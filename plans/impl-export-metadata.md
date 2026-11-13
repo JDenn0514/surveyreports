@@ -88,7 +88,7 @@ stands.** Only the formal arguments come forward.
       design-variable reader.
 - [x] PR 5: `feature/format-helpers` — the six format and write helpers.
 - [x] PR 6: `feature/cover-sheet` — every workbook gains an `"About"` sheet.
-- [ ] PR 7: `feature/effective-n-rewiring` — the reported effective N becomes
+- [x] PR 7: `feature/effective-n-rewiring` — the reported effective N becomes
       correct on twophase and domain-restricted designs.
 - [ ] PR 8: `feature/base-notes-adoption` — a base note falls back to the
       design's `universe` metadata, in both export functions.
