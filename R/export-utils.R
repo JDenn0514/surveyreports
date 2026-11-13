@@ -137,35 +137,6 @@
 
 # -- Effective N ---------------------------------------------------------------
 
-#' @keywords internal
-#' @noRd
-.compute_eff_n <- function(design, col = NULL, level = NULL) {
-  data <- design@data
-  wt_col <- design@variables$weights
-  if (is.null(wt_col) || length(wt_col) == 0L) {
-    wt_col <- design@variables$phase1$weights # nocov
-  }
-  if (is.null(wt_col) || length(wt_col) == 0L || !wt_col %in% names(data)) {
-    return(NA_real_) # nocov
-  }
-
-  if (!is.null(col)) {
-    data <- data[data[[col]] == level, , drop = FALSE]
-  }
-
-  wi <- data[[wt_col]]
-  n <- nrow(data)
-  # nocov start
-  # Defensive: levels iterated via unique(col_vals[!is.na(col_vals)]), so n == 0
-  # cannot occur via the public API.
-  if (n == 0L || sum(wi, na.rm = TRUE) == 0) {
-    return(NA_real_)
-  }
-  # nocov end
-  deff <- (n * sum(wi^2, na.rm = TRUE)) / sum(wi, na.rm = TRUE)^2
-  n / deff
-}
-
 # Raw N and effective N per subgroup, delegated to
 # surveycore::get_effective_n(). One source for both counts.
 #
@@ -845,21 +816,14 @@
     )
 
     if (show_eff_n) {
-      all_rows$eff_n <- mapply(
-        function(stype, svar) {
-          if (stype == "total") {
-            return(NA_real_)
-          }
-          wd <- design@surveys[[svar]]
-          if (is.null(wd)) {
-            return(NA_real_)
-          } # nocov
-          .compute_eff_n(wd)
-        },
-        all_rows$subgroup_type,
-        all_rows$subgroup_var,
-        SIMPLIFY = TRUE
-      )
+      # One effective N per wave, joined on the wave name and not on a
+      # subgroup level (spec 4.1). A pooled "total" row has no wave name, so
+      # it keeps NA_real_: a pooled figure over waves with different designs
+      # is not defined.
+      wave_eff_n <- .resolve_eff_n(design)
+      all_rows$eff_n <- wave_eff_n$n_eff[
+        match(all_rows$subgroup_var, wave_eff_n$level)
+      ]
     }
 
     all_rows <- dplyr::left_join(
@@ -882,9 +846,16 @@
     for (banner_var in banner_resolved) {
       col_vals <- design@data[[banner_var]]
       levels <- unique(col_vals[!is.na(col_vals)])
+      # Holding change: feature/crosstab-min-eff-n rewrites this loop. The
+      # effective N comes from .resolve_eff_n(), keyed by label, so each raw
+      # level is looked up by the label of its first row. A level with no
+      # in-scope row has no row in `counts`, and the sum gives it 0.
+      counts <- .resolve_eff_n(design, group_var = banner_var)
+      labelled <- as.character(.banner_levels_labelled(design, banner_var))
       for (level in levels) {
         level_chr <- as.character(level)
-        eff_n_val <- .compute_eff_n(design, col = banner_var, level = level_chr)
+        level_key <- labelled[match(level, col_vals)]
+        eff_n_val <- sum(counts$n_eff[counts$level %in% level_key])
         raw_n_val <- as.integer(sum(col_vals == level, na.rm = TRUE))
         threshold <- if (pub_type == "external") 100L else 50L
 
@@ -976,20 +947,15 @@
     dplyr::bind_rows()
 
   if (show_eff_n) {
-    all_rows$eff_n <- mapply(
-      function(stype, svar, sval) {
-        if (stype == "total") {
-          .compute_eff_n(design)
-        } else if (stype == "banner") {
-          .compute_eff_n(design, col = svar, level = sval)
-        } else {
-          NA_real_
-        }
-      },
-      all_rows$subgroup_type,
-      all_rows$subgroup_var,
-      all_rows$subgroup_value,
-      SIMPLIFY = TRUE
+    # The full design's effective N, on the "total" rows only, from
+    # surveycore (spec 2.3). export_topline() reads it for its percentage
+    # header. No caller reads a subgroup row's effective N, so every other
+    # row holds NA_real_.
+    full_eff_n <- .resolve_eff_n(design)$n_eff
+    all_rows$eff_n <- dplyr::if_else(
+      all_rows$subgroup_type == "total",
+      full_eff_n,
+      NA_real_
     )
   }
 

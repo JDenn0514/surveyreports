@@ -422,7 +422,7 @@ test_that("export_topline() handles a minimal two-row design", {
   expect_true(file.exists(out))
 })
 
-test_that("export_topline() collection with show_eff_n = TRUE writes Eff N in Total header", {
+test_that("export_topline() collection with show_eff_n = TRUE writes the wave headers", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
   coll <- surveycore::as_survey_collection(
@@ -439,7 +439,8 @@ test_that("export_topline() collection with show_eff_n = TRUE writes Eff N in To
   cells <- as.character(unlist(df)[!is.na(unlist(df))])
 
   expect_true(file.exists(out))
-  # wave headers always written; eff_n path inside Total header may or may not fire
+  # The wave headers are always written. No header carries an effective N
+  # on a collection; TN-03 asserts the exact text.
   expect_true(any(grepl("wave1|wave2|Total", cells)))
 })
 
@@ -1173,4 +1174,243 @@ test_that("export_topline() writes the About sheet for a collection with no meta
       "Effective sample size (ESS)" = topline_glossary_text$ess
     )
   )
+})
+
+# 14. Effective N rewiring -----------------------------------------------------
+# The effective N comes from surveycore::get_effective_n(), through
+# .resolve_eff_n(), so it follows the rows the design tabulates: the phase-2
+# subset of a twophase design and the in-domain rows of a restricted design
+# (spec 1.4.1, spec 2.3, spec 3.20).
+
+# The single-design block of the "Topline" sheet as a data frame of columns A
+# to C, keyed by sheet row in the row names.
+topline_block <- function(path) {
+  df <- openxlsx2::wb_to_df(
+    path,
+    sheet = "Topline",
+    col_names = FALSE,
+    cols = 1:3
+  )
+  data.frame(
+    A = as.character(df[[1L]]),
+    B = as.character(df[[2L]]),
+    C = as.character(df[[3L]]),
+    row = as.integer(rownames(df)),
+    stringsAsFactors = FALSE
+  )
+}
+
+# The rows a design tabulates: the phase-2 subset of a twophase design, then
+# the in-domain rows when the design carries a domain column.
+in_scope_rows <- function(d) {
+  keep <- rep(TRUE, nrow(d@data))
+  if (S7::S7_inherits(d, surveycore::survey_twophase)) {
+    keep <- keep & d@data[[d@variables$subset]]
+  }
+  if (surveycore::SURVEYCORE_DOMAIN_COL %in% names(d@data)) {
+    keep <- keep & d@data[[surveycore::SURVEYCORE_DOMAIN_COL]]
+  }
+  sum(keep)
+}
+
+test_that("export_topline() reports N over the rows the design tabulates (TN-02) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    for (restricted in c(FALSE, TRUE)) {
+      d <- cover_design(designs[[nm]])
+      if (restricted) {
+        d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d@data$group == "A"
+      }
+      lbl <- paste0(nm, if (restricted) " (domain)" else "")
+      if (file.exists(out)) {
+        file.remove(out)
+      }
+
+      export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+      block <- topline_block(out)
+
+      # The unweighted N: the N cell of the Total row.
+      expected_n <- in_scope_rows(d)
+      expect_identical(
+        as.integer(block$C[block$A == "Total"]),
+        expected_n,
+        label = paste0(lbl, ": N of the Total row")
+      )
+
+      # The effective N in the percentage header is computed over the same
+      # rows. The oracle's n confirms the oracle covers those rows.
+      oracle <- surveycore::get_effective_n(d)
+      expect_identical(
+        as.integer(oracle$n),
+        expected_n,
+        label = paste0(lbl, ": oracle n")
+      )
+      header <- block$B[block$A == "Response"]
+      reported_eff_n <- as.numeric(gsub("[^0-9]", "", header))
+      expect_identical(
+        reported_eff_n,
+        round(oracle$n_eff),
+        label = paste0(lbl, ": effective N in the header")
+      )
+    }
+  }
+})
+
+test_that("export_topline() returns the path for a collection under show_eff_n (TC-08)", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    make_all_designs(seed = 42)$taylor,
+    make_all_designs(seed = 7)$taylor
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  result <- withVisible(
+    export_topline(coll, vars = q1, file_name = out, show_eff_n = TRUE)
+  )
+
+  expect_false(result$visible)
+  expect_identical(result$value, out)
+  expect_true(file.exists(out))
+})
+
+test_that("export_topline() writes no effective N in a collection header (TN-03) [numerical]", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    make_all_designs(seed = 42)$taylor,
+    make_all_designs(seed = 7)$taylor
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (eff in c(FALSE, TRUE)) {
+    lbl <- paste0("show_eff_n = ", eff)
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+
+    export_topline(coll, vars = q1, file_name = out, show_eff_n = eff)
+
+    df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+    header_row <- which(as.character(df[[1L]]) == "Response")
+    headers <- as.character(unlist(df[header_row, -1L]))
+    headers <- headers[!is.na(headers)]
+
+    expected <- vapply(
+      names(coll@surveys),
+      function(wn) {
+        wave_n <- sum(surveycore::get_freqs(coll@surveys[[wn]], q1)$n)
+        paste0(wn, "\n(n=", formatC(wave_n, format = "d", big.mark = ","), ")")
+      },
+      character(1L),
+      USE.NAMES = FALSE
+    )
+    expect_identical(
+      headers,
+      c("Total", expected),
+      label = paste0(lbl, ": the header row")
+    )
+    expect_false(
+      any(grepl("Eff N", headers)),
+      label = paste0(lbl, ": no effective N in any header")
+    )
+  }
+})
+
+test_that("export_topline() writes a whole-number effective N in the % header (TN-01) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+    block <- topline_block(out)
+
+    oracle <- round(surveycore::get_effective_n(d)$n_eff)
+    expected <- paste0(
+      "%\n(Eff N=",
+      formatC(oracle, format = "d", big.mark = ","),
+      ")"
+    )
+    expect_identical(
+      block$B[block$A == "Response"],
+      expected,
+      label = paste0(nm, ": the percentage header")
+    )
+    expect_false(
+      "Total" %in% c(block$B, block$C),
+      label = paste0(nm, ": no header cell reads Total")
+    )
+  }
+})
+
+test_that("export_topline() writes a thousands separator in the effective N (TN-01) [numerical]", {
+  skip_if_not_installed("surveycore")
+  df <- make_survey_data(n = 2000, n_psu = 20, n_strata = 4, seed = 123)
+  d <- cover_design(surveycore::as_survey(df, weights = wt))
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+  block <- topline_block(out)
+
+  oracle <- round(surveycore::get_effective_n(d)$n_eff)
+  expect_gte(oracle, 1000)
+  expected <- paste0(
+    "%\n(Eff N=",
+    formatC(oracle, format = "d", big.mark = ","),
+    ")"
+  )
+  expect_identical(block$B[block$A == "Response"], expected)
+  expect_match(expected, "Eff N=[0-9],[0-9]{3}[)]$")
+})
+
+test_that("export_topline() percentages match surveycore::get_freqs() as numbers (TN-04) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, decimals = 1L)
+    block <- topline_block(out)
+
+    first <- block$row[block$A == "Response"] + 1L
+    last <- block$row[block$A == "Total"] - 1L
+    cells <- openxlsx2::wb_to_df(
+      out,
+      sheet = "Topline",
+      col_names = FALSE,
+      rows = first:last,
+      cols = 1:2
+    )
+    expect_true(is.numeric(cells[[2L]]), label = paste0(nm, ": numeric cells"))
+
+    ref <- surveycore::get_freqs(d, q1)
+    expect_identical(
+      sort(as.character(cells[[1L]])),
+      sort(as.character(ref[[1L]])),
+      label = paste0(nm, ": response levels")
+    )
+    for (val in as.character(ref[[1L]])) {
+      expect_equal(
+        cells[[2L]][as.character(cells[[1L]]) == val],
+        round(ref$pct[as.character(ref[[1L]]) == val] * 100, 1L),
+        tolerance = 1e-10,
+        label = paste0(nm, ": pct for '", val, "'")
+      )
+    }
+  }
 })
