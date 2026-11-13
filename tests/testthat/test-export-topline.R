@@ -887,3 +887,290 @@ test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
     expect_true(TRUE)
   }
 })
+
+# 13. Cover sheet ---------------------------------------------------------------
+# Every workbook gains an "About" sheet as sheet 1 (spec 3.14, spec 4.1). A
+# topline workbook withholds nothing and writes numeric cells, so its glossary
+# holds two entries, or three under variance = "ci" (spec 3.15).
+
+# The About sheet as a data frame of columns A and B, one row per sheet row.
+# Blank rows stay in the frame, so a row index is a sheet row minus 1.
+about_sheet <- function(path) {
+  df <- openxlsx2::wb_to_df(
+    path,
+    sheet = "About",
+    col_names = FALSE,
+    cols = 1:2
+  )
+  data.frame(
+    A = as.character(df[[1L]]),
+    B = as.character(df[[2L]]),
+    stringsAsFactors = FALSE
+  )
+}
+
+# The glossary of an About sheet, term = text, in sheet order.
+about_glossary <- function(about) {
+  start <- match("What these numbers mean", about$A)
+  rows <- about[seq.int(start + 1L, nrow(about)), ]
+  stats::setNames(rows$B, rows$A)
+}
+
+# TRUE when the cell's resolved font is bold. A cell with no style of its own
+# takes style 0, the workbook default.
+cell_is_bold <- function(wb, sheet, dims) {
+  style <- unname(openxlsx2::wb_get_cell_style(wb, sheet, dims))
+  style_id <- if (is.na(style) || !nzchar(style)) 0L else as.integer(style)
+  xf <- wb$styles_mgr$styles$cellXfs[[style_id + 1L]]
+  font_id <- as.integer(sub('.*fontId="([0-9]+)".*', "\\1", xf))
+  font <- wb$styles_mgr$styles$fonts[[font_id + 1L]]
+  grepl("<b/>|<b val=\"1\"/>|<b val=\"true\"/>", font)
+}
+
+# A design whose q1 and q2 carry variable labels, so the missing-label
+# warning does not fire in a test about the cover sheet.
+cover_design <- function(d) {
+  surveycore::set_var_label(d, q1 = "Question one", q2 = "Question two")
+}
+
+topline_glossary_text <- list(
+  unweighted = paste(
+    "The number of people who answered. It does not change when weights are",
+    "applied. Report text writes this as N for the full sample and n for a",
+    "subgroup."
+  ),
+  ess = paste(
+    "The sample size left after weighting. Weights make some people count",
+    "for more than others, and that costs precision, so this number is",
+    "smaller than the unweighted sample size — the more the weights vary,",
+    "the smaller it gets. It adjusts for the weights alone. It does not",
+    "adjust for clustered sampling, so on a clustered survey the true",
+    "precision is lower than this number suggests."
+  ),
+  ci = paste(
+    "The interval is a normal approximation. For a very rare or a",
+    "near-unanimous answer a bound can fall below 0 percent or rise above 100",
+    "percent. That is a property of the approximation, not a count of people."
+  )
+)
+
+test_that("export_topline() writes the About sheet first with a topline glossary (TP-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, variance = NULL)
+
+    wb <- openxlsx2::wb_load(out)
+    expect_identical(
+      unname(wb$get_sheet_names()),
+      c("About", "Topline"),
+      label = paste0(nm, ": About is sheet 1")
+    )
+    glossary <- about_glossary(about_sheet(out))
+    expect_identical(
+      glossary,
+      c(
+        "Unweighted sample size" = topline_glossary_text$unweighted,
+        "Effective sample size (ESS)" = topline_glossary_text$ess
+      ),
+      label = paste0(nm, ": the two sample-size terms")
+    )
+    expect_false(
+      "Why a column is missing" %in% names(glossary),
+      label = paste0(nm, ": no missing-column entry")
+    )
+    expect_false(
+      "Percentages" %in% names(glossary),
+      label = paste0(nm, ": no Percentages entry")
+    )
+  }
+})
+
+test_that("export_topline() adds the interval entry under variance = 'ci' (TP-06a)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, variance = "ci")
+
+    glossary <- about_glossary(about_sheet(out))
+    expect_identical(
+      glossary[["Confidence intervals"]],
+      topline_glossary_text$ci,
+      label = paste0(nm, ": the interval entry with its text")
+    )
+    expect_identical(
+      names(glossary),
+      c(
+        "Unweighted sample size",
+        "Effective sample size (ESS)",
+        "Confidence intervals"
+      ),
+      label = paste0(nm, ": three entries")
+    )
+    expect_false(
+      "Why a column is missing" %in% names(glossary),
+      label = paste0(nm, ": no missing-column entry")
+    )
+    expect_false(
+      "Percentages" %in% names(glossary),
+      label = paste0(nm, ": no Percentages entry")
+    )
+  }
+})
+
+test_that("export_topline() writes no withheld block on the About sheet (TP-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = c(q1, q2), file_name = out)
+
+    about <- about_sheet(out)
+    expect_identical(
+      about$A,
+      c(
+        "Key",
+        "What these numbers mean",
+        "Unweighted sample size",
+        "Effective sample size (ESS)"
+      ),
+      label = paste0(nm, ": header and glossary only")
+    )
+    expect_false(
+      any(c("Subgroups not shown", "Not shown") %in% about$A),
+      label = paste0(nm, ": no withheld block")
+    )
+  }
+})
+
+# A two-wave collection from two taylor designs, waves named w1 and w2.
+cover_collection <- function(w1, w2) {
+  surveycore::as_survey_collection(
+    w1 = cover_design(w1),
+    w2 = cover_design(w2)
+  )
+}
+
+test_that("export_topline() writes one metadata block per wave in @surveys order (TC-05)", {
+  skip_if_not_installed("surveycore")
+  w1 <- surveycore::set_dataset_metadata(
+    make_all_designs(seed = 42)$taylor,
+    vendor = "Vendor One",
+    survey_name = "Wave 1 Survey",
+    field_end = "2024-01-31",
+    field_start = "2024-01-02"
+  )
+  w2 <- surveycore::set_dataset_metadata(
+    make_all_designs(seed = 7)$taylor,
+    field_period = "Summer 2024",
+    data_name = "Wave 2 Data",
+    survey_name = "Wave 2 Survey",
+    vendor = "Vendor Two",
+    field_start = "2024-06-01"
+  )
+  coll <- cover_collection(w1, w2)
+  expect_identical(names(coll@surveys), c("w1", "w2"))
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(coll, vars = q1, file_name = out)
+
+  about <- about_sheet(out)
+  expect_identical(about$A[[1L]], "Key")
+  expect_identical(about$B[[1L]], "Value")
+
+  # Wave 1: rows 2 to 6, then one blank row.
+  expect_identical(about$A[[2L]], "w1")
+  expect_true(is.na(about$B[[2L]]))
+  expect_identical(
+    about$A[3:6],
+    c("Survey", "Vendor", "Field start", "Field end")
+  )
+  expect_identical(
+    about$B[3:6],
+    c("Wave 1 Survey", "Vendor One", "2024-01-02", "2024-01-31")
+  )
+  expect_true(is.na(about$A[[7L]]) && is.na(about$B[[7L]]))
+
+  # Wave 2: rows 8 to 13, then one blank row before the glossary.
+  expect_identical(about$A[[8L]], "w2")
+  expect_true(is.na(about$B[[8L]]))
+  expect_identical(
+    about$A[9:13],
+    c("Survey", "Dataset", "Vendor", "Field start", "Field period")
+  )
+  expect_identical(
+    about$B[9:13],
+    c("Wave 2 Survey", "Wave 2 Data", "Vendor Two", "2024-06-01", "Summer 2024")
+  )
+  expect_true(is.na(about$A[[14L]]) && is.na(about$B[[14L]]))
+  expect_identical(about$A[[15L]], "What these numbers mean")
+  expect_identical(sum(is.na(about$A) & is.na(about$B)), 2L)
+})
+
+test_that("export_topline() writes a bold heading for a wave with no keys (TC-06)", {
+  skip_if_not_installed("surveycore")
+  w1 <- surveycore::set_dataset_metadata(
+    make_all_designs(seed = 42)$taylor,
+    survey_name = "Wave 1 Survey"
+  )
+  coll <- cover_collection(w1, make_all_designs(seed = 7)$taylor)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(coll, vars = q1, file_name = out)
+
+  about <- about_sheet(out)
+  expect_identical(
+    about$A[1:6],
+    c("Key", "w1", "Survey", NA, "w2", NA)
+  )
+  expect_identical(about$A[[7L]], "What these numbers mean")
+  expect_true(is.na(about$B[[6L]]))
+
+  wb <- openxlsx2::wb_load(out)
+  expect_true(cell_is_bold(wb, "About", "A5"), label = "w2 heading is bold")
+  expect_true(cell_is_bold(wb, "About", "A2"), label = "w1 heading is bold")
+  expect_false(cell_is_bold(wb, "About", "A3"), label = "a key is not bold")
+})
+
+test_that("export_topline() writes the About sheet for a collection with no metadata (TC-07)", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    make_all_designs(seed = 42)$taylor,
+    make_all_designs(seed = 7)$taylor
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(coll, vars = q1, file_name = out)
+
+  wb <- openxlsx2::wb_load(out)
+  expect_identical(unname(wb$get_sheet_names()), c("About", "Topline"))
+  about <- about_sheet(out)
+  expect_identical(
+    about_glossary(about),
+    c(
+      "Unweighted sample size" = topline_glossary_text$unweighted,
+      "Effective sample size (ESS)" = topline_glossary_text$ess
+    )
+  )
+})

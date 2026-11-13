@@ -1049,10 +1049,251 @@
 
 # -- Workbook builder ----------------------------------------------------------
 
+# The workbook both export functions write into (spec 2.3). It adds the
+# "About" cover sheet before any question sheet, so "About" is sheet 1 by
+# insertion order (spec 3.14). The last six arguments go to
+# .write_cover_sheet() unchanged. The defaults are the export_topline() case
+# for has_banner and string_cells; `decimals` and `variance` come from the
+# caller in both export functions, because the glossary reads them.
 #' @keywords internal
 #' @noRd
-.build_workbook <- function() {
-  openxlsx2::wb_workbook()
+.build_workbook <- function(
+  design,
+  withheld = NULL,
+  min_eff_n = NULL,
+  has_banner = FALSE,
+  string_cells = FALSE,
+  decimals = 1L,
+  variance = NULL
+) {
+  wb <- openxlsx2::wb_workbook()
+  wb <- openxlsx2::wb_add_worksheet(wb, "About")
+  .write_cover_sheet(
+    wb,
+    design,
+    withheld,
+    min_eff_n,
+    has_banner,
+    string_cells,
+    decimals,
+    variance
+  )
+}
+
+# -- Cover sheet ---------------------------------------------------------------
+
+# Writes the "About" sheet, which .build_workbook() has already added
+# (spec 3.14). Row 1 is a `Key` / `Value` header. Three blocks follow, with one
+# blank row between two blocks and none after the last:
+# - Survey metadata: one row per set dataset key, in surveycore's canonical
+#   key order, then the `Restricted to` row when .has_domain() is TRUE.
+#   Written when any key is set or the design has the domain column. A
+#   survey_collection writes one block per wave instead, in @surveys order:
+#   the wave name alone in column A, then that wave's rows. A wave with no
+#   keys still gets its heading.
+# - Subgroups not shown: the minimum in force, then one row per line of
+#   .format_withheld_lines(), or one `None` row for a zero-row frame. Written
+#   only when `withheld` is not NULL and `min_eff_n` is above 0. NULL is the
+#   caller's instruction to write no block; it never means "nothing withheld".
+# - What these numbers mean: the glossary of spec 3.15, always written.
+# This helper takes no withheld_note argument and reads none (spec 3.14).
+#
+# Readings where the spec is open:
+# - The key column shows the display label of the v0.7.0 spec, section 6.2
+#   (survey_name -> Survey, ...), which the test-spec (XA-03) still names as
+#   "display labels". A key with no label shows its own name.
+# - A single design's survey block has no heading row: the `Key` / `Value`
+#   header heads it. A collection's blocks are headed by the wave names, and
+#   the header row comes directly before the first one (test-spec TC-05).
+# - On a collection, the domain row is written per wave, in that wave's block,
+#   because .has_domain() reads one design's @data and a collection has none.
+# - The block headings are the block names of the spec 3.14 table.
+# - The withheld rows put `Minimum effective sample size` and `Not shown` in
+#   column A and the value or line in column B, as Key / Value pairs.
+# - Column A is 44 characters wide and column B is 12, the label and data
+#   widths of spec 3.16, which spec 3.14 cites. Text in column B overflows
+#   into the empty columns to its right. No cell is merged and none wraps.
+# - The `Percentages` entry quotes the floor and ceiling strings of
+#   .fmt_pct_limits() at `decimals`, so its examples match the cells (spec
+#   3.15). Spec 2.2 gives a seven-argument signature with no `decimals`; this
+#   helper adds it. No caller sets string_cells = TRUE yet.
+# Returns wb.
+#' @keywords internal
+#' @noRd
+.write_cover_sheet <- function(
+  wb,
+  design,
+  withheld,
+  min_eff_n,
+  has_banner,
+  string_cells,
+  decimals,
+  variance
+) {
+  sheet <- "About"
+  key_labels <- c(
+    survey_name = "Survey",
+    data_name = "Dataset",
+    vendor = "Vendor",
+    field_start = "Field start",
+    field_end = "Field end",
+    field_period = "Field period"
+  )
+
+  cover_rows <- function(a, b = NA_character_, bold = FALSE) {
+    data.frame(
+      A = a,
+      B = b,
+      bold = rep(bold, length(a)),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  # The set keys of one survey_base design, then its domain row.
+  survey_rows <- function(d) {
+    meta <- surveycore::extract_dataset_metadata(d, format = "data_frame")
+    labels <- unname(key_labels[meta$key])
+    labels[is.na(labels)] <- meta$key[is.na(labels)]
+    rows <- cover_rows(labels, meta$value)
+    if (.has_domain(d)) {
+      n_in <- .resolve_eff_n(d)$n
+      rows <- rbind(
+        rows,
+        cover_rows(
+          "Restricted to",
+          paste0(n_in, " of ", nrow(d@data), " rows")
+        )
+      )
+    }
+    rows
+  }
+
+  blocks <- list()
+
+  if (S7::S7_inherits(design, surveycore::survey_collection)) {
+    for (wave in names(design@surveys)) {
+      blocks[[length(blocks) + 1L]] <- rbind(
+        cover_rows(wave, bold = TRUE),
+        survey_rows(design@surveys[[wave]])
+      )
+    }
+  } else {
+    survey <- survey_rows(design)
+    if (nrow(survey) > 0L) {
+      blocks[[length(blocks) + 1L]] <- survey
+    }
+  }
+
+  if (!is.null(withheld) && !is.null(min_eff_n) && min_eff_n > 0) {
+    lines <- .format_withheld_lines(withheld, min_eff_n)
+    if (length(lines) == 0L) {
+      lines <- "None"
+    }
+    blocks[[length(blocks) + 1L]] <- rbind(
+      cover_rows("Subgroups not shown", bold = TRUE),
+      cover_rows(
+        "Minimum effective sample size",
+        format(min_eff_n, scientific = FALSE, trim = TRUE)
+      ),
+      cover_rows("Not shown", lines)
+    )
+  }
+
+  # The glossary, in the order of spec 3.15. Each entry is written only when
+  # it is true of this workbook. Five terms and three conditions: the
+  # issue-66 decision of spec 3.15 keeps the count at five, so
+  # variance = "se" adds no entry. The legend row of spec 3.12 names that
+  # statistic instead. The em-dash is built from its code point, because
+  # R CMD check warns on non-ASCII characters in R code and `air format`
+  # rewrites a backslash-u escape as the literal character.
+  glossary <- c(
+    "Unweighted sample size" = paste(
+      "The number of people who answered. It does not change when weights are",
+      "applied. Report text writes this as N for the full sample and n for a",
+      "subgroup."
+    ),
+    "Effective sample size (ESS)" = paste(
+      "The sample size left after weighting. Weights make some people count",
+      "for more than others, and that costs precision, so this number is",
+      "smaller than the unweighted sample size",
+      intToUtf8(0x2014L),
+      "the more the weights vary, the smaller it gets. It adjusts for the",
+      "weights alone. It does not adjust for clustered sampling, so on a",
+      "clustered survey the true precision is lower than this number",
+      "suggests."
+    )
+  )
+  if (!is.null(min_eff_n) && min_eff_n > 0 && has_banner) {
+    glossary[["Why a column is missing"]] <- paste(
+      "A subgroup whose effective sample size falls below the minimum is not",
+      "shown. The minimum for this workbook is listed above. The test is on",
+      "the size of the subgroup itself, not on how many of its members",
+      "answered any one question, so a question that many people skipped can",
+      "still be shown for a subgroup that clears the minimum."
+    )
+  }
+  if (string_cells) {
+    limits <- .fmt_pct_limits(decimals)
+    glossary[["Percentages"]] <- paste(
+      "Each percentage is based on the people who answered that question,",
+      "which can be fewer than the sample size shown above the table. A value",
+      "that is not zero but rounds to zero at the shown precision reads",
+      paste0(limits[["floor"]], "."),
+      "A value below 100 that rounds to 100 reads",
+      paste0(limits[["ceiling"]], "."),
+      "A true zero reads 0%. A dash means the answer was not chosen in that",
+      "column, or was never offered there."
+    )
+  }
+  if (identical(variance, "ci")) {
+    glossary[["Confidence intervals"]] <- paste(
+      "The interval is a normal approximation. For a very rare or a",
+      "near-unanimous answer a bound can fall below 0 percent or rise above",
+      "100 percent. That is a property of the approximation, not a count of",
+      "people."
+    )
+  }
+  blocks[[length(blocks) + 1L]] <- rbind(
+    cover_rows("What these numbers mean", bold = TRUE),
+    cover_rows(names(glossary), unname(glossary))
+  )
+
+  # One blank row between two blocks, none after the last.
+  body <- blocks[[1L]]
+  for (block in blocks[-1L]) {
+    body <- rbind(body, cover_rows(NA_character_), block)
+  }
+  rows <- rbind(cover_rows("Key", "Value", bold = TRUE), body)
+
+  wb <- openxlsx2::wb_add_data(
+    wb,
+    sheet = sheet,
+    x = rows[, c("A", "B")],
+    start_row = 1L,
+    start_col = 1L,
+    col_names = FALSE,
+    na.strings = NULL
+  )
+  wb <- openxlsx2::wb_add_font(
+    wb,
+    sheet = sheet,
+    dims = "A1:B1",
+    bold = TRUE
+  )
+  for (row in which(rows$bold)[-1L]) {
+    wb <- openxlsx2::wb_add_font(
+      wb,
+      sheet = sheet,
+      dims = openxlsx2::wb_dims(rows = row, cols = 1L),
+      bold = TRUE
+    )
+  }
+  openxlsx2::wb_set_col_widths(
+    wb,
+    sheet = sheet,
+    cols = 1:2,
+    widths = c(44, 12)
+  )
 }
 
 # -- Suppression footnote writer -----------------------------------------------
@@ -1267,18 +1508,30 @@
   }
   half_unit <- 0.5 * 10^-decimals
   if (pp > 0 && pp < half_unit) {
-    floor_str <- formatC(10^-decimals, format = "f", digits = decimals)
-    return(paste0("<", floor_str, "%"))
+    return(.fmt_pct_limits(decimals)[["floor"]])
   }
   if (pp > 100 - half_unit && pp < 100) {
-    ceiling_str <- formatC(
-      100 - 10^-decimals,
-      format = "f",
-      digits = decimals
-    )
-    return(paste0(">", ceiling_str, "%"))
+    return(.fmt_pct_limits(decimals)[["ceiling"]])
   }
   paste0(round(pp, decimals), "%")
+}
+
+# The floor and ceiling strings at `decimals` places, as a named character
+# vector: c(floor = "<0.1%", ceiling = ">99.9%") at decimals = 1. .fmt_pct()
+# writes them in a cell, and .write_cover_sheet() quotes them in the
+# `Percentages` glossary entry, so the two always agree.
+#' @keywords internal
+#' @noRd
+.fmt_pct_limits <- function(decimals) {
+  unit <- 10^-decimals
+  c(
+    floor = paste0("<", formatC(unit, format = "f", digits = decimals), "%"),
+    ceiling = paste0(
+      ">",
+      formatC(100 - unit, format = "f", digits = decimals),
+      "%"
+    )
+  )
 }
 
 # One variance string, as it appears beside an estimate (spec 3.12). `rows`

@@ -124,8 +124,11 @@ export_topline <- function(
     show_eff_n = show_eff_n
   )
 
-  # Build workbook
-  wb <- .build_workbook()
+  # Build workbook. The "About" cover sheet comes first. Topline withholds
+  # nothing and writes numeric cells, so `withheld`, `min_eff_n`,
+  # `has_banner` and `string_cells` keep their defaults; `variance` is passed
+  # because the glossary reads it (spec 2.3).
+  wb <- .build_workbook(design, decimals = decimals, variance = variance)
   wb <- openxlsx2::wb_add_worksheet(wb, "Topline")
 
   # Render loop
