@@ -94,7 +94,7 @@ stands.** Only the formal arguments come forward.
       design's `universe` metadata, in both export functions.
 - [x] PR 9: `feature/topline-guards` — `export_topline()` runs the role guard
       and the design-variable check.
-- [ ] PR 10: `feature/crosstab-guards` — `export_crosstab()` runs the same two
+- [x] PR 10: `feature/crosstab-guards` — `export_crosstab()` runs the same two
       guards, and re-validates `interactions`.
 - [ ] PR 11: `feature/crosstab-min-eff-n` — `min_eff_n` replaces `pub_type`,
       and a banner level below the floor loses its column.

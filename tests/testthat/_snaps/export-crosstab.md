@@ -121,3 +121,94 @@
       i Got <list> of length 1.
       v Name every element after the variable whose table it annotates.
 
+# export_crosstab() aborts when every vars column is non-substantive (XE-01)
+
+    Code
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+    Condition
+      Error in `.apply_role_guard()`:
+      x Every column in `vars` has a non-substantive role.
+      i Dropped: q1 (free_text) and q2 (free_text).
+      v Select a column with a substantive role, or clear the role of a column to keep it.
+
+# export_crosstab() aborts when every banner column is non-substantive (XE-03)
+
+    Code
+      export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out)
+    Condition
+      Error in `.apply_role_guard()`:
+      x Every column in `banner` has a non-substantive role.
+      i Dropped: gen (paradata) and reg (paradata).
+      v Select a column with a substantive role, or clear the role of a column to keep it.
+
+# export_crosstab() re-validates interactions against the surviving banner (XE-06)
+
+    Code
+      export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out,
+      interactions = list(c("gen", "reg")))
+    Condition
+      Warning:
+      ! Dropped 1 column from `banner` for a non-substantive role.
+      i Dropped: reg (paradata).
+      Error in `export_crosstab()`:
+      x Interaction variable reg not found in `banner`.
+      i All variables in each interactions element must also appear in `banner`.
+      v Add the missing variable to `banner`, or remove them from `interactions`.
+
+# export_crosstab() aborts on an empty domain (XE-09)
+
+    Code
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+    Condition
+      Error in `.validate_export_inputs()`:
+      x `design` has no rows to tabulate.
+      i The design has no row inside its domain.
+      v Use a domain that keeps at least one row.
+
+# export_crosstab() aborts when vars names the design's weight column (XE-12)
+
+    Code
+      export_crosstab(d, vars = c(q1, wt), banner = group, file_name = out)
+    Condition
+      Error in `.reject_design_vars()`:
+      x Column wt in `vars` is a design variable, not a question.
+      i The design names it in its weights slot.
+      v Remove wt from `vars`.
+
+# export_crosstab() aborts when banner names the design's weight column (XE-14)
+
+    Code
+      export_crosstab(d, vars = q1, banner = c(group, wt), file_name = out)
+    Condition
+      Error in `.reject_design_vars()`:
+      x Column wt in `banner` is a design variable, not a question.
+      i The design names it in its weights slot.
+      v Remove wt from `banner`.
+
+# export_crosstab() warns once for a dropped vars column and still writes the file (XV-01)
+
+    Code
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+    Condition
+      Warning:
+      ! Dropped 1 column from `vars` for a non-substantive role.
+      i Dropped: q2 (free_text).
+
+# export_crosstab() warns for a dropped banner column under its own name (XV-02)
+
+    Code
+      export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out)
+    Condition
+      Warning:
+      ! Dropped 1 column from `banner` for a non-substantive role.
+      i Dropped: reg (paradata).
+
+# export_crosstab() keeps a column with an unrecognized role and warns (XV-07)
+
+    Code
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+    Condition
+      Warning:
+      ! `vars` has 1 column with an unrecognized role: q2 (curiosity).
+      i Each one is kept as a substantive column. The known roles are "item", "demographic", "treatment", "weight", "identifier", "paradata", and "free_text".
+
