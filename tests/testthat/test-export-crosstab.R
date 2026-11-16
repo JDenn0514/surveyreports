@@ -8,9 +8,9 @@ test_that("export_crosstab() creates a non-empty .xlsx file for all 4 design typ
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
-    result <- withVisible(export_crosstab(
-      designs[[nm]],
+    unlink(out)
+    result <- withVisible(crosstab_quiet(
+      cover_design(designs[[nm]]),
       vars = q1,
       banner = group,
       file_name = out
@@ -265,7 +265,7 @@ test_that("export_crosstab() renders SATA variables without error, with banner c
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
+    unlink(out)
     expect_no_error(
       suppressWarnings(
         export_crosstab(
@@ -306,7 +306,7 @@ test_that("export_crosstab() renders battery variables without error, with banne
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
+    unlink(out)
     expect_no_error(
       suppressWarnings(
         export_crosstab(
@@ -353,7 +353,7 @@ test_that("export_crosstab() heads a SATA block with the shared question preface
       variable = c("sata_a", "sata_b", "sata_c"),
       label = c("Option A", "Option B", "Option C")
     )
-    file.remove(out)
+    unlink(out)
     suppressWarnings(
       export_crosstab(
         d,
@@ -389,7 +389,7 @@ test_that("export_crosstab() heads a battery block with the shared question pref
       variable = c("bat_1", "bat_2", "bat_3"),
       label = c("Item one", "Item two", "Item three")
     )
-    file.remove(out)
+    unlink(out)
     suppressWarnings(
       export_crosstab(
         d,
@@ -437,7 +437,7 @@ test_that("export_crosstab() heads a single block with variable_label even when 
 
 test_that("export_crosstab() variance=NULL produces no se/ci columns in output frame", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -458,7 +458,7 @@ test_that("export_crosstab() variance=NULL produces no se/ci columns in output f
 
 test_that("export_crosstab() variance='se' produces se column in output frame", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -478,7 +478,7 @@ test_that("export_crosstab() variance='se' produces se column in output frame", 
 
 test_that("export_crosstab() variance='ci' produces ci_low/ci_high columns in frame", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -608,6 +608,8 @@ test_that("export_crosstab() pub_type='external' suppresses small-N banner colum
     weights = wt,
     nest = TRUE
   )
+  # Set the label so the missing-variable-label warning does not fire.
+  d_small <- surveycore::set_var_label(d_small, variable = "q1", label = "Q1")
 
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -687,6 +689,8 @@ test_that("export_crosstab() pub_type='internal' suppresses below internal thres
     weights = wt,
     nest = TRUE
   )
+  # Set the label so the missing-variable-label warning does not fire.
+  d <- surveycore::set_var_label(d, variable = "q1", label = "Q1")
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_warning(
@@ -1062,12 +1066,16 @@ test_that("export_crosstab() handles very small design (2 rows) without crashing
   df_small <- make_survey_data(seed = 42)[1L:2L, ]
   df_small$strata <- 1L
   df_small$psu <- 1L:2L
-  d_small <- surveycore::as_survey(
-    df_small,
-    ids = psu,
-    strata = strata,
-    weights = wt,
-    nest = TRUE
+  # One stratum is the setup of this test, so its warning is not under test.
+  d_small <- suppressWarnings(
+    surveycore::as_survey(
+      df_small,
+      ids = psu,
+      strata = strata,
+      weights = wt,
+      nest = TRUE
+    ),
+    classes = "surveycore_warning_single_stratum"
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1096,12 +1104,17 @@ test_that("export_crosstab() handles single-level banner without error", {
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
+  # surveycore warns that banner_one has one level. That level is the setup of
+  # this test, so its warning is not under test.
   expect_no_error(
-    export_crosstab(
-      d_one_banner,
-      vars = q1,
-      banner = banner_one,
-      file_name = out
+    suppressWarnings(
+      export_crosstab(
+        d_one_banner,
+        vars = q1,
+        banner = banner_one,
+        file_name = out
+      ),
+      classes = "surveycore_warning_single_level"
     )
   )
   expect_true(file.exists(out))
@@ -3303,40 +3316,7 @@ test_that(".unique_sheet_name() keeps a suffixed long name at 31 characters", {
 # a Key / Value header row, then the survey metadata block, the withheld block
 # and the glossary block (spec 3.15).
 
-# The About sheet as a data frame of columns A and B, one row per sheet row.
-# Blank rows stay in the frame, so a row index is a sheet row minus 1.
-about_sheet <- function(path) {
-  df <- openxlsx2::wb_to_df(
-    path,
-    sheet = "About",
-    col_names = FALSE,
-    cols = 1:2
-  )
-  data.frame(
-    A = as.character(df[[1L]]),
-    B = as.character(df[[2L]]),
-    stringsAsFactors = FALSE
-  )
-}
-
-# The glossary terms of an About sheet, in sheet order: the column A cells
-# below the "What these numbers mean" heading.
-about_glossary <- function(about) {
-  start <- match("What these numbers mean", about$A)
-  rows <- about[seq.int(start + 1L, nrow(about)), ]
-  stats::setNames(rows$B, rows$A)
-}
-
-# A design whose q1, q2 and group carry variable labels, so the missing-label
-# warning does not fire in a test about the cover sheet.
-cover_design <- function(d) {
-  surveycore::set_var_label(
-    d,
-    q1 = "Question one",
-    q2 = "Question two",
-    group = "Group"
-  )
-}
+# about_sheet(), about_glossary() and cover_design() are in helper-export.R.
 
 test_that("export_crosstab() writes the About sheet as sheet 1 for all designs (XA-01)", {
   skip_if_not_installed("surveycore")
@@ -3350,7 +3330,7 @@ test_that("export_crosstab() writes the About sheet as sheet 1 for all designs (
     }
     d <- cover_design(designs[[nm]])
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
 
     wb <- openxlsx2::wb_load(out)
     expect_identical(
@@ -3377,7 +3357,7 @@ test_that("export_crosstab() writes the About sheet with no dataset metadata, gl
       label = paste0(nm, ": no metadata set")
     )
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
 
     about <- about_sheet(out)
     expect_identical(
@@ -3434,7 +3414,7 @@ test_that("export_crosstab() writes every set key in canonical order (XA-03)", {
     )
     oracle <- surveycore::extract_dataset_metadata(d, format = "data_frame")
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
 
     about <- about_sheet(out)
     expect_identical(
@@ -3497,7 +3477,7 @@ test_that("export_crosstab() writes no row for an unset key (XA-04)", {
       label = paste0(nm, ": no domain column")
     )
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
 
     about <- about_sheet(out)
     blank <- which(is.na(about$A) & is.na(about$B))[[1L]]
@@ -3538,7 +3518,7 @@ test_that("export_crosstab() writes a file that opens on the About sheet (XA-08)
       survey_name = "Test Survey"
     )
 
-    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+    crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out)
 
     # Read the active sheet after a save and a reload. A workbook still in
     # memory has no active sheet set, so the check would pass vacuously.
@@ -3574,7 +3554,7 @@ test_that("export_crosstab() writes the domain row only on a restricted design (
       file.remove(out)
     }
     # q2 is the banner, because `group` holds one level inside the domain.
-    export_crosstab(d_dom, vars = q1, banner = q2, file_name = out)
+    crosstab_quiet(d_dom, vars = q1, banner = q2, file_name = out)
     about <- about_sheet(out)
 
     expect_identical(
@@ -3594,7 +3574,7 @@ test_that("export_crosstab() writes the domain row only on a restricted design (
     )
 
     file.remove(out)
-    export_crosstab(d, vars = q1, banner = q2, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = q2, file_name = out)
     about <- about_sheet(out)
 
     expect_false(
@@ -3623,7 +3603,7 @@ test_that("export_crosstab() suffixes a data sheet named About (XA-09)", {
     d <- surveycore::set_var_label(d, About = "About question")
     expect_true("About" %in% names(d@data), label = paste0(nm, ": column"))
 
-    export_crosstab(
+    crosstab_quiet(
       d,
       vars = About,
       banner = group,
@@ -3672,7 +3652,7 @@ test_that("export_crosstab() folds case when it checks a sheet name (XA-10)", {
     d@data$about <- d@data$q1
     d <- surveycore::set_var_label(d, about = "About question")
 
-    result <- export_crosstab(d, vars = about, banner = group, file_name = out)
+    result <- crosstab_quiet(d, vars = about, banner = group, file_name = out)
 
     expect_identical(result, out, label = paste0(nm, ": returns the path"))
     expect_true(file.exists(out), label = paste0(nm, ": the save succeeds"))
@@ -3705,7 +3685,7 @@ test_that("export_crosstab() gives two variables sharing 31 characters two sheet
       label = c("Long one", "Long two")
     )
 
-    export_crosstab(
+    crosstab_quiet(
       d,
       vars = tidyselect::all_of(c(long_a, long_b)),
       banner = group,
@@ -3737,7 +3717,7 @@ test_that("export_crosstab() writes the About sheet with no merged cell and two 
       survey_name = "Test Survey"
     )
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
 
     wb <- openxlsx2::wb_load(out)
     ws <- wb$worksheets[[match("About", wb$get_sheet_names())]]
@@ -4139,7 +4119,7 @@ battery_col_a <- function(d, out, base_notes = NULL) {
   if (file.exists(out)) {
     file.remove(out)
   }
-  export_crosstab(
+  crosstab_quiet(
     d,
     vars = c(bat_1, bat_2, bat_3),
     banner = group,
@@ -4162,7 +4142,7 @@ test_that("export_crosstab() writes the universe as the base note, verbatim (XM-
     }
     d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = universe)
 
-    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out)
     col_a <- sheet_col_a(out, "q1")
 
     expect_identical(col_a[[1L]], "Question one", label = paste0(nm, ": title"))
@@ -4187,7 +4167,7 @@ test_that("export_crosstab() writes the caller's note over the universe (XM-02)"
     }
     d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = "Adults")
 
-    export_crosstab(
+    crosstab_quiet(
       d,
       vars = q1,
       banner = group,
@@ -4298,7 +4278,7 @@ test_that("export_crosstab() prints a SATA universe its members agree on (XM-07)
       sata_c = universe
     )
 
-    export_crosstab(
+    crosstab_quiet(
       d,
       vars = c(sata_a, sata_b, sata_c),
       banner = group,
@@ -4384,18 +4364,9 @@ sheet_rows <- function(path, sheet) {
   )
 }
 
-# surveycore warns on every survey_nonprob estimate that its standard errors
-# use an SRS approximation. That warning is not under test here, so this
-# section's calls muffle that one class and no other: every surveyreports
-# warning still reaches the expectation, and a "no warning" assertion still
-# sees any other warning. The snapshots call export_crosstab() directly, on
-# the taylor design, which raises no such warning.
-crosstab_quiet <- function(...) {
-  suppressWarnings(
-    export_crosstab(...),
-    classes = "surveycore_warning_nonprob_srs_fallback"
-  )
-}
+# crosstab_quiet() is in helper-export.R. It muffles the surveycore nonprob
+# SRS fallback warning and no other. The snapshots call export_crosstab()
+# directly, on the taylor design, which raises no such warning.
 
 test_that("export_crosstab() drops a free_text column from vars (XM-08)", {
   skip_if_not_installed("surveycore")

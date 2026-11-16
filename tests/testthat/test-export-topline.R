@@ -19,9 +19,9 @@ test_that("export_topline() creates a non-empty .xlsx file for all 4 design type
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
-    result <- withVisible(export_topline(
-      designs[[nm]],
+    unlink(out)
+    result <- withVisible(topline_quiet(
+      cover_design(designs[[nm]]),
       vars = q1,
       file_name = out
     ))
@@ -50,7 +50,12 @@ test_that("export_topline() includes all variable names in the workbook for mult
   d <- make_all_designs(seed = 42)$taylor
   out <- withr::local_tempfile(fileext = ".xlsx")
 
-  export_topline(d, vars = c(q1, q2), file_name = out)
+  # question_text falls back to variable name when no label is set;
+  # the label warning fires — suppress it here since we're testing workbook content
+  suppressWarnings(
+    export_topline(d, vars = c(q1, q2), file_name = out),
+    classes = "surveyreports_warning_missing_variable_label"
+  )
 
   wb <- openxlsx2::wb_load(out)
   expect_true("Topline" %in% wb$sheet_names)
@@ -58,8 +63,6 @@ test_that("export_topline() includes all variable names in the workbook for mult
   cells <- unlist(openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE))
   cells <- as.character(cells[!is.na(cells)])
 
-  # question_text falls back to variable name when no label is set;
-  # the label warning fires — suppress it here since we're testing workbook content
   expect_true(
     any(grepl("q1|Agree|Neutral|Disagree", cells)),
     label = "q1 content in workbook"
@@ -74,8 +77,8 @@ test_that("export_topline() handles survey_collection with wave columns", {
   designs <- make_all_designs(seed = 42)
 
   coll <- surveycore::as_survey_collection(
-    wave1 = designs$taylor,
-    wave2 = designs$replicate
+    wave1 = cover_design(designs$taylor),
+    wave2 = cover_design(designs$replicate)
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -102,9 +105,9 @@ test_that("export_topline() handles SATA variables for all design types", {
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
+    unlink(out)
     expect_no_error(
-      export_topline(
+      topline_quiet(
         designs[[nm]],
         vars = c(sata_a, sata_b, sata_c),
         file_name = out
@@ -120,9 +123,9 @@ test_that("export_topline() handles battery variables for all design types", {
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
-    file.remove(out)
+    unlink(out)
     expect_no_error(
-      export_topline(
+      topline_quiet(
         designs[[nm]],
         vars = c(bat_1, bat_2, bat_3),
         file_name = out
@@ -144,8 +147,8 @@ test_that("export_topline() heads a SATA block with the shared question preface"
       variable = c("sata_a", "sata_b", "sata_c"),
       label = c("Option A", "Option B", "Option C")
     )
-    file.remove(out)
-    export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+    unlink(out)
+    topline_quiet(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
 
     wb <- openxlsx2::wb_load(out)
     df <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
@@ -173,8 +176,8 @@ test_that("export_topline() heads a battery block with the shared question prefa
       variable = c("bat_1", "bat_2", "bat_3"),
       label = c("Item one", "Item two", "Item three")
     )
-    file.remove(out)
-    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    unlink(out)
+    topline_quiet(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
 
     wb <- openxlsx2::wb_load(out)
     df <- openxlsx2::wb_to_df(wb, sheet = "Topline", col_names = FALSE)
@@ -511,7 +514,7 @@ test_that("export_topline() handles survey_collection where one wave is missing 
 
 test_that(".build_freq_frame() totals match surveycore::get_freqs() for q1 [numerical]", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -539,7 +542,7 @@ test_that(".build_freq_frame() totals match surveycore::get_freqs() for q1 [nume
 
 test_that(".build_freq_frame() SE matches surveycore::get_freqs() with variance='se'", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -567,7 +570,7 @@ test_that(".build_freq_frame() SE matches surveycore::get_freqs() with variance=
 
 test_that(".build_freq_frame() CI bounds match surveycore::get_freqs() with variance='ci'", {
   skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
+  d <- cover_design(make_all_designs(seed = 42)$taylor)
   clf <- surveycore::classify_question_type(d, "q1")
 
   frame <- surveyreports:::.build_freq_frame(
@@ -872,7 +875,12 @@ test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
-  export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+  # surveycore warns that the all-NA sata_b yields 0 rows. That warning is
+  # the setup of this test, not its subject.
+  suppressWarnings(
+    export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out),
+    classes = "surveycore_warning_all_na_freqs"
+  )
 
   df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
   col_a <- as.character(df[[1L]])
@@ -894,28 +902,7 @@ test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
 # topline workbook withholds nothing and writes numeric cells, so its glossary
 # holds two entries, or three under variance = "ci" (spec 3.15).
 
-# The About sheet as a data frame of columns A and B, one row per sheet row.
-# Blank rows stay in the frame, so a row index is a sheet row minus 1.
-about_sheet <- function(path) {
-  df <- openxlsx2::wb_to_df(
-    path,
-    sheet = "About",
-    col_names = FALSE,
-    cols = 1:2
-  )
-  data.frame(
-    A = as.character(df[[1L]]),
-    B = as.character(df[[2L]]),
-    stringsAsFactors = FALSE
-  )
-}
-
-# The glossary of an About sheet, term = text, in sheet order.
-about_glossary <- function(about) {
-  start <- match("What these numbers mean", about$A)
-  rows <- about[seq.int(start + 1L, nrow(about)), ]
-  stats::setNames(rows$B, rows$A)
-}
+# about_sheet(), about_glossary() and cover_design() are in helper-export.R.
 
 # TRUE when the cell's resolved font is bold. A cell with no style of its own
 # takes style 0, the workbook default.
@@ -926,12 +913,6 @@ cell_is_bold <- function(wb, sheet, dims) {
   font_id <- as.integer(sub('.*fontId="([0-9]+)".*', "\\1", xf))
   font <- wb$styles_mgr$styles$fonts[[font_id + 1L]]
   grepl("<b/>|<b val=\"1\"/>|<b val=\"true\"/>", font)
-}
-
-# A design whose q1 and q2 carry variable labels, so the missing-label
-# warning does not fire in a test about the cover sheet.
-cover_design <- function(d) {
-  surveycore::set_var_label(d, q1 = "Question one", q2 = "Question two")
 }
 
 topline_glossary_text <- list(
@@ -967,7 +948,7 @@ test_that("export_topline() writes the About sheet first with a topline glossary
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, variance = NULL)
+    topline_quiet(d, vars = q1, file_name = out, variance = NULL)
 
     wb <- openxlsx2::wb_load(out)
     expect_identical(
@@ -1006,7 +987,7 @@ test_that("export_topline() adds the interval entry under variance = 'ci' (TP-06
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, variance = "ci")
+    topline_quiet(d, vars = q1, file_name = out, variance = "ci")
 
     glossary <- about_glossary(about_sheet(out))
     expect_identical(
@@ -1045,7 +1026,7 @@ test_that("export_topline() writes no withheld block on the About sheet (TP-07)"
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = c(q1, q2), file_name = out)
+    topline_quiet(d, vars = c(q1, q2), file_name = out)
 
     about <- about_sheet(out)
     expect_identical(
@@ -1230,7 +1211,7 @@ test_that("export_topline() reports N over the rows the design tabulates (TN-02)
         file.remove(out)
       }
 
-      export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+      topline_quiet(d, vars = q1, file_name = out, show_eff_n = TRUE)
       block <- topline_block(out)
 
       # The unweighted N: the N cell of the Total row.
@@ -1331,7 +1312,7 @@ test_that("export_topline() writes a whole-number effective N in the % header (T
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+    topline_quiet(d, vars = q1, file_name = out, show_eff_n = TRUE)
     block <- topline_block(out)
 
     oracle <- round(surveycore::get_effective_n(d)$n_eff)
@@ -1384,7 +1365,7 @@ test_that("export_topline() percentages match surveycore::get_freqs() as numbers
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, decimals = 1L)
+    topline_quiet(d, vars = q1, file_name = out, decimals = 1L)
     block <- topline_block(out)
 
     first <- block$row[block$A == "Response"] + 1L
@@ -1398,7 +1379,7 @@ test_that("export_topline() percentages match surveycore::get_freqs() as numbers
     )
     expect_true(is.numeric(cells[[2L]]), label = paste0(nm, ": numeric cells"))
 
-    ref <- surveycore::get_freqs(d, q1)
+    ref <- quiet_nonprob(surveycore::get_freqs(d, q1))
     expect_identical(
       sort(as.character(cells[[1L]])),
       sort(as.character(ref[[1L]])),
@@ -1460,7 +1441,7 @@ test_that("export_topline() writes the universe as the base note, verbatim (TP-0
     }
     d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = universe)
 
-    export_topline(d, vars = q1, file_name = out)
+    topline_quiet(d, vars = q1, file_name = out)
     col_a <- topline_col_a(out)
 
     expect_identical(col_a[[1L]], "Question one", label = paste0(nm, ": title"))
@@ -1485,7 +1466,7 @@ test_that("export_topline() writes the caller's note over the universe (TP-02)",
     }
     d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = "Adults")
 
-    export_topline(
+    topline_quiet(
       d,
       vars = q1,
       file_name = out,
@@ -1518,7 +1499,7 @@ test_that("export_topline() prints a battery universe its members agree on (TP-0
       bat_3 = universe
     )
 
-    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    topline_quiet(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
     col_a <- topline_col_a(out)
 
     expect_identical(
@@ -1554,7 +1535,7 @@ test_that("export_topline() prints no battery universe its members disagree on (
       bat_3 = universe
     )
 
-    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    topline_quiet(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
     col_a <- topline_col_a(out)
 
     expect_identical(
@@ -1588,7 +1569,7 @@ test_that("export_topline() lets a battery caller note win over an agreed univer
     if (file.exists(out)) {
       file.remove(out)
     }
-    export_topline(
+    topline_quiet(
       d,
       vars = c(bat_1, bat_2, bat_3),
       file_name = out,
@@ -1602,7 +1583,7 @@ test_that("export_topline() lets a battery caller note win over an agreed univer
     # A caller note on a later member: the block prints the universe once,
     # and the caller note stays under its own sub-item.
     file.remove(out)
-    export_topline(
+    topline_quiet(
       d,
       vars = c(bat_1, bat_2, bat_3),
       file_name = out,
@@ -1647,7 +1628,7 @@ test_that("export_topline() drops a free_text column from vars (TP-05)", {
     )
 
     expect_warning(
-      export_topline(d, vars = c(q1, q2), file_name = out),
+      topline_quiet(d, vars = c(q1, q2), file_name = out),
       class = "surveyreports_warning_role_dropped"
     )
     col_a <- topline_col_a(out)
@@ -1696,7 +1677,7 @@ test_that("export_topline() raises no tidyselect deprecation warning (TP-08)", {
     d <- cover_design(designs[[nm]])
 
     expect_no_warning(
-      export_topline(d, vars = c(q1, q2), file_name = out),
+      topline_quiet(d, vars = c(q1, q2), file_name = out),
       class = "lifecycle_warning_deprecated"
     )
     expect_true(file.exists(out), label = paste0(nm, ": file written"))
@@ -1832,7 +1813,7 @@ test_that("export_topline() warns once for a dropped column and still writes the
     )
 
     expect_warning(
-      result <- export_topline(d, vars = c(q1, q2), file_name = out),
+      result <- topline_quiet(d, vars = c(q1, q2), file_name = out),
       class = "surveyreports_warning_role_dropped"
     )
     expect_identical(result, out, label = paste0(nm, ": the path"))
@@ -1857,7 +1838,7 @@ test_that("export_topline() keeps a column with an unknown role and warns (TW-02
     )
 
     expect_warning(
-      result <- export_topline(d, vars = c(q1, q2), file_name = out),
+      result <- topline_quiet(d, vars = c(q1, q2), file_name = out),
       class = "surveyreports_warning_unknown_role"
     )
     expect_identical(result, out, label = paste0(nm, ": the path"))
@@ -1882,7 +1863,7 @@ test_that("export_topline() keeps the percentage cells numeric (TP-09)", {
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out)
+    topline_quiet(d, vars = q1, file_name = out)
     block <- topline_block(out)
 
     first <- block$row[block$A == "Response"] + 1L
@@ -1912,7 +1893,7 @@ test_that("export_topline() still writes the N column (TP-10)", {
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, show_n = TRUE)
+    topline_quiet(d, vars = q1, file_name = out, show_n = TRUE)
     block <- topline_block(out)
 
     expect_identical(
@@ -1935,7 +1916,7 @@ test_that("export_topline() keeps the effective N in the % header (TP-11)", {
     }
     d <- cover_design(designs[[nm]])
 
-    export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+    topline_quiet(d, vars = q1, file_name = out, show_eff_n = TRUE)
     col_a <- topline_col_a(out)
     block <- topline_block(out)
 
@@ -1973,7 +1954,7 @@ test_that("export_topline() never withholds a tiny subgroup (TP-12)", {
         file.remove(out)
       }
       expect_no_warning(
-        export_topline(d, vars = q1, file_name = out),
+        topline_quiet(d, vars = q1, file_name = out),
         class = cls
       )
     }
@@ -1994,7 +1975,7 @@ test_that("export_topline() renders a SATA block in its own shape (TP-13)", {
     }
     d <- note_design(designs[[nm]])
 
-    export_topline(
+    topline_quiet(
       d,
       vars = c(sata_a, sata_b, sata_c),
       file_name = out,
