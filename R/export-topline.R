@@ -99,7 +99,10 @@ export_topline <- function(
     conf_level,
     decimals
   )
+  # The caller's vector is validated alone, before the universe joins it:
+  # surveycore metadata is not the caller's error to fix (spec 3.6).
   .validate_base_notes(base_notes)
+  resolved_notes <- .resolve_base_notes(design, base_notes)
 
   # Classify variables (collection: use first wave's design)
   design_for_classify <- if (
@@ -156,7 +159,7 @@ export_topline <- function(
         show_eff_n,
         decimals,
         freq_result$suppressed,
-        base_notes
+        resolved_notes
       )
     } else if (vtype == "sata") {
       group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -172,7 +175,7 @@ export_topline <- function(
         show_eff_n,
         decimals,
         freq_result$suppressed,
-        base_notes
+        resolved_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     } else {
@@ -190,7 +193,7 @@ export_topline <- function(
         show_eff_n,
         decimals,
         freq_result$suppressed,
-        base_notes
+        resolved_notes
       )
       groups_done <- c(groups_done, as.character(group_id))
     }
@@ -631,6 +634,29 @@ export_topline <- function(
 
   current_row <- start_row + 1L
 
+  # The topline battery writes each sub-item as its own table, and a caller
+  # note stays keyed by the sub-item's own variable name, as before. The
+  # universe is a statement about the whole block (spec 3.6), so it is
+  # judged once, by the battery unanimity rule, and written once under the
+  # preface. Reading chosen where the spec is silent: the block row follows
+  # .base_note_for() on the whole frame, so a caller entry on the first
+  # member wins it. That entry is already written under its own sub-item, so
+  # the block row is skipped rather than written twice.
+  block_note <- if (bat_vars[[1L]] %in% names(base_notes$caller)) {
+    NULL
+  } else {
+    .base_note_for(frame, base_notes)
+  }
+  if (!is.null(block_note)) {
+    wb <- .write_base_note(wb, sheet, block_note, current_row, n_cols)
+    current_row <- current_row + 1L
+  }
+  item_notes <- if (is.null(base_notes)) {
+    NULL
+  } else {
+    list(caller = base_notes$caller, universe = character(0))
+  }
+
   for (var in bat_vars) {
     var_frame <- frame[frame$variable == var, ]
 
@@ -638,8 +664,8 @@ export_topline <- function(
     var_label_val <- var_frame$var_label[[1L]]
     var_frame$question_text <- var_label_val
 
-    # base_notes passes through: each sub-item is keyed by its own
-    # variable name
+    # Each sub-item takes the caller's note keyed by its own variable name,
+    # and no universe: the block row above carries that.
     result <- .render_topline_single(
       wb,
       sheet,
@@ -649,7 +675,7 @@ export_topline <- function(
       show_eff_n,
       decimals,
       suppressed[integer(0), ], # no per-item footnote
-      base_notes
+      item_notes
     )
     wb <- result$wb
     current_row <- result$next_row + 1L

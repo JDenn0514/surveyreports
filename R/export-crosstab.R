@@ -170,8 +170,11 @@ export_crosstab <- function(
     }
   }
 
-  # 8. base_notes validation
+  # 8. base_notes validation, on the caller's vector alone, then the merge
+  # with the design's universe. surveycore metadata is not the caller's error
+  # to fix, so it is never validated here (spec 3.6).
   .validate_base_notes(base_notes)
+  resolved_notes <- .resolve_base_notes(design, base_notes)
 
   layout <- match.arg(layout)
   pub_type <- match.arg(pub_type)
@@ -231,7 +234,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -253,7 +256,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -275,7 +278,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       }
 
@@ -310,7 +313,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       } else if (vtype == "sata") {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -330,7 +333,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       } else {
         group_vars <- classify_out$variable[classify_out$group == group_id]
@@ -350,7 +353,7 @@ export_crosstab <- function(
           banner_resolved,
           interactions,
           show_total,
-          base_notes
+          resolved_notes
         )
       }
 
