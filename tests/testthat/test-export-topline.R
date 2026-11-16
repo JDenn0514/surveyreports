@@ -1414,3 +1414,212 @@ test_that("export_topline() percentages match surveycore::get_freqs() as numbers
     }
   }
 })
+
+# 15. Base notes fall back to the universe -------------------------------------
+# A variable with no caller note takes its universe text, verbatim. A caller
+# note wins. A battery or SATA block prints the universe only when every
+# member carries the same text (spec 3.6).
+
+# A design whose q1, SATA and battery columns carry variable labels, so the
+# missing-label warning does not fire in a test about base notes.
+note_design <- function(d) {
+  surveycore::set_var_label(
+    d,
+    q1 = "Question one",
+    sata_a = "Option A",
+    sata_b = "Option B",
+    sata_c = "Option C",
+    bat_1 = "Item one",
+    bat_2 = "Item two",
+    bat_3 = "Item three"
+  )
+}
+
+# Column A of the "Topline" sheet, as a character vector indexed by sheet row.
+topline_col_a <- function(path) {
+  df <- openxlsx2::wb_to_df(
+    path,
+    sheet = "Topline",
+    col_names = FALSE,
+    cols = 1L,
+    skip_empty_rows = FALSE
+  )
+  as.character(df[[1L]])
+}
+
+test_that("export_topline() writes the universe as the base note, verbatim (TP-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Asked of all U.S. adults."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = universe)
+
+    export_topline(d, vars = q1, file_name = out)
+    col_a <- topline_col_a(out)
+
+    expect_identical(col_a[[1L]], "Question one", label = paste0(nm, ": title"))
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_identical(col_a[[3L]], "Response", label = paste0(nm, ": header"))
+    # No "Base:" prefix is added anywhere (spec 3.6).
+    expect_false(
+      any(startsWith(col_a, "Base:"), na.rm = TRUE),
+      label = paste0(nm, ": no Base: prefix")
+    )
+  }
+})
+
+test_that("export_topline() writes the caller's note over the universe (TP-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = "Adults")
+
+    export_topline(
+      d,
+      vars = q1,
+      file_name = out,
+      base_notes = c(q1 = "Caller text")
+    )
+    col_a <- topline_col_a(out)
+
+    expect_identical(col_a[[2L]], "Caller text", label = paste0(nm, ": note"))
+    expect_false(
+      "Adults" %in% col_a,
+      label = paste0(nm, ": the universe is not written")
+    )
+  }
+})
+
+test_that("export_topline() prints a battery universe its members agree on (TP-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = universe,
+      bat_3 = universe
+    )
+
+    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    col_a <- topline_col_a(out)
+
+    expect_identical(
+      col_a[[1L]],
+      "Please rate the following items:",
+      label = paste0(nm, ": preface")
+    )
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_identical(
+      sum(col_a == universe, na.rm = TRUE),
+      1L,
+      label = paste0(nm, ": one base-note row")
+    )
+    expect_identical(col_a[[3L]], "Item one", label = paste0(nm, ": item"))
+  }
+})
+
+test_that("export_topline() prints no battery universe its members disagree on (TP-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+  other <- "Rated by parents."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = other,
+      bat_3 = universe
+    )
+
+    export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
+    col_a <- topline_col_a(out)
+
+    expect_identical(
+      sum(col_a %in% c(universe, other)),
+      0L,
+      label = paste0(nm, ": no base-note row")
+    )
+    expect_identical(col_a[[2L]], "Item one", label = paste0(nm, ": item"))
+  }
+})
+
+# The topline battery writes each sub-item as its own table, so a caller note
+# stays under its own sub-item and the universe is written once under the
+# preface. A caller entry on the first member wins the block, as in
+# export_crosstab(), so the universe is then not written (spec 3.6).
+test_that("export_topline() lets a battery caller note win over an agreed universe", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = universe,
+      bat_3 = universe
+    )
+
+    # A caller note on the first member: the block prints no universe.
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    export_topline(
+      d,
+      vars = c(bat_1, bat_2, bat_3),
+      file_name = out,
+      base_notes = c(bat_1 = "Caller one")
+    )
+    col_a <- topline_col_a(out)
+    expect_identical(col_a[[2L]], "Item one", label = paste0(nm, ": first"))
+    expect_identical(col_a[[3L]], "Caller one", label = paste0(nm, ": caller"))
+    expect_false(universe %in% col_a, label = paste0(nm, ": no universe"))
+
+    # A caller note on a later member: the block prints the universe once,
+    # and the caller note stays under its own sub-item.
+    file.remove(out)
+    export_topline(
+      d,
+      vars = c(bat_1, bat_2, bat_3),
+      file_name = out,
+      base_notes = c(bat_3 = "Caller three")
+    )
+    col_a <- topline_col_a(out)
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": block note"))
+    expect_identical(
+      sum(col_a == universe, na.rm = TRUE),
+      1L,
+      label = paste0(nm, ": one universe row")
+    )
+    row_3 <- which(col_a == "Item three")[[1L]]
+    expect_identical(
+      col_a[[row_3 + 1L]],
+      "Caller three",
+      label = paste0(nm, ": caller under its item")
+    )
+  }
+})

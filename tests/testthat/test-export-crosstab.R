@@ -4099,3 +4099,248 @@ test_that(".write_cover_sheet() keeps the Percentages text at decimals = 1", {
     )
   }
 })
+
+# 24. Base notes fall back to the universe -------------------------------------
+# A variable with no caller note takes its universe text, verbatim. A caller
+# note wins, and is exempt from the unanimity rule. A battery or SATA block
+# prints the universe only when every member carries the same text
+# (spec 3.6).
+
+# A design whose q1, SATA, battery and banner columns carry variable labels,
+# so the missing-label warning does not fire in a test about base notes.
+note_design <- function(d) {
+  surveycore::set_var_label(
+    d,
+    q1 = "Question one",
+    group = "Group",
+    sata_a = "Option A",
+    sata_b = "Option B",
+    sata_c = "Option C",
+    bat_1 = "Item one",
+    bat_2 = "Item two",
+    bat_3 = "Item three"
+  )
+}
+
+# Column A of one sheet, as a character vector indexed by sheet row.
+sheet_col_a <- function(path, sheet) {
+  df <- openxlsx2::wb_to_df(
+    path,
+    sheet = sheet,
+    col_names = FALSE,
+    cols = 1L,
+    skip_empty_rows = FALSE
+  )
+  as.character(df[[1L]])
+}
+
+# Writes the battery block for one design and returns column A of its sheet.
+battery_col_a <- function(d, out, base_notes = NULL) {
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+  export_crosstab(
+    d,
+    vars = c(bat_1, bat_2, bat_3),
+    banner = group,
+    file_name = out,
+    base_notes = base_notes
+  )
+  sheet_col_a(out, "bat_1")
+}
+
+test_that("export_crosstab() writes the universe as the base note, verbatim (XM-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Asked of all U.S. adults."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = universe)
+
+    export_crosstab(d, vars = q1, banner = group, file_name = out)
+    col_a <- sheet_col_a(out, "q1")
+
+    expect_identical(col_a[[1L]], "Question one", label = paste0(nm, ": title"))
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_identical(col_a[[4L]], "Response", label = paste0(nm, ": header"))
+    # No "Base:" prefix is added anywhere (spec 3.6).
+    expect_false(
+      any(startsWith(col_a, "Base:"), na.rm = TRUE),
+      label = paste0(nm, ": no Base: prefix")
+    )
+  }
+})
+
+test_that("export_crosstab() writes the caller's note over the universe (XM-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(note_design(designs[[nm]]), q1 = "Adults")
+
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      base_notes = c(q1 = "Caller text")
+    )
+    col_a <- sheet_col_a(out, "q1")
+
+    expect_identical(col_a[[2L]], "Caller text", label = paste0(nm, ": note"))
+    expect_false(
+      "Adults" %in% col_a,
+      label = paste0(nm, ": the universe is not written")
+    )
+  }
+})
+
+test_that("export_crosstab() prints a battery universe its members agree on (XM-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = universe,
+      bat_3 = universe
+    )
+
+    col_a <- battery_col_a(d, out)
+
+    expect_identical(
+      col_a[[1L]],
+      "Please rate the following items:",
+      label = paste0(nm, ": preface")
+    )
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_identical(
+      sum(col_a == universe, na.rm = TRUE),
+      1L,
+      label = paste0(nm, ": one base-note row")
+    )
+    expect_identical(col_a[[4L]], "Item", label = paste0(nm, ": header"))
+  }
+})
+
+test_that("export_crosstab() prints no battery universe its members disagree on (XM-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+  other <- "Rated by parents."
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = other,
+      bat_3 = universe
+    )
+
+    col_a <- battery_col_a(d, out)
+
+    expect_identical(
+      sum(col_a %in% c(universe, other)),
+      0L,
+      label = paste0(nm, ": no base-note row")
+    )
+    expect_identical(col_a[[3L]], "Item", label = paste0(nm, ": header"))
+  }
+})
+
+test_that("export_crosstab() prints no battery universe when one member is unset (XM-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_3 = universe
+    )
+
+    col_a <- battery_col_a(d, out)
+
+    expect_false(universe %in% col_a, label = paste0(nm, ": no base-note row"))
+    expect_identical(col_a[[3L]], "Item", label = paste0(nm, ": header"))
+  }
+})
+
+test_that("export_crosstab() prints a SATA universe its members agree on (XM-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Asked of all adults."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      sata_a = universe,
+      sata_b = universe,
+      sata_c = universe
+    )
+
+    export_crosstab(
+      d,
+      vars = c(sata_a, sata_b, sata_c),
+      banner = group,
+      file_name = out
+    )
+    col_a <- sheet_col_a(out, "sata_a")
+
+    expect_identical(
+      col_a[[1L]],
+      "Which of the following apply to you?",
+      label = paste0(nm, ": preface")
+    )
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_identical(
+      sum(col_a == universe, na.rm = TRUE),
+      1L,
+      label = paste0(nm, ": one base-note row")
+    )
+    expect_identical(col_a[[4L]], "Item", label = paste0(nm, ": header"))
+  }
+})
+
+test_that("export_crosstab() exempts a battery caller note from the unanimity rule", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    # The members disagree, so the universe alone would print nothing.
+    d <- surveycore::set_universe(
+      note_design(designs[[nm]]),
+      bat_1 = "Rated by all adults.",
+      bat_2 = "Rated by parents.",
+      bat_3 = "Rated by all adults."
+    )
+
+    col_a <- battery_col_a(d, out, base_notes = c(bat_1 = "Caller text"))
+
+    expect_identical(col_a[[2L]], "Caller text", label = paste0(nm, ": note"))
+    expect_false(
+      any(c("Rated by all adults.", "Rated by parents.") %in% col_a),
+      label = paste0(nm, ": no universe")
+    )
+  }
+})

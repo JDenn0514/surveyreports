@@ -1321,9 +1321,17 @@
   invisible(TRUE)
 }
 
-# Base-note text for a rendered table, keyed by the frame's first variable
-# (the sole variable of a single-choice table; the first member of a
-# sata/battery group). NULL when no note is configured for it.
+# Base-note text for a rendered table, or NULL when none applies (spec 3.6).
+#
+# base_notes is the two-element object from .resolve_base_notes(), or NULL.
+# 1. The caller's entry for the frame's first variable wins. That is the sole
+#    variable of a single-response table, or the first member of a SATA or
+#    battery group. A caller entry is exempt from the unanimity rule.
+# 2. Otherwise the universe applies, under the unanimity rule: every variable
+#    in the frame must carry the same universe text. A single-response table
+#    has one variable, so its own universe prints. The frame holds only the
+#    members that reach the block, so a dropped member does not veto the note.
+# The text is returned verbatim. No "Base:" prefix is added.
 #' @keywords internal
 #' @noRd
 .base_note_for <- function(frame, base_notes) {
@@ -1331,10 +1339,24 @@
     return(NULL)
   }
   var <- frame$variable[[1L]]
-  if (!var %in% names(base_notes)) {
+  caller <- base_notes$caller
+  if (var %in% names(caller)) {
+    return(caller[[var]])
+  }
+
+  # The battery shape is transposed: one universe vector, several variables.
+  # Reshape it so every member shares the one key .unanimous_across() reads.
+  # A member with no universe gives NA, which vetoes the note.
+  universe <- base_notes$universe
+  per_member <- lapply(
+    unique(frame$variable),
+    function(member) c(universe = unname(universe[member]))
+  )
+  found <- .unanimous_across(per_member)
+  if (length(found) == 0L) {
     return(NULL)
   }
-  base_notes[[var]]
+  found[["universe"]]
 }
 
 # Italic base-note row directly under a table title, merged across the
