@@ -92,7 +92,7 @@ stands.** Only the formal arguments come forward.
       correct on twophase and domain-restricted designs.
 - [x] PR 8: `feature/base-notes-adoption` — a base note falls back to the
       design's `universe` metadata, in both export functions.
-- [ ] PR 9: `feature/topline-guards` — `export_topline()` runs the role guard
+- [x] PR 9: `feature/topline-guards` — `export_topline()` runs the role guard
       and the design-variable check.
 - [ ] PR 10: `feature/crosstab-guards` — `export_crosstab()` runs the same two
       guards, and re-validates `interactions`.

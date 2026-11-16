@@ -102,6 +102,21 @@ export_topline <- function(
   # The caller's vector is validated alone, before the universe joins it:
   # surveycore metadata is not the caller's error to fix (spec 3.6).
   .validate_base_notes(base_notes)
+
+  # Step 5 of spec 3.11: a column the design names aborts. It runs before the
+  # role guard, so a design column that also carries role = "weight" errors
+  # and is not dropped with a warning.
+  .reject_design_vars(design, vars_resolved, "vars")
+
+  # Step 6 of spec 3.11: the role guard drops a non-substantive `vars` column
+  # before classification, so it never forms a question group of its own.
+  vars_resolved <- .apply_role_guard(
+    design,
+    vars_resolved,
+    "vars",
+    "surveyreports_error_vars_all_dropped"
+  )
+
   resolved_notes <- .resolve_base_notes(design, base_notes)
 
   # Classify variables (collection: use first wave's design)
@@ -112,9 +127,11 @@ export_topline <- function(
   } else {
     design
   }
+  # Step 7 of spec 3.11: all_of() passes the resolved names as a selection, so
+  # tidyselect raises no external-vector deprecation warning (spec 2.1).
   classify_out <- surveycore::classify_question_type(
     design_for_classify,
-    vars_resolved
+    tidyselect::all_of(vars_resolved)
   )
 
   # Build frequency frame

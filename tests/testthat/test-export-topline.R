@@ -1623,3 +1623,497 @@ test_that("export_topline() lets a battery caller note win over an agreed univer
     )
   }
 })
+
+# 16. Selection guards ----------------------------------------------------------
+# export_topline() runs the design-variable check and then the role guard on
+# `vars`, after the tidy-select resolution and before classification (spec
+# 3.10, spec 3.11). The topline presentation does not change (spec 4.1, spec
+# 4.2). cover_design() labels q1 as "Question one" and q2 as "Question two",
+# so a block is found by its title.
+
+test_that("export_topline() drops a free_text column from vars (TP-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      cover_design(designs[[nm]]),
+      q2 = list(role = "free_text")
+    )
+
+    expect_warning(
+      export_topline(d, vars = c(q1, q2), file_name = out),
+      class = "surveyreports_warning_role_dropped"
+    )
+    col_a <- topline_col_a(out)
+
+    expect_true("Question one" %in% col_a, label = paste0(nm, ": q1 block"))
+    expect_false("Question two" %in% col_a, label = paste0(nm, ": no q2 block"))
+  }
+})
+
+# The class alone: XE-12, in export_crosstab(), snapshots the `vars` wording,
+# and both functions raise the same text for the same argument.
+test_that("export_topline() aborts when vars names the design's weight column (TE-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    expect_error(
+      export_topline(d, vars = c(q1, wt), file_name = out),
+      class = "surveyreports_error_design_variable_selected"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+})
+
+# tidyselect raises its external-vector deprecation with the class
+# lifecycle_warning_deprecated when a bare character vector reaches a
+# selection. testthat sets lifecycle_verbosity to "warning", so the warning
+# fires on every call here, not once per session.
+test_that("export_topline() raises no tidyselect deprecation warning (TP-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    expect_no_warning(
+      export_topline(d, vars = c(q1, q2), file_name = out),
+      class = "lifecycle_warning_deprecated"
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+  }
+})
+
+test_that("export_topline() aborts when every vars column is non-substantive (TE-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      cover_design(designs[[nm]]),
+      q1 = list(role = "free_text"),
+      q2 = list(role = "paradata")
+    )
+
+    expect_error(
+      export_topline(d, vars = c(q1, q2), file_name = out),
+      class = "surveyreports_error_vars_all_dropped"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- surveycore::set_var_extra(
+    cover_design(designs$taylor),
+    q1 = list(role = "free_text"),
+    q2 = list(role = "paradata")
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_topline(d, vars = c(q1, q2), file_name = out)
+  )
+})
+
+# The class alone: the section 8 block snapshots this class's message.
+test_that("export_topline() rejects a plain data frame (TE-02)", {
+  df <- make_survey_data(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    export_topline(df, vars = c(q1, q2), file_name = out),
+    class = "surveyreports_error_not_survey_object"
+  )
+  expect_false(file.exists(out))
+})
+
+# surveycore exports no filter verb, so the all-FALSE domain is written into
+# the domain column directly, as surveytidy's filter() would leave it. The
+# empty-domain check runs at step 3, before the role guard at step 6, so the
+# role warning for q2 must never fire (spec 3.11).
+test_that("export_topline() aborts on an empty domain before the role guard (TE-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  empty_domain_design <- function(d) {
+    d <- surveycore::set_var_extra(
+      cover_design(d),
+      q2 = list(role = "free_text")
+    )
+    d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- rep(FALSE, nrow(d@data))
+    d
+  }
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- empty_domain_design(designs[[nm]])
+
+    expect_no_warning(
+      expect_error(
+        export_topline(d, vars = c(q1, q2), file_name = out),
+        class = "surveyreports_error_empty_domain"
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- empty_domain_design(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_topline(d, vars = c(q1, q2), file_name = out)
+  )
+})
+
+# The class alone: the TE-03 block snapshots it. The "i" bullet names the
+# wave whose domain excludes every row.
+test_that("export_topline() aborts when one wave's domain excludes every row", {
+  skip_if_not_installed("surveycore")
+  w2 <- make_all_designs(seed = 7)$taylor
+  w2@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- rep(FALSE, nrow(w2@data))
+  coll <- cover_collection(make_all_designs(seed = 42)$taylor, w2)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    export_topline(coll, vars = q1, file_name = out),
+    class = "surveyreports_error_empty_domain",
+    regexp = "w2"
+  )
+  expect_false(file.exists(out))
+})
+
+# The class alone: XV-01, in export_crosstab(), snapshots the `vars` wording,
+# and both functions run the same guard on `vars`.
+test_that("export_topline() warns once for a dropped column and still writes the file (TW-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      cover_design(designs[[nm]]),
+      q2 = list(role = "free_text")
+    )
+
+    expect_warning(
+      result <- export_topline(d, vars = c(q1, q2), file_name = out),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+  }
+})
+
+# The class alone: XV-07, in export_crosstab(), snapshots this class.
+test_that("export_topline() keeps a column with an unknown role and warns (TW-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      cover_design(designs[[nm]]),
+      q2 = list(role = "curiosity")
+    )
+
+    expect_warning(
+      result <- export_topline(d, vars = c(q1, q2), file_name = out),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+    col_a <- topline_col_a(out)
+    expect_true("Question two" %in% col_a, label = paste0(nm, ": q2 block"))
+  }
+})
+
+# TP-09 to TP-12 are the scope-boundary rows: the topline presentation does
+# not take the crosstab changes (spec 4.1, spec 4.2).
+
+test_that("export_topline() keeps the percentage cells numeric (TP-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out)
+    block <- topline_block(out)
+
+    first <- block$row[block$A == "Response"] + 1L
+    last <- block$row[block$A == "Total"] - 1L
+    cells <- openxlsx2::wb_to_df(
+      out,
+      sheet = "Topline",
+      col_names = FALSE,
+      rows = first:last,
+      cols = 2L
+    )
+    expect_identical(nrow(cells), 3L, label = paste0(nm, ": three responses"))
+    expect_true(is.numeric(cells[[1L]]), label = paste0(nm, ": numeric cells"))
+    expect_false(anyNA(cells[[1L]]), label = paste0(nm, ": no blank cell"))
+  }
+})
+
+test_that("export_topline() still writes the N column (TP-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, show_n = TRUE)
+    block <- topline_block(out)
+
+    expect_identical(
+      c(block$B[block$A == "Response"], block$C[block$A == "Response"]),
+      c("%", "N"),
+      label = paste0(nm, ": the heading cells")
+    )
+  }
+})
+
+test_that("export_topline() keeps the effective N in the % header (TP-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    export_topline(d, vars = q1, file_name = out, show_eff_n = TRUE)
+    col_a <- topline_col_a(out)
+    block <- topline_block(out)
+
+    expect_match(
+      block$B[block$A == "Response"],
+      "^%\n\\(Eff N=[0-9,]+\\)$",
+      label = paste0(nm, ": the % header")
+    )
+    expect_false(
+      any(grepl("sample size", col_a, ignore.case = TRUE)),
+      label = paste0(nm, ": no sample-size row")
+    )
+  }
+})
+
+test_that("export_topline() never withholds a tiny subgroup (TP-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  withheld_classes <- c(
+    "surveyreports_warning_subgroup_withheld",
+    "surveyreports_warning_banner_all_withheld",
+    "surveyreports_warning_full_sample_below_min"
+  )
+
+  for (nm in names(designs)) {
+    d <- cover_design(designs[[nm]])
+    # Two phase-2 rows, so the response is tabulated on every design.
+    tiny <- which(d@data$in_phase2)[1:2]
+    d@data$q1[tiny] <- "Rare"
+
+    for (cls in withheld_classes) {
+      if (file.exists(out)) {
+        file.remove(out)
+      }
+      expect_no_warning(
+        export_topline(d, vars = q1, file_name = out),
+        class = cls
+      )
+    }
+    col_a <- topline_col_a(out)
+    expect_true("Rare" %in% col_a, label = paste0(nm, ": the tiny response"))
+  }
+})
+
+test_that("export_topline() renders a SATA block in its own shape (TP-13)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- note_design(designs[[nm]])
+
+    export_topline(
+      d,
+      vars = c(sata_a, sata_b, sata_c),
+      file_name = out,
+      base_notes = NULL
+    )
+    col_a <- topline_col_a(out)
+
+    # One block: the preface, one "Item" heading, one row per item. Three
+    # single-response blocks would write three titles and three "Response"
+    # headings; a battery would write "Response" under each item.
+    expect_identical(
+      col_a,
+      c(
+        "Which of the following apply to you?",
+        "Item",
+        "Option A",
+        "Option B",
+        "Option C"
+      ),
+      label = paste0(nm, ": column A")
+    )
+    block <- topline_block(out)
+    expect_identical(
+      c(block$B[block$A == "Item"], block$C[block$A == "Item"]),
+      c("%", "N"),
+      label = paste0(nm, ": the heading cells")
+    )
+  }
+})
+
+# A collection branches every metadata read on the design type: surveycore's
+# universe and var_extra readers abort on a survey_collection (spec 1.5). The
+# two waves are the taylor designs at seed 42 and seed 7.
+
+test_that("export_topline() writes a universe note for a collection (TC-01)", {
+  skip_if_not_installed("surveycore")
+  universe <- "Asked of all adults."
+  coll <- cover_collection(
+    surveycore::set_universe(make_all_designs(seed = 42)$taylor, q1 = universe),
+    surveycore::set_universe(make_all_designs(seed = 7)$taylor, q1 = universe)
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  result <- withVisible(export_topline(coll, vars = q1, file_name = out))
+
+  expect_false(result$visible)
+  expect_identical(result$value, out)
+  expect_true(file.exists(out))
+  col_a <- topline_col_a(out)
+  expect_identical(col_a[[1L]], "Question one")
+  expect_identical(col_a[[2L]], universe)
+})
+
+test_that("export_topline() writes no universe that differs across waves (TC-02)", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    surveycore::set_universe(
+      make_all_designs(seed = 42)$taylor,
+      q1 = "Asked of all adults."
+    ),
+    surveycore::set_universe(
+      make_all_designs(seed = 7)$taylor,
+      q1 = "Asked of parents."
+    )
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  result <- export_topline(coll, vars = q1, file_name = out)
+
+  expect_identical(result, out)
+  col_a <- topline_col_a(out)
+  expect_identical(col_a[[2L]], "Response")
+  expect_false(
+    any(c("Asked of all adults.", "Asked of parents.") %in% col_a)
+  )
+})
+
+test_that("export_topline() runs the role guard on a collection (TC-03)", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    surveycore::set_var_extra(
+      make_all_designs(seed = 42)$taylor,
+      q1 = list(role = "item")
+    ),
+    surveycore::set_var_extra(
+      make_all_designs(seed = 7)$taylor,
+      q1 = list(role = "item")
+    )
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  result <- withVisible(
+    export_topline(coll, vars = c(q1, q2), file_name = out)
+  )
+
+  expect_false(result$visible)
+  expect_identical(result$value, out)
+  col_a <- topline_col_a(out)
+  expect_true("Question one" %in% col_a)
+  expect_true("Question two" %in% col_a)
+})
+
+test_that("export_topline() keeps a column whose role differs between waves (TC-04)", {
+  skip_if_not_installed("surveycore")
+  coll <- cover_collection(
+    surveycore::set_var_extra(
+      make_all_designs(seed = 42)$taylor,
+      q2 = list(role = "paradata")
+    ),
+    make_all_designs(seed = 7)$taylor
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_no_warning(
+    result <- export_topline(coll, vars = c(q1, q2), file_name = out),
+    class = "surveyreports_warning_role_dropped"
+  )
+
+  expect_identical(result, out)
+  col_a <- topline_col_a(out)
+  expect_true("Question two" %in% col_a)
+})

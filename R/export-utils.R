@@ -64,24 +64,34 @@
     )
   }
 
-  # 4. Domain has at least one row
-  if (nrow(data_for_check) == 0L) {
-    # nocov start
-    # Defensive: surveycore >= 1.2.0 rejects zero-row @data in its S7
-    # validator. An empty filter() domain keeps every row, so it does not
-    # reach this check. The check stays because DESCRIPTION still allows
-    # surveycore < 1.2.0. The export-metadata work
-    # (plans/spec-export-metadata.md) plans to raise this class for an
-    # all-FALSE domain; remove these markers then.
+  # 4. Every member has at least one row in its domain. A filter() domain
+  # keeps every row and marks the rows outside it FALSE in the domain column,
+  # so a domain that excludes every row leaves nothing to tabulate. It aborts
+  # here, before the role guard (spec 3.11). On a collection every member is
+  # checked, and the first empty member is named: a wave with nothing to
+  # tabulate is a mistake in a trend workbook, as it is in a single design.
+  # The zero-row test stays for a design built without surveycore's
+  # validator.
+  members <- .design_members(design)
+  is_collection <- S7::S7_inherits(design, surveycore::survey_collection)
+  for (m in seq_along(members)) {
+    dat <- members[[m]]@data
+    in_domain <- !.has_domain(members[[m]]) ||
+      any(dat[[surveycore::SURVEYCORE_DOMAIN_COL]] %in% TRUE)
+    if (nrow(dat) > 0L && in_domain) {
+      next
+    }
+    member <- if (is_collection) names(members)[[m]] else NULL
+    what <- if (nrow(dat) == 0L) "zero rows" else "no row inside its domain"
+    where <- if (is_collection) "Member {.val {member}}" else "The design"
     cli::cli_abort(
       c(
-        "x" = "The design contains zero rows.",
-        "i" = "No data is available to compute frequencies.",
-        "v" = "Supply a design with at least one observation."
+        "x" = "{.arg design} has no rows to tabulate.",
+        "i" = paste0(where, " has {what}."),
+        "v" = "Use a domain that keeps at least one row."
       ),
       class = "surveyreports_error_empty_domain"
     )
-    # nocov end
   }
 
   # 5. file_name ends in .xlsx
