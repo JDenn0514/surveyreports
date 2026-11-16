@@ -78,3 +78,23 @@
       i Got <integer> of length 3.
       v Name every element after the variable whose table it annotates.
 
+# export_topline() aborts when every vars column is non-substantive (TE-01)
+
+    Code
+      export_topline(d, vars = c(q1, q2), file_name = out)
+    Condition
+      Error in `.apply_role_guard()`:
+      x Every column in `vars` has a non-substantive role.
+      i Dropped: q1 (free_text) and q2 (paradata).
+      v Select a column with a substantive role, or clear the role of a column to keep it.
+
+# export_topline() aborts on an empty domain before the role guard (TE-03)
+
+    Code
+      export_topline(d, vars = c(q1, q2), file_name = out)
+    Condition
+      Error in `.validate_export_inputs()`:
+      x `design` has no rows to tabulate.
+      i The design has no row inside its domain.
+      v Use a domain that keeps at least one row.
+
