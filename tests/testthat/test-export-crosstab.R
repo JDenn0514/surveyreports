@@ -4344,3 +4344,1001 @@ test_that("export_crosstab() exempts a battery caller note from the unanimity ru
     )
   }
 })
+
+# 25. Selection guards ---------------------------------------------------------
+# export_crosstab() runs the design-variable check on `vars`, then on
+# `banner`, then the role guard on both, then re-validates `interactions`
+# against the surviving banner. All of it runs after both tidy-select
+# resolutions and before classification (spec 3.10, spec 3.11).
+
+# A design whose q1, q2, group, SATA and battery columns carry variable
+# labels, so the missing-label warning does not fire in a guard test. A block
+# is found by its title or its sheet.
+guard_design <- function(d) {
+  surveycore::set_var_label(
+    note_design(d),
+    q2 = "Question two"
+  )
+}
+
+# The sheet names of a written workbook, without the "About" cover sheet.
+data_sheets <- function(path) {
+  setdiff(openxlsx2::wb_load(path)$sheet_names, "About")
+}
+
+# Adds two banner columns: the labelled `gen` of add_labelled_banner() and a
+# character `reg`, labelled "Gender" and "Region".
+add_gen_reg <- function(d) {
+  d <- add_labelled_banner(d)
+  d@data$reg <- rep(c("North", "South"), length.out = nrow(d@data))
+  surveycore::set_var_label(d, gen = "Gender", reg = "Region")
+}
+
+# Every row of one sheet as a data frame, blank rows kept.
+sheet_rows <- function(path, sheet) {
+  openxlsx2::wb_to_df(
+    path,
+    sheet = sheet,
+    col_names = FALSE,
+    skip_empty_rows = FALSE
+  )
+}
+
+# surveycore warns on every survey_nonprob estimate that its standard errors
+# use an SRS approximation. That warning is not under test here, so this
+# section's calls muffle that one class and no other: every surveyreports
+# warning still reaches the expectation, and a "no warning" assertion still
+# sees any other warning. The snapshots call export_crosstab() directly, on
+# the taylor design, which raises no such warning.
+crosstab_quiet <- function(...) {
+  suppressWarnings(
+    export_crosstab(...),
+    classes = "surveycore_warning_nonprob_srs_fallback"
+  )
+}
+
+test_that("export_crosstab() drops a free_text column from vars (XM-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = "free_text")
+    )
+
+    expect_warning(
+      crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+      class = "surveyreports_warning_role_dropped"
+    )
+
+    expect_identical(data_sheets(out), "q1", label = paste0(nm, ": sheets"))
+    expect_identical(
+      sheet_col_a(out, "q1")[[1L]],
+      "Question one",
+      label = paste0(nm, ": q1 block")
+    )
+  }
+})
+
+test_that("export_crosstab() drops a vars column for each non-substantive role (XM-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    for (role in c("weight", "identifier", "paradata", "free_text")) {
+      if (file.exists(out)) {
+        file.remove(out)
+      }
+      d <- surveycore::set_var_extra(
+        guard_design(designs[[nm]]),
+        q2 = list(role = role)
+      )
+
+      expect_warning(
+        crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+        class = "surveyreports_warning_role_dropped"
+      )
+
+      expect_identical(
+        data_sheets(out),
+        "q1",
+        label = paste0(nm, ", ", role, ": no q2 sheet")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() keeps a vars column for each substantive role (XM-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    for (role in c("item", "demographic", "treatment")) {
+      if (file.exists(out)) {
+        file.remove(out)
+      }
+      d <- surveycore::set_var_extra(
+        guard_design(designs[[nm]]),
+        q2 = list(role = role)
+      )
+
+      expect_no_warning(
+        crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out)
+      )
+
+      expect_identical(
+        data_sheets(out),
+        c("q1", "q2"),
+        label = paste0(nm, ", ", role, ": both sheets")
+      )
+      expect_identical(
+        sheet_col_a(out, "q2")[[1L]],
+        "Question two",
+        label = paste0(nm, ", ", role, ": q2 block")
+      )
+    }
+  }
+})
+
+# The spanner is the banner column's name until the banner headings are
+# wired, so the spanner assertions accept the name or the label. The
+# label-independent check is the comparison with the same call at
+# banner = gen: dropping reg must leave exactly that sheet.
+test_that("export_crosstab() drops a paradata column from banner (XM-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  ref <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    for (path in c(out, ref)) {
+      if (file.exists(path)) {
+        file.remove(path)
+      }
+    }
+    base <- add_gen_reg(guard_design(designs[[nm]]))
+    d <- surveycore::set_var_extra(base, reg = list(role = "paradata"))
+
+    expect_warning(
+      crosstab_quiet(d, vars = q1, banner = c(gen, reg), file_name = out),
+      class = "surveyreports_warning_role_dropped"
+    )
+    crosstab_quiet(base, vars = q1, banner = gen, file_name = ref)
+
+    rows <- sheet_rows(out, "q1")
+    spanners <- as.character(unlist(rows[2L, ]))
+    expect_false(
+      any(c("reg", "Region") %in% spanners),
+      label = paste0(nm, ": no Region spanner")
+    )
+    expect_true(
+      any(c("gen", "Gender") %in% spanners),
+      label = paste0(nm, ": the Gender spanner")
+    )
+    expect_identical(
+      rows,
+      sheet_rows(ref, "q1"),
+      label = paste0(nm, ": the same sheet as banner = gen")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps a battery whose 2 of 3 members survive (XM-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  items <- c("Item one", "Item two", "Item three")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      bat_2 = list(role = "paradata")
+    )
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    col_a <- sheet_col_a(out, "bat_1")
+
+    expect_identical(data_sheets(out), "bat_1", label = paste0(nm, ": sheets"))
+    expect_identical(
+      col_a[[1L]],
+      "Please rate the following items:",
+      label = paste0(nm, ": preface")
+    )
+    expect_identical(col_a[[3L]], "Item", label = paste0(nm, ": header"))
+    expect_identical(
+      col_a[col_a %in% items],
+      c("Item one", "Item three"),
+      label = paste0(nm, ": the surviving items")
+    )
+    # A single-response block writes "Response" in column A; a battery writes
+    # it in column B.
+    expect_false("Response" %in% col_a, label = paste0(nm, ": not split"))
+  }
+})
+
+test_that("export_crosstab() renders a battery reduced to one member as a single question (XM-13)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      bat_2 = list(role = "paradata"),
+      bat_3 = list(role = "paradata")
+    )
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    col_a <- sheet_col_a(out, "bat_1")
+
+    expect_identical(data_sheets(out), "bat_1", label = paste0(nm, ": sheets"))
+    expect_identical(col_a[[1L]], "Item one", label = paste0(nm, ": title"))
+    expect_identical(col_a[[3L]], "Response", label = paste0(nm, ": header"))
+    expect_false(
+      "Please rate the following items:" %in% col_a,
+      label = paste0(nm, ": no preface")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps a SATA group whose 2 of 3 members survive (XM-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  options <- c("Option A", "Option B", "Option C")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      sata_b = list(role = "paradata")
+    )
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(sata_a, sata_b, sata_c),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    col_a <- sheet_col_a(out, "sata_a")
+
+    expect_identical(data_sheets(out), "sata_a", label = paste0(nm, ": sheets"))
+    expect_identical(
+      col_a[[1L]],
+      "Which of the following apply to you?",
+      label = paste0(nm, ": preface")
+    )
+    expect_identical(col_a[[3L]], "Item", label = paste0(nm, ": header"))
+    expect_identical(
+      col_a[col_a %in% options],
+      c("Option A", "Option C"),
+      label = paste0(nm, ": the surviving options")
+    )
+  }
+})
+
+test_that("export_crosstab() names the sheet after the first surviving member (XM-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      bat_1 = list(role = "paradata")
+    )
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out,
+        layout = "per_question"
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+
+    expect_identical(data_sheets(out), "bat_2", label = paste0(nm, ": sheet"))
+    expect_identical(
+      sheet_col_a(out, "bat_2")[[1L]],
+      "Please rate the following items:",
+      label = paste0(nm, ": preface")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps every column of a design with no role set (XM-16)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- guard_design(designs[[nm]])
+
+    expect_no_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, q2, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out
+      )
+    )
+
+    expect_identical(
+      data_sheets(out),
+      c("q1", "q2", "sata_a", "bat_1"),
+      label = paste0(nm, ": every block")
+    )
+  }
+})
+
+test_that("export_crosstab() judges battery unanimity on the surviving members (XM-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  universe <- "Rated by all adults."
+  other <- "Rated by parents."
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_universe(
+      guard_design(designs[[nm]]),
+      bat_1 = universe,
+      bat_2 = other,
+      bat_3 = universe
+    )
+    d <- surveycore::set_var_extra(d, bat_2 = list(role = "paradata"))
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    col_a <- sheet_col_a(out, "bat_1")
+
+    expect_identical(col_a[[2L]], universe, label = paste0(nm, ": base note"))
+    expect_false(other %in% col_a, label = paste0(nm, ": no dropped universe"))
+  }
+})
+
+# tidyselect raises its external-vector deprecation with the class
+# lifecycle_warning_deprecated when a bare character vector reaches a
+# selection. The block sets lifecycle_verbosity to "warning", so the warning
+# fires on every call here, not once per session. Measured on tidyselect
+# 1.2.1: the warning fires for a bare vector from the global environment and
+# not for one from package code, so the bare call this PR replaced did not
+# raise it either. The block guards the all_of() call against a future
+# tidyselect that warns in both cases.
+test_that("export_crosstab() raises no tidyselect deprecation warning (XM-17)", {
+  skip_if_not_installed("surveycore")
+  withr::local_options(lifecycle_verbosity = "warning")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- guard_design(designs[[nm]])
+
+    expect_no_warning(
+      crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+      class = "lifecycle_warning_deprecated"
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+  }
+})
+
+test_that("export_crosstab() aborts when every vars column is non-substantive (XE-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  all_dropped <- function(d) {
+    surveycore::set_var_extra(
+      guard_design(d),
+      q1 = list(role = "free_text"),
+      q2 = list(role = "free_text")
+    )
+  }
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- all_dropped(designs[[nm]])
+
+    cnd <- expect_error(
+      crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+      class = "surveyreports_error_vars_all_dropped"
+    )
+    expect_match(
+      conditionMessage(cnd),
+      "q1 (free_text) and q2 (free_text)",
+      fixed = TRUE,
+      label = paste0(nm, ": every dropped column and its role")
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- all_dropped(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+  )
+})
+
+test_that("export_crosstab()'s all-dropped vars error is not the empty-selection class (XE-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q1 = list(role = "free_text"),
+      q2 = list(role = "free_text")
+    )
+
+    cnd <- expect_error(
+      crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+      class = "surveyreports_error_vars_all_dropped"
+    )
+    expect_false(
+      inherits(cnd, "surveyreports_error_vars_empty_selection"),
+      label = paste0(nm, ": not the tidyselect class")
+    )
+  }
+})
+
+test_that("export_crosstab() aborts when every banner column is non-substantive (XE-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  all_dropped <- function(d) {
+    surveycore::set_var_extra(
+      add_gen_reg(guard_design(d)),
+      gen = list(role = "paradata"),
+      reg = list(role = "paradata")
+    )
+  }
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- all_dropped(designs[[nm]])
+
+    expect_error(
+      crosstab_quiet(d, vars = q1, banner = c(gen, reg), file_name = out),
+      class = "surveyreports_error_banner_empty_selection"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- all_dropped(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out)
+  )
+})
+
+# The re-validation path: without the role, the same call passes both checks
+# and writes the file. With reg dropped from the banner, the element passes
+# the check at step 7 and fails the one at step 11 (spec 3.11). The role
+# warning comes first, so the snapshot records it before the error.
+test_that("export_crosstab() re-validates interactions against the surviving banner (XE-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    base <- add_gen_reg(guard_design(designs[[nm]]))
+    d <- surveycore::set_var_extra(base, reg = list(role = "paradata"))
+
+    crosstab_quiet(
+      base,
+      vars = q1,
+      banner = c(gen, reg),
+      file_name = out,
+      interactions = list(c("gen", "reg"))
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": passes with no role"))
+    file.remove(out)
+
+    expect_warning(
+      expect_error(
+        crosstab_quiet(
+          d,
+          vars = q1,
+          banner = c(gen, reg),
+          file_name = out,
+          interactions = list(c("gen", "reg"))
+        ),
+        class = "surveyreports_error_interaction_not_in_banner"
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- surveycore::set_var_extra(
+    add_gen_reg(guard_design(designs$taylor)),
+    reg = list(role = "paradata")
+  )
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = c(gen, reg),
+      file_name = out,
+      interactions = list(c("gen", "reg"))
+    )
+  )
+})
+
+# The class alone: section 12 snapshots this class's message.
+test_that("export_crosstab() still rejects a survey_collection (XE-08)", {
+  skip_if_not_installed("surveycore")
+  coll <- surveycore::as_survey_collection(
+    w1 = guard_design(make_all_designs(seed = 42)$taylor),
+    w2 = guard_design(make_all_designs(seed = 7)$taylor)
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    crosstab_quiet(coll, vars = q1, banner = group, file_name = out),
+    class = "surveyreports_error_collection_not_supported_for_crosstab"
+  )
+  expect_false(file.exists(out))
+})
+
+# surveycore exports no filter verb, so the all-FALSE domain is written into
+# the domain column directly, as surveytidy's filter() would leave it.
+test_that("export_crosstab() aborts on an empty domain (XE-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  empty_domain <- function(d) {
+    d <- guard_design(d)
+    d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- rep(FALSE, nrow(d@data))
+    d
+  }
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- empty_domain(designs[[nm]])
+
+    expect_error(
+      crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+      class = "surveyreports_error_empty_domain"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- empty_domain(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+  )
+})
+
+# The class alone: section 12 snapshots this class's message.
+test_that("export_crosstab() still rejects a plain data frame (XE-10)", {
+  df <- make_survey_data(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    crosstab_quiet(df, vars = c(q1, q2), banner = group, file_name = out),
+    class = "surveyreports_error_not_survey_object"
+  )
+  expect_false(file.exists(out))
+})
+
+# XE-12 to XE-15 set no role, so each proves the design read and not the
+# role table.
+test_that("export_crosstab() aborts when vars names the design's weight column (XE-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- guard_design(designs[[nm]])
+
+    cnd <- expect_error(
+      crosstab_quiet(d, vars = c(q1, wt), banner = group, file_name = out),
+      class = "surveyreports_error_design_variable_selected"
+    )
+    expect_match(
+      conditionMessage(cnd),
+      "wt in `vars`",
+      fixed = TRUE,
+      label = paste0(nm, ": names the column and vars")
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- guard_design(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = c(q1, wt), banner = group, file_name = out)
+  )
+})
+
+# The class alone: XE-12 snapshots the `vars` wording.
+test_that("export_crosstab() aborts when vars names the stratum or cluster id column (XE-13)", {
+  skip_if_not_installed("surveycore")
+  d <- guard_design(make_all_designs(seed = 42)$taylor)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    crosstab_quiet(d, vars = c(q1, strata), banner = group, file_name = out),
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_error(
+    crosstab_quiet(d, vars = c(q1, psu), banner = group, file_name = out),
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_false(file.exists(out))
+})
+
+test_that("export_crosstab() aborts when banner names the design's weight column (XE-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- guard_design(designs[[nm]])
+
+    cnd <- expect_error(
+      crosstab_quiet(d, vars = q1, banner = c(group, wt), file_name = out),
+      class = "surveyreports_error_design_variable_selected"
+    )
+    expect_match(
+      conditionMessage(cnd),
+      "wt in `banner`",
+      fixed = TRUE,
+      label = paste0(nm, ": names the column and banner")
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+
+  d <- guard_design(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = c(group, wt), file_name = out)
+  )
+})
+
+# The class alone: XE-12 snapshots the `vars` wording. Neither column is a
+# weight, a stratum or a cluster id.
+test_that("export_crosstab() aborts on a replicate-weight or twophase subset column (XE-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  if (file.exists(out)) {
+    file.remove(out)
+  }
+
+  expect_error(
+    crosstab_quiet(
+      guard_design(designs$replicate),
+      vars = c(q1, rwt1),
+      banner = group,
+      file_name = out
+    ),
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_error(
+    crosstab_quiet(
+      guard_design(designs$twophase),
+      vars = c(q1, in_phase2),
+      banner = group,
+      file_name = out
+    ),
+    class = "surveyreports_error_design_variable_selected"
+  )
+  expect_false(file.exists(out))
+})
+
+# The class alone: XE-09 snapshots it. The empty-domain check runs at step 4,
+# before the role guard at step 10, so the role warning for q2 must never
+# fire (spec 3.11).
+test_that("export_crosstab() aborts on an empty domain before the role guard (XX-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = "free_text")
+    )
+    d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- rep(FALSE, nrow(d@data))
+
+    expect_no_warning(
+      expect_error(
+        crosstab_quiet(d, vars = c(q1, q2), banner = group, file_name = out),
+        class = "surveyreports_error_empty_domain"
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file written"))
+  }
+})
+
+test_that("export_crosstab() warns once for a dropped vars column and still writes the file (XV-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = "free_text")
+    )
+
+    expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+  }
+
+  d <- surveycore::set_var_extra(
+    guard_design(designs$taylor),
+    q2 = list(role = "free_text")
+  )
+  expect_snapshot(
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+  )
+})
+
+test_that("export_crosstab() warns for a dropped banner column under its own name (XV-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      add_gen_reg(guard_design(designs[[nm]])),
+      reg = list(role = "paradata")
+    )
+
+    expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = q1,
+        banner = c(gen, reg),
+        file_name = out
+      ),
+      regexp = "`banner`",
+      class = "surveyreports_warning_role_dropped"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file written"))
+  }
+
+  d <- surveycore::set_var_extra(
+    add_gen_reg(guard_design(designs$taylor)),
+    reg = list(role = "paradata")
+  )
+  expect_snapshot(
+    export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out)
+  )
+})
+
+test_that("export_crosstab() keeps a column with an unrecognized role and warns (XV-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = "curiosity")
+    )
+
+    expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_identical(
+      data_sheets(out),
+      c("q1", "q2"),
+      label = paste0(nm, ": the q2 block")
+    )
+  }
+
+  d <- surveycore::set_var_extra(
+    guard_design(designs$taylor),
+    q2 = list(role = "curiosity")
+  )
+  expect_snapshot(
+    export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+  )
+})
+
+# The class alone: XV-07 snapshots it.
+test_that("export_crosstab() keeps a column with a length-2 role and warns (XV-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = c("item", "demographic"))
+    )
+
+    expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_identical(
+      data_sheets(out),
+      c("q1", "q2"),
+      label = paste0(nm, ": the q2 block")
+    )
+  }
+})
+
+# The class alone: XV-07 snapshots it.
+test_that("export_crosstab() keeps a column with a non-character role and warns (XV-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- surveycore::set_var_extra(
+      guard_design(designs[[nm]]),
+      q2 = list(role = 3L)
+    )
+
+    expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = group,
+        file_name = out
+      ),
+      class = "surveyreports_warning_unknown_role"
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_identical(
+      data_sheets(out),
+      c("q1", "q2"),
+      label = paste0(nm, ": the q2 block")
+    )
+  }
+})

@@ -154,20 +154,7 @@ export_crosstab <- function(
         class = "surveyreports_error_interactions_not_list"
       )
     }
-    for (elem in interactions) {
-      not_in_banner <- elem[!elem %in% banner_resolved]
-      if (length(not_in_banner) > 0L) {
-        n_not_in <- length(not_in_banner)
-        cli::cli_abort(
-          c(
-            "x" = "{cli::qty(n_not_in)}Interaction variable{?s} {.field {not_in_banner}} not found in {.arg banner}.",
-            "i" = "All variables in each interactions element must also appear in {.arg banner}.",
-            "v" = "{cli::qty(n_not_in)}Add the missing variable{?s} to {.arg banner}, or remove them from {.arg interactions}."
-          ),
-          class = "surveyreports_error_interaction_not_in_banner"
-        )
-      }
-    }
+    .validate_interactions_in_banner(interactions, banner_resolved)
   }
 
   # 8. base_notes validation, on the caller's vector alone, then the merge
@@ -176,10 +163,42 @@ export_crosstab <- function(
   .validate_base_notes(base_notes)
   resolved_notes <- .resolve_base_notes(design, base_notes)
 
+  # 9. The design-variable check, on `vars` and then on `banner`, so a call
+  # naming a design column in both reports `vars`. It runs before the role
+  # guard, so a design column that also carries role = "weight" errors and
+  # is not dropped with a warning (spec 3.11, spec 3.17).
+  .reject_design_vars(design, vars_resolved, "vars")
+  .reject_design_vars(design, banner_resolved, "banner")
+
+  # 10. The role guard, on `vars` and then on `banner`. A dropped column never
+  # reaches classification, so it forms no question group of its own
+  # (spec 3.10).
+  vars_resolved <- .apply_role_guard(
+    design,
+    vars_resolved,
+    "vars",
+    "surveyreports_error_vars_all_dropped"
+  )
+  banner_resolved <- .apply_role_guard(
+    design,
+    banner_resolved,
+    "banner",
+    "surveyreports_error_banner_empty_selection"
+  )
+
+  # 11. `interactions` again, against the surviving banner: an element that
+  # names a dropped banner column passed step 7 and fails here (spec 3.10).
+  .validate_interactions_in_banner(interactions, banner_resolved)
+
   layout <- match.arg(layout)
   pub_type <- match.arg(pub_type)
 
-  classify_out <- surveycore::classify_question_type(design, vars_resolved)
+  # 13. all_of() passes the resolved names as a selection, so tidyselect
+  # raises no external-vector deprecation warning (spec 2.1).
+  classify_out <- surveycore::classify_question_type(
+    design,
+    tidyselect::all_of(vars_resolved)
+  )
 
   freq_result <- .build_freq_frame(
     design,
@@ -364,6 +383,48 @@ export_crosstab <- function(
 
   openxlsx2::wb_save(wb, file_name)
   invisible(file_name)
+}
+
+# -- Interactions --------------------------------------------------------------
+
+# Every variable of every `interactions` element must be in the banner.
+#
+# export_crosstab() calls it twice: at step 7 of spec 3.11, against the
+# resolved banner, and at step 11, against the banner that survives the role
+# guard (spec 3.10). A NULL `interactions` passes. The error is raised in the
+# caller's frame, so its message names export_crosstab().
+#' @keywords internal
+#' @noRd
+.validate_interactions_in_banner <- function(
+  interactions,
+  banner_resolved,
+  call = rlang::caller_env()
+) {
+  for (elem in interactions) {
+    not_in_banner <- elem[!elem %in% banner_resolved]
+    if (length(not_in_banner) > 0L) {
+      n_not_in <- length(not_in_banner)
+      cli::cli_abort(
+        c(
+          "x" = paste0(
+            "{cli::qty(n_not_in)}Interaction variable{?s} ",
+            "{.field {not_in_banner}} not found in {.arg banner}."
+          ),
+          "i" = paste0(
+            "All variables in each interactions element must also appear ",
+            "in {.arg banner}."
+          ),
+          "v" = paste0(
+            "{cli::qty(n_not_in)}Add the missing variable{?s} to ",
+            "{.arg banner}, or remove them from {.arg interactions}."
+          )
+        ),
+        class = "surveyreports_error_interaction_not_in_banner",
+        call = call
+      )
+    }
+  }
+  invisible(TRUE)
 }
 
 # -- Sheet names -------------------------------------------------------------------
