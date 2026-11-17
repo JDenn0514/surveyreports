@@ -303,6 +303,17 @@ design withholds almost every subgroup. Most happy-path rows below therefore set
 rows set it deliberately. A row that forgets this asserts on a table that is not
 there.
 
+**Fixture caution for the floor on twophase (changed 2026-11-17,
+`feature/crosstab-min-eff-n`).** The twophase design tabulates its phase-2 rows
+only, about 60 percent of the 200. On the labelled `gen` fixture, `Male` keeps
+107 of its 180 rows there, with an effective N of 99.2, so a floor of 100
+withholds `Male` as well. A row that needs `Female` withheld and `Male` kept on
+every design uses `min_eff_n = 50`: `Female` sits at an effective N of 18.1 or
+less, and `Male` at 99.2 or more. A row that needs every subgroup kept uses a
+floor below every subgroup's effective N on every design, such as
+`min_eff_n = 10`. The default floor of 100 stays in the rows that test the
+default itself.
+
 ---
 
 ## Per-function test plan
@@ -347,7 +358,7 @@ types the scenario runs against.
 
 | Id | Scenario | Designs | Input | Expected observable result | Tolerance |
 |---|---|---|---|---|---|
-| XW-01 | a subgroup below the floor loses its column | all four | the labelled `gen` fixture (180 Male, 20 Female); `banner = gen`, `min_eff_n = 100` | **the `Female` heading and its cells are absent from the sheet.** Assert absence, not success. A success-only assertion passes while the column is still written | n/a |
+| XW-01 | a subgroup below the floor loses its column | all four | the labelled `gen` fixture (180 Male, 20 Female); `banner = gen`, `min_eff_n = 50` | **the `Female` heading and its cells are absent from the sheet.** Assert absence, not success. A success-only assertion passes while the column is still written | n/a |
 | XW-02 | the surviving column is unaffected | all four | the same call | the `Male` column's estimates equal the same call at `min_eff_n = 0` | exact string |
 | XW-03 | the spanner span shrinks | all four | the same call | the `Gender` spanner spans one column, not two | n/a |
 | XW-04 | `min_eff_n = 0` withholds nothing | all four | the same fixture, `min_eff_n = 0` | both columns are present; no withholding warning is raised | n/a |
@@ -411,7 +422,7 @@ block.
 
 | Id | Scenario | Designs | Input | Expected observable result | Tolerance |
 |---|---|---|---|---|---|
-| XR-01 | the block row order under `sample_size_display = "top"` | all four | `vars = q1`, `banner = gen` on the labelled `gen` fixture (180 Male, 20 Female), `base_notes = c(q1 = "Base: all adults")`, `variance = "se"`, `show_ess = TRUE`, `withheld_note = "every"`, `min_eff_n = 100` so `Female` is withheld and `Male` survives, `layout = "per_question"` so the sheet holds one block | read column A from the block's first row through its last written row, and compare it against an expected ordered character vector: the question text, the base-note text, the legend text, one empty element for the spanner row, `Response`, `Unweighted sample size`, `Effective sample size`, then one element per response value in the oracle's order, then one element per withheld line. Assert as an **ordered character vector**, so a transposed pair fails. Build the response values from `get_freqs()` and the withheld lines from the wording `XW-08` fixes. An unwritten cell reads back as `NA` and not `""`; normalise the two before the comparison, so a blank-against-`NA` difference does not decide the row | exact string |
+| XR-01 | the block row order under `sample_size_display = "top"` | all four | `vars = q1`, `banner = gen` on the labelled `gen` fixture (180 Male, 20 Female), `base_notes = c(q1 = "Base: all adults")`, `variance = "se"`, `show_ess = TRUE`, `withheld_note = "every"`, `min_eff_n = 50` so `Female` is withheld and `Male` survives, `layout = "per_question"` so the sheet holds one block | read column A from the block's first row through its last written row, and compare it against an expected ordered character vector: the question text, the base-note text, the legend text, one empty element for the spanner row, `Response`, `Unweighted sample size`, `Effective sample size`, then one element per response value in the oracle's order, then one element per withheld line. Assert as an **ordered character vector**, so a transposed pair fails. Build the response values from `get_freqs()` and the withheld lines from the wording `XW-08` fixes. An unwritten cell reads back as `NA` and not `""`; normalise the two before the comparison, so a blank-against-`NA` difference does not decide the row | exact string |
 | XR-02 | the block row order under `sample_size_display = "bottom"` | all four | the same call at `sample_size_display = "bottom"` | the same construction with the two sample-size labels moved below the data: the question text, the base-note text, the legend text, one empty element, `Response`, then one element per response value, then `Unweighted sample size`, `Effective sample size`, then one element per withheld line. Assert as an **ordered character vector**. The two rows together pin the one argument that moves rows inside a block | exact string |
 
 **What these two rows leave to others.** `sample_size_display = "none"` stays
@@ -455,14 +466,14 @@ contrasting cell.
 | XA-04 | an unset key produces no row | all four | two keys set, four unset, **on a design with no domain column** | the survey block holds exactly two rows. No blank-valued row exists. The input names the domain condition because the domain row of `XA-13` would be a third row | n/a |
 | XA-05 | the glossary writes only the terms that are true of the workbook | all four | `vars = q1`, `banner = group`, `min_eff_n = 50`, `variance = NULL`. The floor sits below every `group` level's effective N, so every banner column survives and the row raises no withholding warning — it is about the glossary alone | the glossary block holds **four** of the five terms, each with its text: `Unweighted sample size`, `Effective sample size (ESS)`, `Why a column is missing` and `Percentages`. `Confidence intervals` is **absent**, because `variance` is `NULL`. Assert the four texts and the one absence. The `Percentages` text now opens with a sentence on the percentage base — the people who answered that question, which can be fewer than the sample size above the table — so a run that asserts the four rounding forms alone fails | exact string |
 | XA-05a | the two conditional entries flip with their arguments | all four | the same call at `min_eff_n = 0` and `variance = "ci"` | `Why a column is missing` is **absent**, and `Confidence intervals` is **present** with its text. The two sample-size terms and `Percentages` stay present, and `Percentages` carries the same longer text `XA-05` asserts. This is the row that justifies the `min_eff_n` and `variance` arguments: it differs from `XA-05` in those two alone, and exactly two entries change | exact string |
-| XA-06 | the withheld block states `None` when nothing was withheld | all four | `min_eff_n = 100` on a design where every subgroup clears it | the block exists, names the minimum, and states that nothing was withheld | n/a |
+| XA-06 | the withheld block states `None` when nothing was withheld | all four | `min_eff_n = 10`, a floor every subgroup clears on every design | the block exists, names the minimum, and states that nothing was withheld | n/a |
 | XA-07 | the withheld block is absent at `min_eff_n = 0` | all four | `min_eff_n = 0` | no withheld block; the glossary block is still present. `XA-05a` carries the absent-entry assertion for this floor, so this row does not repeat it | n/a |
 | XA-13 | the domain row appears only on a restricted design | all four | the domain snippet applied, then the same call without the domain column | with the domain column the survey metadata block holds one more row, below the dataset keys. Its key reads `Restricted to`, and its value names the in-domain row count against the design's total rows. The count equals the oracle's `n` on the restricted design. Without the domain column the row is absent. Assert the presence and the absence, so a row written unconditionally fails | exact string |
 | XA-08 | the written file opens on the cover sheet | all four | metadata set; `vars = c(q1, q2)` so data sheets follow | **save the file, then load it back** before asserting: the active sheet of the loaded workbook is 1. Do not read the active sheet from a workbook still in memory — nothing is set there, and the assertion would pass vacuously | n/a |
 | XA-09 | a variable named `About` is suffixed | all four | a variable named `About` in `per_question` layout | the workbook holds `About` (the cover sheet) and `About_2` (the data sheet); the cover sheet still holds the glossary, proving the data block did not overwrite it | n/a |
 | XA-10 | the collision check folds case | all four | a variable named `about` | the data sheet is suffixed, and the save succeeds. An exact-match implementation aborts here | n/a |
 | XA-11 | two variables sharing 31 characters both get sheets | all four | two variables whose first 31 characters match | both sheets exist with distinct names. Pre-existing defect, closed by the same helper | n/a |
-| XA-12 | the header row and each block heading are bold | all four | all six keys set; `min_eff_n = 100` so all three blocks have content | the two header cells `Key` and `Value` resolve to a bold font, and so does each block heading in column A. A value cell in the same block resolves to a non-bold font, which is the contrast the row rests on. Read the resolved font, not the cell text — `XS-02` gives the pattern. Assert every block heading, so a run that bolds the first and no other fails | n/a |
+| XA-12 | the header row and each block heading are bold | all four | all six keys set; `min_eff_n = 50` on the labelled `gen` fixture, so `Female` is withheld and all three blocks have content | the two header cells `Key` and `Value` resolve to a bold font, and so does each block heading in column A. A value cell in the same block resolves to a non-bold font, which is the contrast the row rests on. Read the resolved font, not the cell text — `XS-02` gives the pattern. Assert every block heading, so a run that bolds the first and no other fails | n/a |
 
 #### Happy path — metadata behavior shared with `export_topline()`
 
@@ -561,7 +572,7 @@ row on the same class asserts the class alone.
 |---|---|---|---|
 | XV-01 | `surveyreports_warning_role_dropped` | `role = "free_text"` on `q2` | one warning per argument, naming every dropped column and its role; the file is written. Dual pattern |
 | XV-02 | `surveyreports_warning_role_dropped` on `banner` | `role = "paradata"` on one of two banner columns | a separate warning naming `banner`, not `vars`. **Dual pattern, with its own snapshot.** The guard names the argument in the message, so the `banner` wording is different text from the `vars` wording `XV-01` snapshots. Nothing else pins it |
-| XV-03 | `surveyreports_warning_subgroup_withheld` | the labelled `gen` fixture at `min_eff_n = 100` | one warning per call, naming each withheld subgroup and its effective N. Fires even at `withheld_note = "none"`. Dual pattern |
+| XV-03 | `surveyreports_warning_subgroup_withheld` | the labelled `gen` fixture at `min_eff_n = 50` | one warning per call, naming each withheld subgroup and its effective N. Fires even at `withheld_note = "none"`. Dual pattern |
 | XV-04 | `surveyreports_warning_banner_all_withheld` | `min_eff_n` above every subgroup's effective N | one warning naming each emptied column group; the workbook is still written and holds the Total column alone. **No abort.** Dual pattern — the class is new, so the snapshot is its first |
 | XV-05 | `surveyreports_warning_full_sample_below_min` | a design whose own effective N is below `min_eff_n` | one warning; the workbook is written in full, with every column. Dual pattern — the class is new, so the snapshot is its first |
 | XV-06 | `surveyreports_warning_missing_variable_label` | `banner = nolab` | one warning naming the banner column. The trigger is **extended** to banner columns by this change, so the message names a banner column for the first time. Dual pattern, on the banner trigger |
@@ -585,7 +596,7 @@ row on the same class asserts the class alone.
 | XX-04 | single-value variable | `d@data$constant <- "Agree"` | one response row; the sample-size rows are unchanged against another variable on the same design |
 | XX-06 | unused factor level on the banner | a factor banner with a level held by no row | no column for that level, and no withheld-list entry for it — surveycore drops it before the floor applies |
 | XX-07 | unobserved value label on the banner | `Other = 3` with no row holding code 3 | no column, no withheld entry, no mention anywhere |
-| XX-08 | exactly one unlabelled observed code | the partly labelled `gen` fixture | the unlabelled code is a real subgroup with its true unweighted count; at `min_eff_n = 100` it is withheld and the list names it as a missing label rather than as code `3` |
+| XX-08 | exactly one unlabelled observed code | the partly labelled `gen` fixture | the unlabelled code is a real subgroup with its true unweighted count; at `min_eff_n = 50` it is withheld and the list names it as a missing label rather than as code `3` |
 | XX-09 | self-banner | a variable named in both `vars` and `banner` | that banner column is skipped for that variable; unchanged |
 | XX-10 | empty domain with a role-dropped column | the domain `FALSE` everywhere **and** `role = "free_text"` on one `vars` column | `surveyreports_error_empty_domain` fires. **No role warning is raised first.** The domain check always wins |
 | XX-11 | `stacked` layout | `layout = "stacked"`, `vars = c(q1, q2)` | one `Crosstab` sheet plus the cover sheet; the two blocks are separated by one blank row; the second block's sample-size rows sit under its own heading row |

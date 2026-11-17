@@ -145,7 +145,7 @@
 
     Code
       export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out,
-      interactions = list(c("gen", "reg")))
+      interactions = list(c("gen", "reg")), min_eff_n = 0)
     Condition
       Warning:
       ! Dropped 1 column from `banner` for a non-substantive role.
@@ -188,7 +188,8 @@
 # export_crosstab() warns once for a dropped vars column and still writes the file (XV-01)
 
     Code
-      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out,
+      min_eff_n = 0)
     Condition
       Warning:
       ! Dropped 1 column from `vars` for a non-substantive role.
@@ -197,7 +198,7 @@
 # export_crosstab() warns for a dropped banner column under its own name (XV-02)
 
     Code
-      export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out)
+      export_crosstab(d, vars = q1, banner = c(gen, reg), file_name = out, min_eff_n = 0)
     Condition
       Warning:
       ! Dropped 1 column from `banner` for a non-substantive role.
@@ -206,9 +207,30 @@
 # export_crosstab() keeps a column with an unrecognized role and warns (XV-07)
 
     Code
-      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out)
+      export_crosstab(d, vars = c(q1, q2), banner = group, file_name = out,
+      min_eff_n = 0)
     Condition
       Warning:
       ! `vars` has 1 column with an unrecognized role: q2 (curiosity).
       i Each one is kept as a substantive column. The known roles are "item", "demographic", "treatment", "weight", "identifier", "paradata", and "free_text".
+
+# export_crosstab() rejects an invalid min_eff_n before writing (XE-11)
+
+    Code
+      export_crosstab(d, vars = q1, banner = gen, file_name = out, min_eff_n = -5)
+    Condition
+      Error in `export_crosstab()`:
+      x `min_eff_n` must be a single finite number at or above 0.
+      i Got -5.
+      v Use a single number at or above 0, such as the default 100.
+
+# export_crosstab() drops a below-floor level's heading and cells (XW-01)
+
+    Code
+      export_crosstab(add_gen_fixture(designs$taylor), vars = q1, banner = gen,
+      file_name = out, min_eff_n = gen_floor)
+    Condition
+      Warning:
+      ! 1 subgroup suppressed due to small sample size.
+      i Suppressed: gen=Female.
 

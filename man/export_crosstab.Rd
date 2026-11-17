@@ -11,7 +11,7 @@ export_crosstab(
   file_name,
   layout = c("per_question", "stacked"),
   interactions = NULL,
-  pub_type = c("none", "external", "internal"),
+  min_eff_n = 100,
   variance = NULL,
   conf_level = 0.95,
   show_n = TRUE,
@@ -47,11 +47,11 @@ are stacked on a single sheet.}
 names two or more variables from \code{banner} whose levels will be crossed
 (interacted) to form additional crosstab columns. Default \code{NULL}.}
 
-\item{pub_type}{One of \code{"none"} (default), \code{"external"}, or
-\code{"internal"}. Controls suppression thresholds for small subgroups.
-\code{"none"} disables suppression; \code{"external"} suppresses subgroups with
-effective or raw N < 100; \code{"internal"} uses a threshold of 50 effective
-N or 100 raw N.}
+\item{min_eff_n}{Numeric scalar, at or above \code{0}. \code{100} is the default.
+A banner level whose effective sample size is below \code{min_eff_n} is not
+shown: its column is left out of every table. A level whose effective
+sample size equals \code{min_eff_n} is shown. The test reads the effective
+sample size, not the unweighted count. \code{0} shows every level.}
 
 \item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
 standard errors or confidence intervals are shown. Default \code{NULL}.}
