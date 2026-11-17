@@ -26,11 +26,11 @@
 #' @param interactions Optional list of character vectors. Each element
 #'   names two or more variables from `banner` whose levels will be crossed
 #'   (interacted) to form additional crosstab columns. Default `NULL`.
-#' @param pub_type One of `"none"` (default), `"external"`, or
-#'   `"internal"`. Controls suppression thresholds for small subgroups.
-#'   `"none"` disables suppression; `"external"` suppresses subgroups with
-#'   effective or raw N < 100; `"internal"` uses a threshold of 50 effective
-#'   N or 100 raw N.
+#' @param min_eff_n Numeric scalar, at or above `0`. `100` is the default.
+#'   A banner level whose effective sample size is below `min_eff_n` is not
+#'   shown: its column is left out of every table. A level whose effective
+#'   sample size equals `min_eff_n` is shown. The test reads the effective
+#'   sample size, not the unweighted count. `0` shows every level.
 #' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
 #'   standard errors or confidence intervals are shown. Default `NULL`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
@@ -75,7 +75,7 @@ export_crosstab <- function(
   file_name,
   layout = c("per_question", "stacked"),
   interactions = NULL,
-  pub_type = c("none", "external", "internal"),
+  min_eff_n = 100,
   variance = NULL,
   conf_level = 0.95,
   show_n = TRUE,
@@ -96,10 +96,10 @@ export_crosstab <- function(
     )
   }
 
-  # 2. Check surveycore is installed
+  # Check surveycore is installed
   rlang::check_installed("surveycore")
 
-  # 3. Inline design-type check
+  # 2. Inline design-type check
   if (!S7::S7_inherits(design, surveycore::survey_base)) {
     cli::cli_abort(
       c(
@@ -111,13 +111,13 @@ export_crosstab <- function(
     )
   }
 
-  # 4. NSE resolution for vars only
+  # 3. NSE resolution for vars only
   vars_resolved <- names(tidyselect::eval_select(
     rlang::enquo(vars),
     design@data
   ))
 
-  # 5. Shared input validation (errors 3-8)
+  # 4. Shared input validation (errors 3-8)
   .validate_export_inputs(
     design,
     vars_resolved,
@@ -126,7 +126,7 @@ export_crosstab <- function(
     decimals
   )
 
-  # 6. Banner NSE resolution (AFTER validate, so banner_not_found is error #9)
+  # 5. Banner NSE resolution (AFTER validate, so banner_not_found is error #9)
   banner_quo <- rlang::enquo(banner)
   banner_resolved <- tryCatch(
     names(tidyselect::eval_select(banner_quo, design@data)),
@@ -142,7 +142,7 @@ export_crosstab <- function(
     }
   )
 
-  # 7. Interactions validation
+  # 6. Interactions validation
   if (!is.null(interactions)) {
     if (!is.list(interactions)) {
       cli::cli_abort(
@@ -157,11 +157,15 @@ export_crosstab <- function(
     .validate_interactions_in_banner(interactions, banner_resolved)
   }
 
-  # 8. base_notes validation, on the caller's vector alone, then the merge
+  # 7. base_notes validation, on the caller's vector alone, then the merge
   # with the design's universe. surveycore metadata is not the caller's error
   # to fix, so it is never validated here (spec 3.6).
   .validate_base_notes(base_notes)
   resolved_notes <- .resolve_base_notes(design, base_notes)
+
+  # 8. min_eff_n validation, before the role guard, so an invalid floor
+  # aborts before any workbook is built (spec 3.11, spec 3.17).
+  .validate_min_eff_n(min_eff_n)
 
   # 9. The design-variable check, on `vars` and then on `banner`, so a call
   # naming a design column in both reports `vars`. It runs before the role
@@ -191,7 +195,6 @@ export_crosstab <- function(
   .validate_interactions_in_banner(interactions, banner_resolved)
 
   layout <- match.arg(layout)
-  pub_type <- match.arg(pub_type)
 
   # 13. all_of() passes the resolved names as a selection, so tidyselect
   # raises no external-vector deprecation warning (spec 2.1).
@@ -209,7 +212,7 @@ export_crosstab <- function(
     variance = variance,
     conf_level = conf_level,
     show_eff_n = show_eff_n,
-    pub_type = pub_type
+    min_eff_n = min_eff_n
   )
 
   # The "About" cover sheet comes first. No withholding exists yet, so the
@@ -383,6 +386,36 @@ export_crosstab <- function(
 
   openxlsx2::wb_save(wb, file_name)
   invisible(file_name)
+}
+
+# -- min_eff_n -----------------------------------------------------------------
+
+# `min_eff_n` is one finite number at or above 0 (spec 3.17). export_crosstab()
+# calls it at step 8 of spec 3.11, after the base_notes check and before the
+# design-variable check. Each test closes one silent failure: a negative floor
+# withholds nothing, NA makes every comparison NA, Inf withholds every
+# subgroup, a length-2 vector recycles, and "100" compares as a string. The
+# error is raised in the caller's frame, so its message names
+# export_crosstab().
+#' @keywords internal
+#' @noRd
+.validate_min_eff_n <- function(min_eff_n, call = rlang::caller_env()) {
+  valid <- is.numeric(min_eff_n) &&
+    length(min_eff_n) == 1L &&
+    is.finite(min_eff_n) &&
+    min_eff_n >= 0
+  if (!valid) {
+    cli::cli_abort(
+      c(
+        "x" = "{.arg min_eff_n} must be a single finite number at or above 0.",
+        "i" = "Got {.val {min_eff_n}}.",
+        "v" = "Use a single number at or above 0, such as the default 100."
+      ),
+      class = "surveyreports_error_invalid_min_eff_n",
+      call = call
+    )
+  }
+  invisible(TRUE)
 }
 
 # -- Interactions --------------------------------------------------------------

@@ -96,7 +96,7 @@ stands.** Only the formal arguments come forward.
       and the design-variable check.
 - [x] PR 10: `feature/crosstab-guards` — `export_crosstab()` runs the same two
       guards, and re-validates `interactions`.
-- [ ] PR 11: `feature/crosstab-min-eff-n` — `min_eff_n` replaces `pub_type`,
+- [x] PR 11: `feature/crosstab-min-eff-n` — `min_eff_n` replaces `pub_type`,
       and a banner level below the floor loses its column.
 - [ ] PR 12: `feature/crosstab-banner-headings` — banner spanners and
       interaction levels read labels; an all-NA variable is dropped with a
@@ -1325,7 +1325,8 @@ which assert that no warning fires — gain `min_eff_n = 0` here.
     asserts on a withheld table.
 16. Confirm the suite is green.
 17. Write the failing test `XW-01`: the `Female` heading and its cells are
-    absent at `min_eff_n = 100`.
+    absent at `min_eff_n = 50`. A floor of 100 withholds `Male` too on the
+    twophase design (test-spec, fixture caution for the floor on twophase).
 18. Run it. Confirm it fails.
 19. Rewrite the withholding loop in `.build_freq_frame()` to call
     `.resolve_eff_n()` once per banner column, then `.build_withheld()`. This

@@ -729,7 +729,7 @@
   variance = NULL,
   conf_level = 0.95,
   show_eff_n = FALSE,
-  pub_type = "none"
+  min_eff_n = 0
 ) {
   freq_args <- list(variance = variance, conf_level = conf_level)
 
@@ -851,61 +851,42 @@
   # Standard path
   suppressed <- .empty_suppressed()
 
-  # Suppression evaluation
-  if (pub_type != "none" && !is.null(banner_resolved)) {
-    for (banner_var in banner_resolved) {
-      col_vals <- design@data[[banner_var]]
-      levels <- unique(col_vals[!is.na(col_vals)])
-      # Holding change: feature/crosstab-min-eff-n rewrites this loop. The
-      # effective N comes from .resolve_eff_n(), keyed by label, so each raw
-      # level is looked up by the label of its first row. A level with no
-      # in-scope row has no row in `counts`, and the sum gives it 0.
-      counts <- .resolve_eff_n(design, group_var = banner_var)
-      labelled <- as.character(.banner_levels_labelled(design, banner_var))
-      for (level in levels) {
-        level_chr <- as.character(level)
-        level_key <- labelled[match(level, col_vals)]
-        eff_n_val <- sum(counts$n_eff[counts$level %in% level_key])
-        raw_n_val <- as.integer(sum(col_vals == level, na.rm = TRUE))
-        threshold <- if (pub_type == "external") 100L else 50L
-
-        suppress <- if (pub_type == "external") {
-          eff_n_val < 100 || raw_n_val < 100L
-        } else {
-          eff_n_val < 50 || raw_n_val < 100L
-        }
-
-        if (suppress) {
-          suppressed <- dplyr::bind_rows(
-            suppressed,
-            tibble::tibble(
-              subgroup_var = banner_var,
-              subgroup_value = level_chr,
-              eff_n = eff_n_val,
-              raw_n = raw_n_val,
-              threshold = threshold,
-              pub_type = pub_type
-            )
-          )
-        }
-      }
-    }
-
-    if (nrow(suppressed) > 0L) {
-      dropped <- paste(
-        suppressed$subgroup_var,
-        suppressed$subgroup_value,
-        sep = "=",
-        collapse = ", "
+  # Withholding (spec 3.5): one .resolve_eff_n() call per banner column, then
+  # .build_withheld(), which holds the only floor test. The kept levels are
+  # the set difference on `level`, so no second comparison runs here. The
+  # levels are labels, the vocabulary of the frame's subgroup_value.
+  # Interactions are not tested yet.
+  kept_levels <- list()
+  for (banner_var in banner_resolved) {
+    counts <- .resolve_eff_n(design, group_var = banner_var)
+    withheld <- .build_withheld(counts, min_eff_n, banner_var)
+    kept_levels[[banner_var]] <- setdiff(counts$level, withheld$level)
+    suppressed <- dplyr::bind_rows(
+      suppressed,
+      tibble::tibble(
+        subgroup_var = withheld$banner_var,
+        subgroup_value = withheld$level,
+        eff_n = withheld$n_eff,
+        raw_n = counts$n[match(withheld$level, counts$level)],
+        threshold = rep(as.numeric(min_eff_n), nrow(withheld))
       )
-      cli::cli_warn(
-        c(
-          "!" = "{nrow(suppressed)} subgroup{?s} suppressed due to small sample size.",
-          "i" = "Suppressed: {dropped}."
-        ),
-        class = "surveyreports_warning_subgroup_suppressed"
-      )
-    }
+    )
+  }
+
+  if (nrow(suppressed) > 0L) {
+    dropped <- paste(
+      suppressed$subgroup_var,
+      suppressed$subgroup_value,
+      sep = "=",
+      collapse = ", "
+    )
+    cli::cli_warn(
+      c(
+        "!" = "{nrow(suppressed)} subgroup{?s} suppressed due to small sample size.",
+        "i" = "Suppressed: {dropped}."
+      ),
+      class = "surveyreports_warning_subgroup_suppressed"
+    )
   }
 
   # Frame building
@@ -923,9 +904,6 @@
           next
         } # self-banner drop
 
-        sup_vals <- suppressed$subgroup_value[
-          suppressed$subgroup_var == banner_var
-        ]
         r <- do.call(
           .compute_subgroup_freq,
           c(
@@ -933,9 +911,9 @@
             freq_args
           )
         )
-        if (length(sup_vals) > 0L) {
-          r <- r[!r$subgroup_value %in% sup_vals, , drop = FALSE]
-        }
+        # A withheld level leaves the frame, so the column-group builder
+        # reads no heading and no cell for it (spec 3.5).
+        r <- r[r$subgroup_value %in% kept_levels[[banner_var]], , drop = FALSE]
         rows[[length(rows) + 1L]] <- r
       }
     }
@@ -988,8 +966,7 @@
     subgroup_value = character(0L),
     eff_n = numeric(0L),
     raw_n = integer(0L),
-    threshold = integer(0L),
-    pub_type = character(0L)
+    threshold = numeric(0L)
   )
 }
 
@@ -1284,14 +1261,16 @@
   }
   # nocov end
 
+  # The threshold is min_eff_n, which may be fractional, so it is formatted
+  # as text and not with %d.
   for (i in seq_len(nrow(suppressed))) {
     row <- suppressed[i, ]
     text <- sprintf(
-      "* %s: %s suppressed (n=%d, threshold=%d)",
+      "* %s: %s suppressed (n=%d, threshold=%s)",
       row$subgroup_var,
       row$subgroup_value,
       row$raw_n,
-      row$threshold
+      format(row$threshold, scientific = FALSE, trim = TRUE)
     )
     wb <- openxlsx2::wb_add_data(
       wb,
