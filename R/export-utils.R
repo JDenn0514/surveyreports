@@ -631,7 +631,10 @@
 .compute_total_freq <- function(design, var, ...) {
   result <- withCallingHandlers(
     surveycore::get_freqs(design, !!rlang::sym(var), ...),
-    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning"),
+    surveycore_warning_all_na_freqs = function(w) {
+      invokeRestart("muffleWarning")
+    }
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -660,7 +663,10 @@
       group = !!rlang::sym(banner_var),
       ...
     ),
-    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning"),
+    surveycore_warning_all_na_freqs = function(w) {
+      invokeRestart("muffleWarning")
+    }
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -684,9 +690,16 @@
 #' @noRd
 .compute_interaction_freq <- function(design, var, banner_vars, ...) {
   interact_col <- "..interaction.."
+  # Each banner column is translated to its value labels first, so a crossed
+  # heading reads `Male x North` and not `1 x 1`. A factor keeps its level
+  # order, so interaction() does not sort its levels alphabetically
+  # (spec 3.8).
+  labelled <- lapply(banner_vars, function(col) {
+    .banner_levels_labelled(design, col)
+  })
   design@data[[interact_col]] <- do.call(
     interaction,
-    c(design@data[banner_vars], list(sep = " \u00d7 "))
+    c(labelled, list(sep = " \u00d7 "))
   )
 
   result <- withCallingHandlers(
@@ -696,7 +709,10 @@
       group = !!rlang::sym(interact_col),
       ...
     ),
-    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning")
+    surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning"),
+    surveycore_warning_all_na_freqs = function(w) {
+      invokeRestart("muffleWarning")
+    }
   )
   lm <- .extract_var_meta(surveycore::meta(result), var)
 
@@ -718,6 +734,9 @@
 
 # -- Frequency frame builder ---------------------------------------------------
 
+# emit_label_warning = FALSE leaves the missing-label warning to the caller.
+# export_crosstab() passes FALSE, because its one warning also names the
+# banner columns with no variable label (spec 3.18).
 #' @keywords internal
 #' @noRd
 .build_freq_frame <- function(
@@ -729,7 +748,8 @@
   variance = NULL,
   conf_level = 0.95,
   show_eff_n = FALSE,
-  min_eff_n = 0
+  min_eff_n = 0,
+  emit_label_warning = TRUE
 ) {
   freq_args <- list(variance = variance, conf_level = conf_level)
 
@@ -769,8 +789,16 @@
         # nocov end
       }
 
+      # The question text and label come from the first wave frame that has
+      # rows. A wave where the variable is all-NA returns no rows. When no
+      # wave has rows, the variable gets no pooled row, and the all-NA drop
+      # removes it (spec 2.3).
+      has_rows <- vapply(wave_freq_list, nrow, integer(1L)) > 0L
+      if (!any(has_rows)) {
+        return(NULL)
+      }
       combined <- dplyr::bind_rows(wave_freq_list)
-      first <- wave_freq_list[[1L]]
+      first <- wave_freq_list[[which(has_rows)[[1L]]]]
 
       pooled <- combined |>
         dplyr::group_by(value) |>
@@ -844,7 +872,9 @@
     names(all_rows)[names(all_rows) == "type"] <- "var_type"
     names(all_rows)[names(all_rows) == "group"] <- "group_id"
 
-    .emit_missing_label_warning(all_rows)
+    if (emit_label_warning) {
+      .emit_missing_label_warning(all_rows)
+    }
     return(list(frame = all_rows, suppressed = .empty_suppressed()))
   }
 
@@ -955,8 +985,72 @@
   names(all_rows)[names(all_rows) == "type"] <- "var_type"
   names(all_rows)[names(all_rows) == "group"] <- "group_id"
 
-  .emit_missing_label_warning(all_rows)
+  if (emit_label_warning) {
+    .emit_missing_label_warning(all_rows)
+  }
   list(frame = all_rows, suppressed = suppressed)
+}
+
+# The all-NA drop: step 15 of spec 3.11 in export_crosstab(), step 9 of the
+# topline order. It runs after estimation and before the workbook build.
+#
+# A variable is dropped when `frame` holds no "total" row for it. So the test
+# uses the row scope that get_freqs() used: the rows inside the domain on a
+# restricted design, and every wave on a collection, whose pooled "total"
+# rows are absent only when every wave frame is empty (spec 2.2). A SATA or
+# battery item is dropped alone. Its group keeps its type and its group id,
+# and leaves the output only when every item is dropped.
+#
+# Returns list(vars = chr, classify_out = tibble), each less the dropped
+# variables, in input order. Raises one surveyreports_warning_all_na_dropped
+# that names every dropped variable. When no variable survives, it aborts with
+# surveyreports_error_vars_all_na and raises no warning (spec 3.17,
+# spec 3.18). The error is raised in the caller's frame, so its message names
+# the export function.
+#' @keywords internal
+#' @noRd
+.apply_all_na_drop <- function(
+  frame,
+  vars,
+  classify_out,
+  call = rlang::caller_env()
+) {
+  has_rows <- vars %in% frame$variable[frame$subgroup_type == "total"]
+  dropped <- vars[!has_rows]
+
+  if (!any(has_rows)) {
+    cli::cli_abort(
+      c(
+        "x" = "No variable in {.arg vars} has a non-missing value.",
+        "i" = "All-NA variable{?s}: {.field {dropped}}.",
+        "v" = "Select at least one variable with data in {.arg vars}."
+      ),
+      class = "surveyreports_error_vars_all_na",
+      call = call
+    )
+  }
+
+  if (length(dropped) > 0L) {
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "Dropped {length(dropped)} variable{?s} with no non-missing ",
+          "value: {.field {dropped}}."
+        ),
+        "i" = paste0(
+          "The check reads the rows the design tabulates: the rows inside ",
+          "the domain on a domain-restricted design, and every wave of a ",
+          "collection."
+        )
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+  }
+
+  list(
+    vars = vars[has_rows],
+    classify_out = classify_out[!classify_out$variable %in% dropped, ]
+  )
 }
 
 # Empty suppressed tibble with correct schema
@@ -981,22 +1075,46 @@
   }
 }
 
-# Emit missing-variable-label warning for vars that fell back to the var name
-.emit_missing_label_warning <- function(frame) {
-  vars_fallback <- unique(
+# The `vars` columns whose question text fell back to the variable name. It
+# reads the frequency frame, so a variable with no frame rows (an all-NA
+# variable, dropped at step 15 of spec 3.11) is never named (spec 3.18).
+#' @keywords internal
+#' @noRd
+.missing_label_vars <- function(frame) {
+  unique(
     frame$variable[
       !is.na(frame$variable) & frame$question_text == frame$variable
     ]
   )
-  if (length(vars_fallback) > 0L) {
-    cli::cli_warn(
-      c(
-        "!" = "Variable{?s} {.field {vars_fallback}} {?has/have} no {.field variable_label}.",
-        "i" = "Variable name used as question text."
-      ),
-      class = "surveyreports_warning_missing_variable_label"
-    )
+}
+
+# Emit missing-variable-label warning for vars that fell back to the var name
+.emit_missing_label_warning <- function(frame) {
+  .warn_missing_label(.missing_label_vars(frame))
+}
+
+# One surveyreports_warning_missing_variable_label per call, naming every
+# `vars` column and every `banner` column with no variable label (spec 3.18).
+# Each "i" bullet is written only when its argument has a column to name. No
+# column, no warning.
+#' @keywords internal
+#' @noRd
+.warn_missing_label <- function(vars, banner = character(0)) {
+  cols <- c(vars, banner)
+  if (length(cols) == 0L) {
+    return(invisible(NULL))
   }
+  cli::cli_warn(
+    c(
+      "!" = paste0(
+        "Variable{?s} {.field {cols}} {?has/have} no ",
+        "{.field variable_label}."
+      ),
+      "i" = if (length(vars) > 0L) "Variable name used as question text.",
+      "i" = if (length(banner) > 0L) "Column name used as banner heading."
+    ),
+    class = "surveyreports_warning_missing_variable_label"
+  )
   invisible(NULL)
 }
 

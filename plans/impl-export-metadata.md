@@ -98,7 +98,7 @@ stands.** Only the formal arguments come forward.
       guards, and re-validates `interactions`.
 - [x] PR 11: `feature/crosstab-min-eff-n` — `min_eff_n` replaces `pub_type`,
       and a banner level below the floor loses its column.
-- [ ] PR 12: `feature/crosstab-banner-headings` — banner spanners and
+- [x] PR 12: `feature/crosstab-banner-headings` — banner spanners and
       interaction levels read labels; an all-NA variable is dropped with a
       warning, in both functions, and surveycore's all-NA warning is muffled.
 - [ ] PR 13: `feature/crosstab-withheld-notices` — the withholding warnings,

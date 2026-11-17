@@ -388,18 +388,6 @@ test_that("export_topline() uses variable name as question text when label unset
 
 # 9. Edge cases -------------------------------------------------------------------
 
-test_that("export_topline() handles all-NA variable without crashing", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  # all_na_var is NA_character_ for every row
-  expect_no_error(
-    suppressWarnings(export_topline(d, vars = all_na_var, file_name = out))
-  )
-  expect_true(file.exists(out))
-})
-
 test_that("export_topline() handles a single-value variable", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
@@ -445,38 +433,6 @@ test_that("export_topline() collection with show_eff_n = TRUE writes the wave he
   # The wave headers are always written. No header carries an effective N
   # on a collection; TN-03 asserts the exact text.
   expect_true(any(grepl("wave1|wave2|Total", cells)))
-})
-
-test_that("export_topline() handles all-NA SATA variable without crashing", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  d@data$sata_a <- NA_integer_
-  d@data$sata_b <- NA_integer_
-  d@data$sata_c <- NA_integer_
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_no_error(
-    suppressWarnings(
-      export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
-    )
-  )
-  expect_true(file.exists(out))
-})
-
-test_that("export_topline() handles all-NA battery variable without crashing", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  d@data$bat_1 <- NA_integer_
-  d@data$bat_2 <- NA_integer_
-  d@data$bat_3 <- NA_integer_
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_no_error(
-    suppressWarnings(
-      export_topline(d, vars = c(bat_1, bat_2, bat_3), file_name = out)
-    )
-  )
-  expect_true(file.exists(out))
 })
 
 test_that("export_topline() handles survey_collection where one wave is missing the variable", {
@@ -875,11 +831,11 @@ test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
-  # surveycore warns that the all-NA sata_b yields 0 rows. That warning is
-  # the setup of this test, not its subject.
+  # The all-NA sata_b is dropped with a warning. That warning is the setup of
+  # this test, not its subject.
   suppressWarnings(
     export_topline(d, vars = c(sata_a, sata_b, sata_c), file_name = out),
-    classes = "surveycore_warning_all_na_freqs"
+    classes = "surveyreports_warning_all_na_dropped"
   )
 
   df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
@@ -2097,4 +2053,419 @@ test_that("export_topline() keeps a column whose role differs between waves (TC-
   expect_identical(result, out)
   col_a <- topline_col_a(out)
   expect_true("Question two" %in% col_a)
+})
+
+# 17. The all-NA drop ----------------------------------------------------------
+# A variable with no non-missing value leaves the "Topline" sheet at step 9 of
+# the topline order of spec 3.11, with one warning that names every dropped
+# variable, or an error when no variable is left (spec 3.17, spec 3.18,
+# spec 4.1). The topline rows of this section take no snapshot: XV-14 and
+# XE-16 in test-export-crosstab.R snapshot both classes (spec 5.2).
+
+# Sets each named column to all-NA integers. The SATA and battery metadata of
+# the generator stays on the column.
+set_all_na <- function(d, cols) {
+  for (col in cols) {
+    d@data[[col]] <- NA_integer_
+  }
+  d
+}
+
+# Removes the file at `path` when it exists, so the next assertion reads the
+# file that the next call writes, or its absence.
+fresh_path <- function(path) {
+  if (file.exists(path)) {
+    file.remove(path)
+  }
+  invisible(path)
+}
+
+# Every row of the "Topline" sheet as a data frame, blank rows kept.
+topline_rows <- function(path) {
+  openxlsx2::wb_to_df(
+    path,
+    sheet = "Topline",
+    col_names = FALSE,
+    skip_empty_rows = FALSE
+  )
+}
+
+# Every non-blank cell of the "Topline" sheet, as a character vector.
+topline_text <- function(path) {
+  cells <- as.character(unlist(topline_rows(path)))
+  cells[!is.na(cells)]
+}
+
+# The positions of each name in a condition message, in the order given. A
+# name the message does not hold gives -1.
+name_positions <- function(cnd, names) {
+  vapply(
+    names,
+    function(v) as.integer(regexpr(v, conditionMessage(cnd), fixed = TRUE)),
+    integer(1L)
+  )
+}
+
+# The two-wave collections of the test-spec, with q3 all-NA in one wave. q1
+# carries a variable label in both waves; q3 carries none, so its block title
+# is q3. The q3 values alternate, so the result does not depend on the seed.
+na_wave_collections <- function() {
+  w_val <- make_all_designs(seed = 42)$taylor
+  w_val@data$q3 <- rep(c("Yes", "No"), length.out = nrow(w_val@data))
+  w_val <- surveycore::set_var_label(w_val, q1 = "Question one")
+  w_na <- make_all_designs(seed = 7)$taylor
+  w_na@data$q3 <- NA_character_
+  w_na <- surveycore::set_var_label(w_na, q1 = "Question one")
+  list(
+    coll_na_first = surveycore::as_survey_collection(w1 = w_na, w2 = w_val),
+    coll_na_second = surveycore::as_survey_collection(w1 = w_val, w2 = w_na)
+  )
+}
+
+test_that("export_topline() drops an all-NA variable (XX-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  ref <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    fresh_path(ref)
+    lbl <- paste0("export_topline(), ", nm)
+    d <- note_design(designs[[nm]])
+
+    w <- expect_warning(
+      result <- topline_quiet(d, vars = c(q1, all_na_var), file_name = out),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+    topline_quiet(d, vars = q1, file_name = ref)
+
+    expect_identical(result, out, label = paste0(lbl, ": the path"))
+    expect_match(
+      conditionMessage(w),
+      "all_na_var",
+      fixed = TRUE,
+      label = paste0(lbl, ": names all_na_var")
+    )
+    expect_false(
+      "all_na_var" %in% topline_text(out),
+      label = paste0(lbl, ": no all_na_var cell")
+    )
+    expect_identical(
+      topline_rows(out),
+      topline_rows(ref),
+      label = paste0(lbl, ": the q1 block as with vars = q1")
+    )
+  }
+})
+
+test_that("export_topline() names every dropped all-NA variable in one warning (TW-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- designs[[nm]]
+    d@data$all_na_2 <- NA_character_
+
+    w_label <- expect_warning(
+      w_na <- expect_warning(
+        result <- topline_quiet(
+          d,
+          vars = c(q1, all_na_var, q2, all_na_2),
+          file_name = out
+        ),
+        class = "surveyreports_warning_all_na_dropped"
+      ),
+      class = "surveyreports_warning_missing_variable_label"
+    )
+
+    pos <- name_positions(w_na, c("all_na_var", "all_na_2", "q1", "q2"))
+    expect_true(pos[["all_na_var"]] > 0L, label = paste0(nm, ": all_na_var"))
+    expect_true(
+      pos[["all_na_2"]] > pos[["all_na_var"]],
+      label = paste0(nm, ": all_na_2 after all_na_var")
+    )
+    expect_identical(
+      unname(pos[c("q1", "q2")]),
+      c(-1L, -1L),
+      label = paste0(nm, ": names neither q1 nor q2")
+    )
+    expect_identical(
+      unname(name_positions(w_label, c("all_na_var", "all_na_2"))),
+      c(-1L, -1L),
+      label = paste0(nm, ": the label warning names no dropped variable")
+    )
+
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    col_a <- topline_col_a(out)
+    expect_true(
+      all(c("q1", "q2") %in% col_a),
+      label = paste0(nm, ": the q1 and q2 blocks")
+    )
+  }
+})
+
+test_that("export_topline() aborts when every variable is all-NA (TE-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- designs[[nm]]
+    d@data$all_na_2 <- NA_character_
+
+    expect_error(
+      topline_quiet(d, vars = c(all_na_var, all_na_2), file_name = out),
+      class = "surveyreports_error_vars_all_na"
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file"))
+  }
+})
+
+test_that("export_topline() muffles the surveycore all-NA warning (TW-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      all_na_var = "No answers",
+      q1 = "Question one"
+    )
+
+    expect_no_warning(
+      w <- expect_warning(
+        topline_quiet(d, vars = c(all_na_var, q1), file_name = out),
+        class = "surveyreports_warning_all_na_dropped"
+      ),
+      class = "surveycore_warning_all_na_freqs"
+    )
+
+    expect_match(
+      conditionMessage(w),
+      "all_na_var",
+      fixed = TRUE,
+      label = paste0(nm, ": names all_na_var")
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+  }
+})
+
+test_that("export_topline() keeps a group whose other items survive (XX-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  vars_all <- c("q1", "sata_a", "sata_b", "sata_c", "bat_1", "bat_2", "bat_3")
+  sata_preface <- "Which of the following apply to you?"
+  bat_preface <- "Please rate the following items:"
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    lbl <- paste0("export_topline(), ", nm)
+    d <- set_all_na(cover_design(designs[[nm]]), c("sata_a", "bat_1"))
+
+    w <- expect_warning(
+      topline_quiet(d, vars = tidyselect::all_of(vars_all), file_name = out),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    pos <- name_positions(w, c("sata_a", "bat_1"))
+    expect_true(pos[["sata_a"]] > 0L, label = paste0(lbl, ": names sata_a"))
+    expect_true(
+      pos[["bat_1"]] > pos[["sata_a"]],
+      label = paste0(lbl, ": bat_1 after sata_a")
+    )
+    text <- topline_text(out)
+    expect_true(
+      all(c(sata_preface, bat_preface) %in% text),
+      label = paste0(lbl, ": both group prefaces")
+    )
+    expect_true(
+      all(c("sata_b", "sata_c", "bat_2", "bat_3") %in% text),
+      label = paste0(lbl, ": the surviving items")
+    )
+    expect_false(
+      any(c("sata_a", "bat_1") %in% text),
+      label = paste0(lbl, ": no dropped item")
+    )
+
+    fresh_path(out)
+    d <- set_all_na(d, "bat_2")
+
+    w <- expect_warning(
+      topline_quiet(d, vars = tidyselect::all_of(vars_all), file_name = out),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    pos <- name_positions(w, c("bat_1", "bat_2"))
+    expect_true(pos[["bat_1"]] > 0L, label = paste0(lbl, ": names bat_1"))
+    expect_true(
+      pos[["bat_2"]] > pos[["bat_1"]],
+      label = paste0(lbl, ": bat_2 after bat_1")
+    )
+    text <- topline_text(out)
+    expect_true(
+      all(c(bat_preface, "bat_3") %in% text),
+      label = paste0(lbl, ": bat_3 under the battery preface")
+    )
+    expect_false(
+      any(c("bat_1", "bat_2") %in% text),
+      label = paste0(lbl, ": no dropped battery item")
+    )
+  }
+})
+
+test_that("export_topline() drops a group whose every item is all-NA (XX-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  bat_vars <- c("bat_1", "bat_2", "bat_3")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    lbl <- paste0("export_topline(), ", nm)
+    d <- set_all_na(cover_design(designs[[nm]]), bat_vars)
+
+    w <- expect_warning(
+      result <- topline_quiet(
+        d,
+        vars = c(q1, bat_1, bat_2, bat_3),
+        file_name = out
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    pos <- name_positions(w, bat_vars)
+    expect_true(all(pos > 0L), label = paste0(lbl, ": names every item"))
+    expect_false(is.unsorted(pos), label = paste0(lbl, ": input order"))
+    expect_identical(result, out, label = paste0(lbl, ": the path"))
+    text <- topline_text(out)
+    expect_true("Question one" %in% text, label = paste0(lbl, ": q1 block"))
+    expect_false(
+      any(c("Please rate the following items:", bat_vars) %in% text),
+      label = paste0(lbl, ": no battery block")
+    )
+  }
+})
+
+test_that("export_topline() drops a variable all-NA inside the domain only (XX-16)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  dom_label <- "Asked outside group A"
+
+  for (nm in names(designs)) {
+    lbl <- paste0("export_topline(), ", nm)
+    d <- note_design(designs[[nm]])
+    d@data$dom_na <- ifelse(d@data$group == "A", NA_character_, d@data$q1)
+    d <- surveycore::set_var_label(d, dom_na = dom_label)
+    d_dom <- d
+    d_dom@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d_dom@data$group == "A"
+
+    fresh_path(out)
+    w <- expect_warning(
+      topline_quiet(d_dom, vars = c(q1, dom_na), file_name = out),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+    expect_match(
+      conditionMessage(w),
+      "dom_na",
+      fixed = TRUE,
+      label = paste0(lbl, ": names dom_na")
+    )
+    expect_false(
+      dom_label %in% topline_text(out),
+      label = paste0(lbl, ": no dom_na block on the domain")
+    )
+
+    fresh_path(out)
+    expect_no_warning(
+      topline_quiet(d, vars = c(q1, dom_na), file_name = out)
+    )
+    expect_true(
+      dom_label %in% topline_text(out),
+      label = paste0(lbl, ": the dom_na block without the domain")
+    )
+  }
+})
+
+test_that("export_topline() keeps a variable all-NA in one wave of a collection (TC-09)", {
+  skip_if_not_installed("surveycore")
+  colls <- na_wave_collections()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  expected <- list(
+    coll_na_first = c("Total", "w2"),
+    coll_na_second = c("Total", "w1")
+  )
+
+  for (nm in names(colls)) {
+    fresh_path(out)
+
+    expect_no_warning(
+      expect_warning(
+        result <- export_topline(
+          colls[[nm]],
+          vars = c(q1, q3),
+          file_name = out
+        ),
+        class = "surveyreports_warning_missing_variable_label"
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    rows <- topline_rows(out)
+    title_row <- match("q3", as.character(rows[[1L]]))
+    expect_false(is.na(title_row), label = paste0(nm, ": the q3 block"))
+    headings <- as.character(unlist(rows[title_row + 1L, -1L]))
+    headings <- headings[!is.na(headings)]
+    expect_identical(
+      sub("\n.*$", "", headings),
+      expected[[nm]],
+      label = paste0(nm, ": the q3 headings")
+    )
+  }
+})
+
+test_that("export_topline() drops a variable all-NA in every wave of a collection (TC-10)", {
+  skip_if_not_installed("surveycore")
+  w1 <- surveycore::set_var_label(
+    make_all_designs(seed = 42)$taylor,
+    q1 = "Question one",
+    q2 = "Question two"
+  )
+  w2 <- surveycore::set_var_label(
+    make_all_designs(seed = 7)$taylor,
+    q1 = "Question one",
+    q2 = "Question two"
+  )
+  coll <- surveycore::as_survey_collection(w1 = w1, w2 = w2)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  w <- expect_warning(
+    result <- export_topline(
+      coll,
+      vars = c(q1, q2, all_na_var),
+      file_name = out
+    ),
+    class = "surveyreports_warning_all_na_dropped"
+  )
+
+  expect_identical(result, out)
+  expect_match(conditionMessage(w), "all_na_var", fixed = TRUE)
+  text <- topline_text(out)
+  expect_true(all(c("Question one", "Question two") %in% text))
+  expect_false("all_na_var" %in% text)
 })

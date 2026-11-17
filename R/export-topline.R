@@ -144,6 +144,11 @@ export_topline <- function(
     show_eff_n = show_eff_n
   )
 
+  # Step 9 of spec 3.11: the all-NA drop, as in export_crosstab().
+  kept <- .apply_all_na_drop(freq_result$frame, vars_resolved, classify_out)
+  vars_resolved <- kept$vars
+  classify_out <- kept$classify_out
+
   # Build workbook. The "About" cover sheet comes first. Topline withholds
   # nothing and writes numeric cells, so `withheld`, `min_eff_n`,
   # `has_banner` and `string_cells` keep their defaults; `variance` is passed
@@ -238,10 +243,6 @@ export_topline <- function(
   suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  }
-
   question_text <- frame$question_text[[1L]]
 
   # Detect collection mode (wave columns present)
@@ -489,10 +490,6 @@ export_topline <- function(
   suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  }
-
   question_text <- .group_header_text(frame)
   sata_vars <- unique(frame$variable)
 
@@ -619,10 +616,6 @@ export_topline <- function(
   suppressed,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  }
-
   question_text <- .group_header_text(frame)
   bat_vars <- unique(frame$variable)
 

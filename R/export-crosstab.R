@@ -194,7 +194,25 @@ export_crosstab <- function(
   # names a dropped banner column passed step 7 and fails here (spec 3.10).
   .validate_interactions_in_banner(interactions, banner_resolved)
 
+  # 12. The banner label checks, on the banner columns the role guard kept and
+  # before any estimate runs (spec 3.7).
+  .validate_banner_labels(design, banner_resolved)
+
   layout <- match.arg(layout)
+
+  # The heading of each surviving banner column: its variable label, or its
+  # name when no label is set (spec 3.8). A column that falls back is named
+  # in the missing-label warning after estimation.
+  heading_info <- lapply(banner_resolved, function(col) {
+    .banner_heading(design, col)
+  })
+  banner_headings <- stats::setNames(
+    vapply(heading_info, function(h) h$heading, character(1L)),
+    banner_resolved
+  )
+  banner_fell_back <- banner_resolved[
+    vapply(heading_info, function(h) h$fell_back, logical(1L))
+  ]
 
   # 13. all_of() passes the resolved names as a selection, so tidyselect
   # raises no external-vector deprecation warning (spec 2.1).
@@ -203,6 +221,10 @@ export_crosstab <- function(
     tidyselect::all_of(vars_resolved)
   )
 
+  # 14. Estimation. The missing-label warning is raised here, after the frame
+  # is built and before the all-NA drop: one warning for the `vars` columns,
+  # read from the frame, and the banner columns together (spec 3.11,
+  # spec 3.18).
   freq_result <- .build_freq_frame(
     design,
     vars_resolved,
@@ -212,8 +234,20 @@ export_crosstab <- function(
     variance = variance,
     conf_level = conf_level,
     show_eff_n = show_eff_n,
-    min_eff_n = min_eff_n
+    min_eff_n = min_eff_n,
+    emit_label_warning = FALSE
   )
+  .warn_missing_label(
+    .missing_label_vars(freq_result$frame),
+    banner_fell_back
+  )
+
+  # 15. The all-NA drop. A variable with no non-missing value leaves `vars`
+  # and `classify_out` before the workbook build, so no block, sheet or
+  # cursor move is written for it (spec 3.11).
+  kept <- .apply_all_na_drop(freq_result$frame, vars_resolved, classify_out)
+  vars_resolved <- kept$vars
+  classify_out <- kept$classify_out
 
   # The "About" cover sheet comes first. No withholding exists yet, so the
   # withheld block is not written (spec 2.3, spec 3.14).
@@ -255,6 +289,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -277,6 +312,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -299,6 +335,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -334,6 +371,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -354,6 +392,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -374,6 +413,7 @@ export_crosstab <- function(
           freq_result$suppressed,
           banner_resolved,
           interactions,
+          banner_headings,
           show_total,
           resolved_notes
         )
@@ -460,6 +500,74 @@ export_crosstab <- function(
   invisible(TRUE)
 }
 
+# -- Banner labels -------------------------------------------------------------
+
+# The banner label checks of spec 3.7. export_crosstab() calls it at step 12
+# of spec 3.11, on the banner columns that survive the role guard, so no
+# check runs on a column that is about to be dropped. Two conditions abort:
+# - one value label on 2 or more codes. get_freqs() would otherwise abort
+#   with the base R message "factor level is duplicated".
+# - 2 or more observed codes with no value label. Each one keys as a missing
+#   value, so two subgroups would share one heading.
+# A column with no value labels passes, and so does a column with exactly
+# one unlabelled observed code: that code is a real subgroup whose level is
+# NA. An unlabelled code held by no row does not count. "Observed" reads
+# every row of @data. The error is raised in the caller's frame, so its
+# message names export_crosstab().
+#' @keywords internal
+#' @noRd
+.validate_banner_labels <- function(design, cols, call = rlang::caller_env()) {
+  for (col in cols) {
+    labels <- surveycore::extract_val_labels(
+      design,
+      tidyselect::all_of(col)
+    )[[col]]
+    if (is.null(labels)) {
+      next
+    }
+
+    repeated <- unique(names(labels)[duplicated(names(labels))])
+    if (length(repeated) > 0L) {
+      cli::cli_abort(
+        c(
+          "x" = paste0(
+            "Banner column {.field {col}} uses one value label for 2 or ",
+            "more codes."
+          ),
+          "i" = "Repeated label{?s}: {.val {repeated}}.",
+          "v" = paste0(
+            "Use {.fn surveycore::set_val_labels} to give each code its ",
+            "own label."
+          )
+        ),
+        class = "surveyreports_error_duplicate_value_label",
+        call = call
+      )
+    }
+
+    observed <- unique(stats::na.omit(as.vector(design@data[[col]])))
+    unlabelled <- sort(setdiff(observed, unname(labels)))
+    if (length(unlabelled) >= 2L) {
+      cli::cli_abort(
+        c(
+          "x" = paste0(
+            "Banner column {.field {col}} has {length(unlabelled)} observed ",
+            "codes with no value label."
+          ),
+          "i" = "Codes with no label: {.val {unlabelled}}.",
+          "v" = paste0(
+            "Use {.fn surveycore::set_val_labels} to label these codes, so ",
+            "at most one is left without a label."
+          )
+        ),
+        class = "surveyreports_error_multiple_unlabelled_codes",
+        call = call
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
 # -- Sheet names -------------------------------------------------------------------
 
 # A sheet name that does not collide with one already in `wb` (spec 2.2,
@@ -491,9 +599,18 @@ export_crosstab <- function(
 
 # -- Shared column-group helpers --------------------------------------------------
 
+# The column groups of one block. A group's `subgroup_var` is the key into
+# the frame, built from column names. Its `spanner` is the display text, built
+# from banner_headings, a character vector of headings named by banner column
+# (spec 3.8): `Gender`, and `Gender x Region` for an interaction.
 #' @keywords internal
 #' @noRd
-.build_col_groups <- function(frame, banner_resolved, interactions) {
+.build_col_groups <- function(
+  frame,
+  banner_resolved,
+  interactions,
+  banner_headings
+) {
   col_groups <- list()
 
   for (bv in banner_resolved) {
@@ -505,7 +622,7 @@ export_crosstab <- function(
       next
     }
     col_groups[[length(col_groups) + 1L]] <- list(
-      spanner = bv,
+      spanner = banner_headings[[bv]],
       levels = levels_present,
       type = "banner",
       subgroup_var = bv
@@ -524,7 +641,10 @@ export_crosstab <- function(
         next
       } # nocov
       col_groups[[length(col_groups) + 1L]] <- list(
-        spanner = int_label,
+        spanner = paste(
+          unname(banner_headings[int_vars]),
+          collapse = " \u00d7 "
+        ),
         levels = levels_present,
         type = "interaction",
         subgroup_var = int_label
@@ -638,20 +758,22 @@ export_crosstab <- function(
   suppressed,
   banner_resolved,
   interactions,
+  banner_headings,
   show_total = TRUE,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  }
-
   question_text <- frame$question_text[[1L]]
 
   # Get value order from total rows
   total_rows <- frame[frame$subgroup_type == "total", ]
   values <- unique(total_rows$value)
 
-  col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  col_groups <- .build_col_groups(
+    frame,
+    banner_resolved,
+    interactions,
+    banner_headings
+  )
   if (show_total) {
     col_groups <- c(list(.total_col_group()), col_groups)
   }
@@ -793,17 +915,19 @@ export_crosstab <- function(
   suppressed,
   banner_resolved,
   interactions,
+  banner_headings,
   show_total = TRUE,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  } # nocov
-
   question_text <- .group_header_text(frame)
   sata_vars <- unique(frame$variable)
 
-  col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  col_groups <- .build_col_groups(
+    frame,
+    banner_resolved,
+    interactions,
+    banner_headings
+  )
   if (show_total) {
     col_groups <- c(list(.total_col_group()), col_groups)
   }
@@ -913,17 +1037,19 @@ export_crosstab <- function(
   suppressed,
   banner_resolved,
   interactions,
+  banner_headings,
   show_total = TRUE,
   base_notes = NULL
 ) {
-  if (nrow(frame) == 0L) {
-    return(list(wb = wb, next_row = start_row))
-  } # nocov
-
   question_text <- .group_header_text(frame)
   bat_vars <- unique(frame$variable)
 
-  col_groups <- .build_col_groups(frame, banner_resolved, interactions)
+  col_groups <- .build_col_groups(
+    frame,
+    banner_resolved,
+    interactions,
+    banner_headings
+  )
   if (show_total) {
     col_groups <- c(list(.total_col_group()), col_groups)
   }
