@@ -160,10 +160,12 @@ Follow TDD order — tests before source, always.
 Run these checks after implementation:
 
 ```r
-devtools::test()
 devtools::check()
 pkgdown::check_pkgdown()
 ```
+
+`devtools::check()` runs the full test suite, so do not run
+`devtools::test()` after it.
 
 **If any fails:** diagnose and fix, then re-run. After **3 failed attempts
 on the same failure**, stop and report the exact error, what was tried, and
@@ -209,8 +211,8 @@ When all checks pass:
 
 Do not mark the section complete until ALL are true:
 
-- [ ] `devtools::test()` — no failures
-- [ ] `devtools::check()` — 0 errors, 0 warnings, ≤2 notes
+- [ ] `devtools::check()` — 0 errors, 0 warnings, ≤2 notes (it runs the full
+      test suite)
 - [ ] `devtools::document()` run (if roxygen2 changed); `_pkgdown.yml` updated (if new exports); `pkgdown::check_pkgdown()` passes
 - [ ] `plans/error-messages.md` updated (if new error classes added)
 - [ ] Sub-task self-check passed (spec compliance + conventions) for each `- [x]` item

@@ -103,12 +103,17 @@ can fill, then return a handoff block for the main session to act on:
 
 **Artifacts for the PR body**:
 - Audit: {path}
+- Audit tree: {the `Tree:` value from audit.md, or `none` if it has none}
 - Review: {path}
 
 **Merge after CI**: yes | no (default no — only yes when the user asked)
 
 **Next step**: run `/commit-and-pr` in the main session.
 ```
+
+Copy the `Tree:` value from `audit.md` exactly. `commit-and-pr` Step 3
+compares it with the current tree hash. When the two are equal, it skips the
+pre-flight check, because the tester already ran the gates on that code.
 
 Required CI check, for the main session's reference: the `R-CMD-check.yaml`
 matrix jobs. This repo runs five — `macos-latest (release)`,

@@ -222,12 +222,13 @@ hints, no file paths from `R/`, no internal helper names.
 
 ## Profile gates (the tester runs ALL unless a skip condition applies)
 - [ ] devtools::document() — NAMESPACE/man/ unchanged after the run
-- [ ] devtools::test() — all tests pass
-- [ ] devtools::run_examples() — all @examples run clean
+- [ ] tests + covr (gate 2) — all tests pass; 95% floor, 98% target, no
+      uncovered new lines
 - [ ] R CMD build
-- [ ] R CMD check --as-cran — 0 errors, 0 warnings, notes reviewed
-- [ ] pkgdown::build_site() — site builds (or SKIPPED — scope)
-- [ ] covr::package_coverage() — 95% floor, 98% target, no uncovered new lines
+- [ ] R CMD check --as-cran --no-tests — 0 errors, 0 warnings, notes
+      reviewed; all @examples run clean
+- [ ] pkgdown::check_pkgdown() — every export is in the reference index (or
+      SKIPPED — scope)
 - [ ] air format --check . — every R file already formatted
 ```
 
@@ -344,12 +345,10 @@ if they fail, the builder iterates. The tester's audit is separate.
 | Gate | Result | Notes |
 |------|--------|-------|
 | devtools::document() | PASS/FAIL | {drift detected or clean} |
-| devtools::test() | PASS/FAIL | {summary} |
-| devtools::run_examples() | PASS/FAIL | {summary} |
+| tests + covr | PASS/FAIL | {FAIL, WARN, SKIP, PASS counts; coverage %; drop vs baseline, uncovered new lines} |
 | R CMD build | PASS/FAIL | {tarball} |
 | R CMD check --as-cran | PASS/FAIL | {errors, warnings, notes} |
-| pkgdown::build_site() | PASS/FAIL/SKIPPED | {reason if skipped} |
-| covr::package_coverage() | {%} | {drop vs baseline, uncovered new lines} |
+| pkgdown::check_pkgdown() | PASS/FAIL/SKIPPED | {reason if skipped} |
 | air format --check . | PASS/FAIL | {count of unformatted files} |
 
 Tree: {git tree hash at gate time}
