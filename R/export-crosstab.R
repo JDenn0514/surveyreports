@@ -27,10 +27,11 @@
 #'   names two or more variables from `banner` whose levels will be crossed
 #'   (interacted) to form additional crosstab columns. Default `NULL`.
 #' @param min_eff_n Numeric scalar, at or above `0`. `100` is the default.
-#'   A banner level whose effective sample size is below `min_eff_n` is not
-#'   shown: its column is left out of every table. A level whose effective
+#'   A subgroup whose effective sample size is below `min_eff_n` is not
+#'   shown: its column is left out of every table. A subgroup is a banner
+#'   level or a crossed cell of `interactions`. A subgroup whose effective
 #'   sample size equals `min_eff_n` is shown. The test reads the effective
-#'   sample size, not the unweighted count. `0` shows every level.
+#'   sample size, not the unweighted count. `0` shows every subgroup.
 #' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
 #'   standard errors or confidence intervals are shown. Default `NULL`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
@@ -44,6 +45,11 @@
 #' @param show_total Logical. Whether to render a `Total` column (the
 #'   full-sample distribution) before the banner columns in every table.
 #'   Default `TRUE`.
+#' @param withheld_note One of `"once"` (default), `"every"`, or `"none"`.
+#'   Where the list of withheld subgroups is written. `"once"` writes it on
+#'   the `"About"` sheet. `"every"` writes it under each table. `"none"`
+#'   writes it nowhere. The argument does not change which subgroups are
+#'   withheld, and the console warning is raised at every value.
 #' @param base_notes Optional named character vector mapping variable names
 #'   to base descriptions (e.g.
 #'   `c(q5 = "Base: adults who donated (n=425)")`). When a rendered table's
@@ -82,6 +88,7 @@ export_crosstab <- function(
   show_eff_n = FALSE,
   decimals = 1L,
   show_total = TRUE,
+  withheld_note = c("once", "every", "none"),
   base_notes = NULL
 ) {
   # 1. survey_collection rejection FIRST
@@ -199,6 +206,7 @@ export_crosstab <- function(
   .validate_banner_labels(design, banner_resolved)
 
   layout <- match.arg(layout)
+  withheld_note <- match.arg(withheld_note)
 
   # The heading of each surviving banner column: its variable label, or its
   # name when no label is set (spec 3.8). A column that falls back is named
@@ -249,16 +257,41 @@ export_crosstab <- function(
   vars_resolved <- kept$vars
   classify_out <- kept$classify_out
 
-  # The "About" cover sheet comes first. No withholding exists yet, so the
-  # withheld block is not written (spec 2.3, spec 3.14).
+  # 16. The withholding warnings, from the withheld frame that estimation
+  # returned. They come after the all-NA drop, so a call whose every variable
+  # is all-NA aborts at step 15 and raises none of them (spec 3.11).
+  # The full-sample test reuses .build_withheld(), the one owner of the floor
+  # comparison, on the full sample's own counts. It does not read the
+  # subgroup frame, and it removes nothing (spec 3.5).
+  full_sample <- .build_withheld(.resolve_eff_n(design), min_eff_n, "")
+  .emit_withholding_warnings(
+    freq_result$withheld,
+    freq_result$emptied_groups,
+    full_sample,
+    min_eff_n
+  )
+
+  # 17. The workbook build. The "About" cover sheet comes first. The caller
+  # owns the withheld_note decision: the withheld frame reaches the cover
+  # sheet only at "once", and NULL tells it to write no withheld block
+  # (spec 3.14). min_eff_n and has_banner decide the glossary entry
+  # `Why a column is missing` (spec 3.15).
   wb <- .build_workbook(
     design,
-    withheld = NULL,
+    withheld = if (withheld_note == "once") freq_result$withheld else NULL,
+    min_eff_n = min_eff_n,
     has_banner = TRUE,
     string_cells = FALSE,
     decimals = decimals,
     variance = variance
   )
+
+  # The lines written at the end of each block, at "every" only (spec 3.16).
+  withheld_lines <- if (withheld_note == "every") {
+    .format_withheld_lines(freq_result$withheld, min_eff_n)
+  } else {
+    character(0)
+  }
 
   if (layout == "per_question") {
     groups_done <- character(0)
@@ -286,7 +319,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -309,7 +342,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -332,7 +365,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -368,7 +401,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -389,7 +422,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -410,7 +443,7 @@ export_crosstab <- function(
           show_n,
           show_eff_n,
           decimals,
-          freq_result$suppressed,
+          withheld_lines,
           banner_resolved,
           interactions,
           banner_headings,
@@ -426,6 +459,84 @@ export_crosstab <- function(
 
   openxlsx2::wb_save(wb, file_name)
   invisible(file_name)
+}
+
+# -- Withholding warnings ------------------------------------------------------
+
+# The withholding warnings of step 16 of spec 3.11, in the order of that
+# section. export_crosstab() calls it after the all-NA drop and before the
+# workbook build.
+# - surveyreports_warning_subgroup_withheld: once per call when the withheld
+#   frame has rows. Its bullets are the lines of .format_withheld_lines(), so
+#   the console, the About sheet and the block footer use one wording
+#   (spec 3.14).
+# - surveyreports_warning_banner_all_withheld: when `emptied_groups` names a
+#   banner column or an interaction whose every level is withheld.
+# - surveyreports_warning_full_sample_below_min: when `full_sample`, the
+#   .build_withheld() frame of the full sample's own counts, has a row.
+#   Nothing is removed for it (spec 3.5).
+# Each bullet is interpolated from the vector and not parsed as cli markup, so
+# a level label holding a brace prints as written.
+#' @keywords internal
+#' @noRd
+.emit_withholding_warnings <- function(
+  withheld,
+  emptied_groups,
+  full_sample,
+  min_eff_n
+) {
+  lines <- .format_withheld_lines(withheld, min_eff_n)
+  n_lines <- length(lines)
+  if (n_lines > 0L) {
+    bullets <- stats::setNames(
+      paste0("{lines[[", seq_len(n_lines), "]]}"),
+      rep("*", n_lines)
+    )
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "{n_lines} subgroup{?s} {?is/are} below {.arg min_eff_n} and ",
+          "{?is/are} withheld."
+        ),
+        bullets,
+        "i" = "Each withheld subgroup has no column in any table."
+      ),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+  }
+
+  n_groups <- length(emptied_groups)
+  if (n_groups > 0L) {
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "Every subgroup of {n_groups} column group{?s} is below ",
+          "{.arg min_eff_n}: {.field {emptied_groups}}."
+        ),
+        "i" = paste0(
+          "{cli::qty(n_groups)}The tables are written without ",
+          "{?that column group/those column groups}."
+        )
+      ),
+      class = "surveyreports_warning_banner_all_withheld"
+    )
+  }
+
+  if (nrow(full_sample) > 0L) {
+    full_eff_n <- formatC(full_sample$n_eff[[1L]], format = "f", digits = 1L)
+    floor_text <- format(min_eff_n, scientific = FALSE, trim = TRUE)
+    cli::cli_warn(
+      c(
+        "!" = paste0(
+          "The effective sample size of the full sample, {full_eff_n}, is ",
+          "below {.arg min_eff_n} ({floor_text})."
+        ),
+        "i" = "The full sample is not a subgroup, so its column is still written."
+      ),
+      class = "surveyreports_warning_full_sample_below_min"
+    )
+  }
+  invisible(TRUE)
 }
 
 # -- min_eff_n -----------------------------------------------------------------
@@ -631,7 +742,7 @@ export_crosstab <- function(
 
   if (!is.null(interactions)) {
     for (int_vars in interactions) {
-      int_label <- paste(int_vars, collapse = " \u00d7 ")
+      int_label <- .interaction_label(int_vars)
       int_rows <- frame[
         frame$subgroup_type == "interaction" &
           frame$subgroup_var == int_label,
@@ -755,7 +866,7 @@ export_crosstab <- function(
   show_n,
   show_eff_n,
   decimals,
-  suppressed,
+  withheld_lines,
   banner_resolved,
   interactions,
   banner_headings,
@@ -892,14 +1003,7 @@ export_crosstab <- function(
     }
   }
 
-  # Suppression footnote
-  next_row <- total_row_num + 1L
-  if (nrow(suppressed) > 0L) {
-    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
-    next_row <- next_row + nrow(suppressed)
-  }
-
-  list(wb = wb, next_row = next_row)
+  .write_withheld_lines(wb, sheet, withheld_lines, total_row_num + 1L)
 }
 
 #' @keywords internal
@@ -912,7 +1016,7 @@ export_crosstab <- function(
   show_n,
   show_eff_n,
   decimals,
-  suppressed,
+  withheld_lines,
   banner_resolved,
   interactions,
   banner_headings,
@@ -1015,13 +1119,12 @@ export_crosstab <- function(
     }
   }
 
-  next_row <- data_start + length(sata_vars)
-  if (nrow(suppressed) > 0L) {
-    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
-    next_row <- next_row + nrow(suppressed)
-  }
-
-  list(wb = wb, next_row = next_row)
+  .write_withheld_lines(
+    wb,
+    sheet,
+    withheld_lines,
+    data_start + length(sata_vars)
+  )
 }
 
 #' @keywords internal
@@ -1034,7 +1137,7 @@ export_crosstab <- function(
   show_n,
   show_eff_n,
   decimals,
-  suppressed,
+  withheld_lines,
   banner_resolved,
   interactions,
   banner_headings,
@@ -1198,11 +1301,24 @@ export_crosstab <- function(
     }
   }
 
-  next_row <- current_row
-  if (nrow(suppressed) > 0L) {
-    wb <- .write_suppression_footnote(wb, sheet, suppressed, next_row)
-    next_row <- next_row + nrow(suppressed)
-  }
+  .write_withheld_lines(wb, sheet, withheld_lines, current_row)
+}
 
-  list(wb = wb, next_row = next_row)
+# The withheld lines at the end of one block, one per row in column A, from
+# `start_row` (spec 3.16). The caller passes character(0) unless
+# withheld_note is "every", and then nothing is written. Returns
+# list(wb = , next_row = ).
+#' @keywords internal
+#' @noRd
+.write_withheld_lines <- function(wb, sheet, lines, start_row) {
+  for (i in seq_along(lines)) {
+    wb <- openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = lines[[i]],
+      start_row = start_row + i - 1L,
+      start_col = 1L
+    )
+  }
+  list(wb = wb, next_row = start_row + length(lines))
 }

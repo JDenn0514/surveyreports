@@ -18,6 +18,7 @@ export_crosstab(
   show_eff_n = FALSE,
   decimals = 1L,
   show_total = TRUE,
+  withheld_note = c("once", "every", "none"),
   base_notes = NULL
 )
 }
@@ -48,10 +49,11 @@ names two or more variables from \code{banner} whose levels will be crossed
 (interacted) to form additional crosstab columns. Default \code{NULL}.}
 
 \item{min_eff_n}{Numeric scalar, at or above \code{0}. \code{100} is the default.
-A banner level whose effective sample size is below \code{min_eff_n} is not
-shown: its column is left out of every table. A level whose effective
+A subgroup whose effective sample size is below \code{min_eff_n} is not
+shown: its column is left out of every table. A subgroup is a banner
+level or a crossed cell of \code{interactions}. A subgroup whose effective
 sample size equals \code{min_eff_n} is shown. The test reads the effective
-sample size, not the unweighted count. \code{0} shows every level.}
+sample size, not the unweighted count. \code{0} shows every subgroup.}
 
 \item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
 standard errors or confidence intervals are shown. Default \code{NULL}.}
@@ -71,6 +73,12 @@ percentages. Default \code{1L}.}
 \item{show_total}{Logical. Whether to render a \code{Total} column (the
 full-sample distribution) before the banner columns in every table.
 Default \code{TRUE}.}
+
+\item{withheld_note}{One of \code{"once"} (default), \code{"every"}, or \code{"none"}.
+Where the list of withheld subgroups is written. \code{"once"} writes it on
+the \code{"About"} sheet. \code{"every"} writes it under each table. \code{"none"}
+writes it nowhere. The argument does not change which subgroups are
+withheld, and the console warning is raised at every value.}
 
 \item{base_notes}{Optional named character vector mapping variable names
 to base descriptions (e.g.

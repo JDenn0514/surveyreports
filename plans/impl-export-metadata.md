@@ -101,7 +101,7 @@ stands.** Only the formal arguments come forward.
 - [x] PR 12: `feature/crosstab-banner-headings` — banner spanners and
       interaction levels read labels; an all-NA variable is dropped with a
       warning, in both functions, and surveycore's all-NA warning is muffled.
-- [ ] PR 13: `feature/crosstab-withheld-notices` — the withholding warnings,
+- [x] PR 13: `feature/crosstab-withheld-notices` — the withholding warnings,
       the withheld lines and `withheld_note`.
 - [ ] PR 14: `feature/crosstab-label-cols-and-sizes` — `label_cols`, the two
       sample-size rows, and the shared block preamble and footer.
