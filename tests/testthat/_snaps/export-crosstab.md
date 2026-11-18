@@ -234,3 +234,57 @@
       ! 1 subgroup suppressed due to small sample size.
       i Suppressed: gen=Female.
 
+# export_crosstab() names an unlabelled banner column in the missing-label warning (XV-06)
+
+    Code
+      export_crosstab(d, vars = q1, banner = nolab, file_name = out, min_eff_n = 0)
+    Condition
+      Warning:
+      ! Variable nolab has no variable_label.
+      i Column name used as banner heading.
+
+# export_crosstab() rejects a banner value label on two codes (XE-04)
+
+    Code
+      export_crosstab(d, vars = q1, banner = gen, file_name = out)
+    Condition
+      Error in `export_crosstab()`:
+      x Banner column gen uses one value label for 2 or more codes.
+      i Repeated label: "Female".
+      v Use `surveycore::set_val_labels()` to give each code its own label.
+
+# export_crosstab() rejects a banner with two unlabelled codes (XE-05)
+
+    Code
+      export_crosstab(d, vars = q1, banner = gen, file_name = out)
+    Condition
+      Error in `export_crosstab()`:
+      x Banner column gen has 2 observed codes with no value label.
+      i Codes with no label: 2 and 3.
+      v Use `surveycore::set_val_labels()` to label these codes, so at most one is left without a label.
+
+# export_crosstab() names every dropped all-NA variable in one warning (XV-14)
+
+    Code
+      export_crosstab(d, vars = c(q1, all_na_var, q2, all_na_2), banner = group,
+      file_name = out, min_eff_n = 0)
+    Condition
+      Warning:
+      ! Variables q1, q2, and group have no variable_label.
+      i Variable name used as question text.
+      i Column name used as banner heading.
+      Warning:
+      ! Dropped 2 variables with no non-missing value: all_na_var and all_na_2.
+      i The check reads the rows the design tabulates: the rows inside the domain on a domain-restricted design, and every wave of a collection.
+
+# export_crosstab() aborts when every variable is all-NA (XE-16)
+
+    Code
+      export_crosstab(d, vars = c(all_na_var, all_na_2), banner = gen, file_name = out,
+      min_eff_n = 0)
+    Condition
+      Error in `export_crosstab()`:
+      x No variable in `vars` has a non-missing value.
+      i All-NA variables: all_na_var and all_na_2.
+      v Select at least one variable with data in `vars`.
+

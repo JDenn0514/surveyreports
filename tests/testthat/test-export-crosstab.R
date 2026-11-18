@@ -436,8 +436,8 @@ test_that("export_crosstab() heads a single block with variable_label even when 
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   d <- surveycore::set_question_preface(
     d,
@@ -639,8 +639,8 @@ test_that("export_crosstab() does not warn when variable_label is set", {
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -868,21 +868,6 @@ test_that("export_crosstab() errors when interactions contains a var not in bann
 
 # 13. Edge cases ------------------------------------------------------------------
 
-test_that("export_crosstab() handles all-NA variable without crashing", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  # all_na_var is NA_character_ throughout — suppressWarnings covers the
-  # missing-variable-label warning that fires for unlabelled variables
-  suppressWarnings(
-    export_crosstab(d, vars = all_na_var, banner = group, file_name = out)
-  )
-
-  expect_true(file.exists(out))
-  expect_gt(file.info(out)$size, 0L)
-})
-
 test_that("export_crosstab() handles single-value variable without crashing", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
@@ -936,8 +921,8 @@ test_that("export_crosstab() handles single-level banner without error", {
   )
   d_one_banner <- surveycore::set_var_label(
     d_one_banner,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "banner_one"),
+    label = c("Agreement question", "Banner")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1062,8 +1047,8 @@ test_that("export_crosstab() renders a Total column before the banner columns by
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1088,8 +1073,8 @@ test_that("export_crosstab() Total column values match the full-sample distribut
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1116,8 +1101,8 @@ test_that("export_crosstab() show_total=FALSE restores the banner-only layout", 
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1149,8 +1134,8 @@ test_that("export_crosstab() show_total shifts the N column one position right",
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out_with <- withr::local_tempfile(fileext = ".xlsx")
   out_without <- withr::local_tempfile(fileext = ".xlsx")
@@ -1188,8 +1173,8 @@ test_that("export_crosstab() SATA tables gain the Total column by default", {
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = c("sata_a", "sata_b", "sata_c"),
-    label = c("Option A", "Option B", "Option C")
+    variable = c("sata_a", "sata_b", "sata_c", "group"),
+    label = c("Option A", "Option B", "Option C", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1223,8 +1208,8 @@ test_that("export_crosstab() writes an italic base row under the title and shift
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1248,8 +1233,8 @@ test_that("export_crosstab() writes no base row when base_notes is NULL", {
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = "q1",
-    label = "Agreement question"
+    variable = c("q1", "group"),
+    label = c("Agreement question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1265,8 +1250,8 @@ test_that("export_crosstab() writes base rows only for variables with an entry",
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = c("q1", "q2"),
-    label = c("Agreement question", "Yes/no question")
+    variable = c("q1", "q2", "group"),
+    label = c("Agreement question", "Yes/no question", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1290,8 +1275,24 @@ test_that("export_crosstab() keys sata and battery base notes by the group's fir
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = c("sata_a", "sata_b", "sata_c", "bat_1", "bat_2", "bat_3"),
-    label = c("Option A", "Option B", "Option C", "Item 1", "Item 2", "Item 3")
+    variable = c(
+      "sata_a",
+      "sata_b",
+      "sata_c",
+      "bat_1",
+      "bat_2",
+      "bat_3",
+      "group"
+    ),
+    label = c(
+      "Option A",
+      "Option B",
+      "Option C",
+      "Item 1",
+      "Item 2",
+      "Item 3",
+      "Group"
+    )
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1388,8 +1389,8 @@ test_that("export_crosstab() battery tables use Item and Response label columns"
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = c("bat_1", "bat_2", "bat_3"),
-    label = c("Item one", "Item two", "Item three")
+    variable = c("bat_1", "bat_2", "bat_3", "group"),
+    label = c("Item one", "Item two", "Item three", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1423,8 +1424,8 @@ test_that("export_crosstab() battery N column follows the banner columns", {
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
     d,
-    variable = c("bat_1", "bat_2", "bat_3"),
-    label = c("Item one", "Item two", "Item three")
+    variable = c("bat_1", "bat_2", "bat_3", "group"),
+    label = c("Item one", "Item two", "Item three", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1451,8 +1452,8 @@ test_that("export_crosstab() prints 0 for an asked-but-never-selected SATA optio
   d@data$sata_b <- 0L
   d <- surveycore::set_var_label(
     d,
-    variable = c("sata_a", "sata_b", "sata_c"),
-    label = c("Option A", "Option B", "Option C")
+    variable = c("sata_a", "sata_b", "sata_c", "group"),
+    label = c("Option A", "Option B", "Option C", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -1482,8 +1483,8 @@ test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA t
   d@data$sata_c <- ifelse(asked, d@data$sata_c, NA_integer_)
   d <- surveycore::set_var_label(
     d,
-    variable = c("sata_a", "sata_b", "sata_c"),
-    label = c("Option A", "Option B", "Option C")
+    variable = c("sata_a", "sata_b", "sata_c", "group"),
+    label = c("Option A", "Option B", "Option C", "Group")
   )
   out <- withr::local_tempfile(fileext = ".xlsx")
 
@@ -4355,8 +4356,7 @@ test_that("export_crosstab() keeps a vars column for each substantive role (XM-1
   }
 })
 
-# The spanner is the banner column's name until the banner headings are
-# wired, so the spanner assertions accept the name or the label. The
+# The spanner reads the banner column's variable label (spec 3.8). The
 # label-independent check is the comparison with the same call at
 # banner = gen: dropping reg must leave exactly that sheet.
 test_that("export_crosstab() drops a paradata column from banner (XM-11)", {
@@ -4400,7 +4400,7 @@ test_that("export_crosstab() drops a paradata column from banner (XM-11)", {
       label = paste0(nm, ": no Region spanner")
     )
     expect_true(
-      any(c("gen", "Gender") %in% spanners),
+      "Gender" %in% spanners,
       label = paste0(nm, ": the Gender spanner")
     )
     expect_identical(
@@ -5331,8 +5331,8 @@ column_cells <- function(path, sheet, heading) {
 }
 
 # The number of columns the gen spanner spans: 1 when its cell is not merged,
-# else the width of its merged range. The spanner is the banner column's name
-# until the banner headings are wired, so it may read "gen" or "Gender".
+# else the width of its merged range. The spanner reads the variable label,
+# "Gender" (spec 3.8). The match also accepts the column name, "gen".
 spanner_width <- function(path, sheet) {
   rows <- sheet_rows(path, sheet)
   spanner_row <- heading_index(rows) - 1L
@@ -5616,5 +5616,806 @@ test_that("export_crosstab() withholds a below-floor column from SATA and batter
         )
       }
     }
+  }
+})
+
+# 27. Banner headings and the all-NA drop --------------------------------------
+# A banner spanner reads the column's variable label, an interaction spanner
+# reads the labels of its parts, and a crossed heading reads value labels
+# (spec 3.8). The banner label checks of spec 3.7 run on the surviving banner
+# columns. A variable with no non-missing value leaves the output at step 15
+# of spec 3.11, with one warning that names every dropped variable, or an
+# error when no variable is left (spec 3.17, spec 3.18).
+
+# The labelled `reg` banner of the test-spec: codes 1 and 2, labelled North
+# and South, with the variable label "Region".
+add_reg_fixture <- function(d) {
+  d@data$reg <- c(rep(1, 120), rep(2, 80))
+  d <- surveycore::set_val_labels(d, reg = c(North = 1, South = 2))
+  surveycore::set_var_label(d, reg = "Region")
+}
+
+# A factor banner `lik` whose level order is not alphabetical, with the
+# variable label "Likert". The levels repeat in a fixed order, so every design
+# holds every level in its tabulated rows.
+add_lik_fixture <- function(d) {
+  d@data$lik <- factor(
+    rep(c("Low", "Medium", "High"), length.out = nrow(d@data)),
+    levels = c("Low", "Medium", "High")
+  )
+  surveycore::set_var_label(d, lik = "Likert")
+}
+
+# A banner `nolab` with no variable label. Its values alternate, so every
+# design holds both levels.
+add_nolab_fixture <- function(d) {
+  d@data$nolab <- rep(c("x", "y"), length.out = nrow(d@data))
+  d
+}
+
+# The duplicate-label fixture: the labelled `gen` banner with one label,
+# Female, on the codes 2 and 3.
+add_duplicate_label <- function(d) {
+  d <- add_gen_fixture(d)
+  surveycore::set_val_labels(d, gen = c(Male = 1, Female = 2, Female = 3))
+}
+
+# The two-unlabelled-codes fixture: `gen` holds the codes 1, 2 and 3, and only
+# code 1 carries a label. surveycore warns about the unlabelled codes when
+# the labels are set. That warning is fixture setup, not the behavior under
+# test.
+add_unlabelled_codes <- function(d) {
+  d <- add_gen_fixture(d)
+  d@data$gen <- c(rep(1, 100), rep(2, 50), rep(3, 50))
+  suppressWarnings(
+    surveycore::set_val_labels(d, gen = c(Male = 1)),
+    classes = "surveycore_warning_missing_labels"
+  )
+}
+
+# A column all-NA inside group A only, with a variable label, so the
+# missing-label warning does not fire when the column is kept.
+add_dom_na <- function(d) {
+  d@data$dom_na <- ifelse(d@data$group == "A", NA_character_, d@data$q1)
+  surveycore::set_var_label(d, dom_na = "Asked outside group A")
+}
+
+# Sets each named column to all-NA integers. The SATA and battery metadata of
+# the generator stays on the column.
+set_all_na <- function(d, cols) {
+  for (col in cols) {
+    d@data[[col]] <- NA_integer_
+  }
+  d
+}
+
+# Removes the file at `path` when it exists, so the next assertion reads the
+# file that the next call writes, or its absence.
+fresh_path <- function(path) {
+  if (file.exists(path)) {
+    file.remove(path)
+  }
+  invisible(path)
+}
+
+# The spanner row of the first block of a sheet: the row above its heading
+# row, as a character vector, blank cells NA.
+spanner_cells <- function(path, sheet, label = "Response") {
+  rows <- sheet_rows(path, sheet)
+  as.character(unlist(rows[heading_index(rows, label) - 1L, ]))
+}
+
+# Every non-blank cell of one sheet, as a character vector.
+sheet_text <- function(path, sheet) {
+  cells <- as.character(unlist(sheet_rows(path, sheet)))
+  cells[!is.na(cells)]
+}
+
+# Writes the q1 crosstab of the gen and reg fixtures, crossed.
+write_gen_reg_crossed <- function(d, path) {
+  fresh_path(path)
+  crosstab_quiet(
+    d,
+    vars = q1,
+    banner = c(gen, reg),
+    interactions = list(c("gen", "reg")),
+    file_name = path,
+    min_eff_n = 0
+  )
+}
+
+test_that("export_crosstab() writes the variable label as the banner spanner (XH-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_gen_fixture(designs[[nm]])
+
+    crosstab_quiet(d, vars = q1, banner = gen, file_name = out, min_eff_n = 0)
+
+    spanners <- spanner_cells(out, "q1")
+    expect_true("Gender" %in% spanners, label = paste0(nm, ": Gender spanner"))
+    expect_false("gen" %in% spanners, label = paste0(nm, ": no gen spanner"))
+  }
+})
+
+test_that("export_crosstab() falls back to the column name for an unlabelled banner (XH-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_nolab_fixture(guard_design(designs[[nm]]))
+
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = q1,
+        banner = nolab,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_missing_variable_label"
+    )
+
+    expect_true(
+      "nolab" %in% spanner_cells(out, "q1"),
+      label = paste0(nm, ": nolab spanner")
+    )
+  }
+})
+
+test_that("export_crosstab() names an unlabelled banner column in the missing-label warning (XV-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_nolab_fixture(guard_design(designs[[nm]]))
+
+    w <- expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = q1,
+        banner = nolab,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_missing_variable_label"
+    )
+
+    msg <- conditionMessage(w)
+    expect_match(msg, "nolab", fixed = TRUE, label = paste0(nm, ": nolab"))
+    expect_no_match(msg, "q1", fixed = TRUE, label = paste0(nm, ": no q1"))
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+  }
+
+  d <- add_nolab_fixture(guard_design(designs$taylor))
+  expect_snapshot(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = nolab,
+      file_name = out,
+      min_eff_n = 0
+    )
+  )
+})
+
+test_that("export_crosstab() writes value labels in a crossed heading (XH-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+
+    write_gen_reg_crossed(d, out)
+
+    headings <- heading_cells(out, "q1")
+    expect_true(
+      "Male \u00d7 North" %in% headings,
+      label = paste0(nm, ": Male x North heading")
+    )
+    expect_false(
+      "1 \u00d7 1" %in% headings,
+      label = paste0(nm, ": no 1 x 1 heading")
+    )
+  }
+})
+
+test_that("export_crosstab() writes both variable labels on an interaction spanner (XH-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+
+    write_gen_reg_crossed(d, out)
+
+    spanners <- spanner_cells(out, "q1")
+    expect_true(
+      "Gender \u00d7 Region" %in% spanners,
+      label = paste0(nm, ": Gender x Region spanner")
+    )
+    expect_false(
+      "gen \u00d7 reg" %in% spanners,
+      label = paste0(nm, ": no gen x reg spanner")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps the factor level order in crossed headings (XH-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  expected <- paste(
+    rep(c("Low", "Medium", "High"), times = 2L),
+    rep(c("North", "South"), each = 3L),
+    sep = " \u00d7 "
+  )
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_reg_fixture(add_lik_fixture(guard_design(designs[[nm]])))
+
+    crosstab_quiet(
+      d,
+      vars = q1,
+      banner = c(lik, reg),
+      interactions = list(c("lik", "reg")),
+      file_name = out,
+      min_eff_n = 0
+    )
+
+    headings <- heading_cells(out, "q1")
+    crossed <- headings[grepl("\u00d7", headings, fixed = TRUE)]
+    expect_identical(crossed, expected, label = paste0(nm, ": crossed order"))
+  }
+})
+
+test_that("export_crosstab() keeps the factor level order of a banner (XH-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  lik_levels <- c("Low", "Medium", "High")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_lik_fixture(guard_design(designs[[nm]]))
+
+    crosstab_quiet(d, vars = q1, banner = lik, file_name = out, min_eff_n = 0)
+
+    headings <- heading_cells(out, "q1")
+    expect_identical(
+      headings[headings %in% lik_levels],
+      lik_levels,
+      label = paste0(nm, ": heading order")
+    )
+  }
+})
+
+test_that("export_crosstab() names a sheet tab by the variable name (XH-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  long_label <- paste(
+    "How much do you agree or disagree with the statement",
+    "about the local council?"
+  )
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_var_label(
+      guard_design(designs[[nm]]),
+      q1 = long_label
+    )
+
+    crosstab_quiet(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      layout = "per_question",
+      min_eff_n = 0
+    )
+
+    expect_identical(data_sheets(out), "q1", label = paste0(nm, ": sheets"))
+  }
+})
+
+test_that("export_crosstab() rejects a banner value label on two codes (XE-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_duplicate_label(designs[[nm]])
+
+    err <- expect_error(
+      crosstab_quiet(d, vars = q1, banner = gen, file_name = out),
+      class = "surveyreports_error_duplicate_value_label"
+    )
+
+    msg <- conditionMessage(err)
+    expect_match(msg, "\\bgen\\b", label = paste0(nm, ": names gen"))
+    expect_match(msg, "Female", fixed = TRUE, label = paste0(nm, ": Female"))
+    expect_false(file.exists(out), label = paste0(nm, ": no file"))
+  }
+
+  d <- add_duplicate_label(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = gen, file_name = out)
+  )
+})
+
+test_that("export_crosstab() rejects a banner with two unlabelled codes (XE-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_unlabelled_codes(designs[[nm]])
+
+    err <- expect_error(
+      crosstab_quiet(d, vars = q1, banner = gen, file_name = out),
+      class = "surveyreports_error_multiple_unlabelled_codes"
+    )
+
+    msg <- conditionMessage(err)
+    expect_match(msg, "\\bgen\\b", label = paste0(nm, ": names gen"))
+    expect_match(msg, "\\b2\\b", label = paste0(nm, ": code 2"))
+    expect_match(msg, "\\b3\\b", label = paste0(nm, ": code 3"))
+    expect_false(file.exists(out), label = paste0(nm, ": no file"))
+  }
+
+  d <- add_unlabelled_codes(designs$taylor)
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(d, vars = q1, banner = gen, file_name = out)
+  )
+})
+
+test_that("export_crosstab() drops an all-NA variable (XX-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  ref <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    fresh_path(ref)
+    lbl <- paste0("export_crosstab(), ", nm)
+    d <- guard_design(designs[[nm]])
+
+    w <- expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, all_na_var),
+        banner = group,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+    crosstab_quiet(d, vars = q1, banner = group, file_name = ref, min_eff_n = 0)
+
+    expect_identical(result, out, label = paste0(lbl, ": the path"))
+    expect_match(
+      conditionMessage(w),
+      "all_na_var",
+      fixed = TRUE,
+      label = paste0(lbl, ": names all_na_var")
+    )
+    expect_identical(data_sheets(out), "q1", label = paste0(lbl, ": sheets"))
+    expect_identical(
+      sheet_rows(out, "q1"),
+      sheet_rows(ref, "q1"),
+      label = paste0(lbl, ": the q1 block as with vars = q1")
+    )
+  }
+})
+
+test_that("export_crosstab() names every dropped all-NA variable in one warning (XV-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- designs[[nm]]
+    d@data$all_na_2 <- NA_character_
+
+    w_label <- expect_warning(
+      w_na <- expect_warning(
+        result <- crosstab_quiet(
+          d,
+          vars = c(q1, all_na_var, q2, all_na_2),
+          banner = group,
+          file_name = out,
+          min_eff_n = 0
+        ),
+        class = "surveyreports_warning_all_na_dropped"
+      ),
+      class = "surveyreports_warning_missing_variable_label"
+    )
+
+    msg_na <- conditionMessage(w_na)
+    first <- regexpr("all_na_var", msg_na, fixed = TRUE)
+    second <- regexpr("all_na_2", msg_na, fixed = TRUE)
+    expect_true(first > 0L, label = paste0(nm, ": names all_na_var"))
+    expect_true(second > first, label = paste0(nm, ": all_na_2 after"))
+    expect_no_match(msg_na, "q1", fixed = TRUE, label = paste0(nm, ": no q1"))
+    expect_no_match(msg_na, "q2", fixed = TRUE, label = paste0(nm, ": no q2"))
+
+    msg_label <- conditionMessage(w_label)
+    expect_match(
+      msg_label,
+      "q1",
+      fixed = TRUE,
+      label = paste0(nm, ": label q1")
+    )
+    expect_match(
+      msg_label,
+      "q2",
+      fixed = TRUE,
+      label = paste0(nm, ": label q2")
+    )
+    expect_no_match(
+      msg_label,
+      "all_na",
+      fixed = TRUE,
+      label = paste0(nm, ": the label warning names no dropped variable")
+    )
+
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_identical(
+      openxlsx2::wb_load(out)$sheet_names,
+      c("About", "q1", "q2"),
+      label = paste0(nm, ": sheets")
+    )
+  }
+
+  d <- designs$taylor
+  d@data$all_na_2 <- NA_character_
+  expect_snapshot(
+    export_crosstab(
+      d,
+      vars = c(q1, all_na_var, q2, all_na_2),
+      banner = group,
+      file_name = out,
+      min_eff_n = 0
+    )
+  )
+})
+
+test_that("export_crosstab() aborts when every variable is all-NA (XE-16)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- add_gen_fixture(designs[[nm]])
+    d@data$all_na_2 <- NA_character_
+
+    expect_no_warning(
+      err <- expect_error(
+        crosstab_quiet(
+          d,
+          vars = c(all_na_var, all_na_2),
+          banner = gen,
+          file_name = out,
+          min_eff_n = 0
+        ),
+        class = "surveyreports_error_vars_all_na"
+      )
+    )
+
+    msg <- conditionMessage(err)
+    expect_match(msg, "all_na_var", fixed = TRUE, label = paste0(nm, ": var"))
+    expect_match(msg, "all_na_2", fixed = TRUE, label = paste0(nm, ": var 2"))
+    expect_false(
+      inherits(err, "surveyreports_error_vars_all_dropped"),
+      label = paste0(nm, ": not the role guard class")
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file"))
+  }
+
+  d <- add_gen_fixture(designs$taylor)
+  d@data$all_na_2 <- NA_character_
+  expect_snapshot(
+    error = TRUE,
+    export_crosstab(
+      d,
+      vars = c(all_na_var, all_na_2),
+      banner = gen,
+      file_name = out,
+      min_eff_n = 0
+    )
+  )
+})
+
+test_that("export_crosstab() muffles the surveycore all-NA warning (XV-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_var_label(
+      designs[[nm]],
+      all_na_var = "No answers",
+      q1 = "Question one",
+      group = "Group"
+    )
+
+    expect_no_warning(
+      w <- expect_warning(
+        crosstab_quiet(
+          d,
+          vars = c(all_na_var, q1),
+          banner = group,
+          file_name = out,
+          min_eff_n = 0
+        ),
+        class = "surveyreports_warning_all_na_dropped"
+      ),
+      class = "surveycore_warning_all_na_freqs"
+    )
+
+    expect_match(
+      conditionMessage(w),
+      "all_na_var",
+      fixed = TRUE,
+      label = paste0(nm, ": names all_na_var")
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+  }
+})
+
+# The interaction helper is the third of the three frequency helpers that
+# muffle the class (spec 2.3). XV-15 reaches the other two.
+test_that("export_crosstab() muffles the surveycore all-NA warning on an interaction (XV-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_var_label(
+      add_reg_fixture(add_gen_fixture(designs[[nm]])),
+      all_na_var = "No answers"
+    )
+
+    expect_no_warning(
+      w <- expect_warning(
+        crosstab_quiet(
+          d,
+          vars = c(all_na_var, q1),
+          banner = c(gen, reg),
+          interactions = list(c("gen", "reg")),
+          file_name = out,
+          min_eff_n = 0
+        ),
+        class = "surveyreports_warning_all_na_dropped"
+      ),
+      class = "surveycore_warning_all_na_freqs"
+    )
+
+    expect_match(
+      conditionMessage(w),
+      "all_na_var",
+      fixed = TRUE,
+      label = paste0(nm, ": names all_na_var")
+    )
+    expect_identical(data_sheets(out), "q1", label = paste0(nm, ": sheets"))
+  }
+})
+
+test_that("export_crosstab() keeps a group whose other items survive (XX-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  sata_preface <- "Which of the following apply to you?"
+  bat_preface <- "Please rate the following items:"
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    lbl <- paste0("export_crosstab(), ", nm)
+    d <- set_all_na(cover_design(designs[[nm]]), c("sata_a", "bat_1"))
+
+    w <- expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    msg <- conditionMessage(w)
+    first <- regexpr("sata_a", msg, fixed = TRUE)
+    second <- regexpr("bat_1", msg, fixed = TRUE)
+    expect_true(first > 0L, label = paste0(lbl, ": names sata_a"))
+    expect_true(second > first, label = paste0(lbl, ": bat_1 after sata_a"))
+    expect_identical(
+      data_sheets(out),
+      c("q1", "sata_b", "bat_2"),
+      label = paste0(lbl, ": sheets")
+    )
+
+    sata_a_col <- sheet_col_a(out, "sata_b")
+    expect_identical(
+      sata_a_col[[1L]],
+      sata_preface,
+      label = paste0(lbl, ": SATA")
+    )
+    expect_true(
+      all(c("sata_b", "sata_c") %in% sata_a_col),
+      label = paste0(lbl, ": SATA items")
+    )
+    bat_a_col <- sheet_col_a(out, "bat_2")
+    expect_identical(
+      bat_a_col[[1L]],
+      bat_preface,
+      label = paste0(lbl, ": battery")
+    )
+    expect_true(
+      all(c("bat_2", "bat_3") %in% bat_a_col),
+      label = paste0(lbl, ": battery items")
+    )
+    for (sheet in c("sata_b", "bat_2")) {
+      expect_false(
+        any(c("sata_a", "bat_1") %in% sheet_text(out, sheet)),
+        label = paste0(lbl, ": no dropped item on ", sheet)
+      )
+    }
+
+    fresh_path(out)
+    d <- set_all_na(d, "bat_2")
+
+    w <- expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    msg <- conditionMessage(w)
+    first <- regexpr("bat_1", msg, fixed = TRUE)
+    second <- regexpr("bat_2", msg, fixed = TRUE)
+    expect_true(first > 0L, label = paste0(lbl, ": names bat_1"))
+    expect_true(second > first, label = paste0(lbl, ": bat_2 after bat_1"))
+    expect_identical(
+      data_sheets(out),
+      c("q1", "sata_b", "bat_3"),
+      label = paste0(lbl, ": sheets, bat_2 dropped too")
+    )
+    bat_a_col <- sheet_col_a(out, "bat_3")
+    expect_identical(
+      bat_a_col[[1L]],
+      bat_preface,
+      label = paste0(lbl, ": bat_3")
+    )
+    expect_true("bat_3" %in% bat_a_col, label = paste0(lbl, ": bat_3 item"))
+    expect_false(
+      any(c("bat_1", "bat_2") %in% sheet_text(out, "bat_3")),
+      label = paste0(lbl, ": no dropped battery item")
+    )
+  }
+})
+
+test_that("export_crosstab() drops a group whose every item is all-NA (XX-15)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    lbl <- paste0("export_crosstab(), ", nm)
+    d <- set_all_na(cover_design(designs[[nm]]), c("bat_1", "bat_2", "bat_3"))
+
+    w <- expect_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+
+    pos <- vapply(
+      c("bat_1", "bat_2", "bat_3"),
+      function(v) as.integer(regexpr(v, conditionMessage(w), fixed = TRUE)),
+      integer(1L)
+    )
+    expect_true(all(pos > 0L), label = paste0(lbl, ": names every item"))
+    expect_false(is.unsorted(pos), label = paste0(lbl, ": input order"))
+    expect_identical(result, out, label = paste0(lbl, ": the path"))
+    expect_identical(data_sheets(out), "q1", label = paste0(lbl, ": sheets"))
+  }
+})
+
+test_that("export_crosstab() drops a variable all-NA inside the domain only (XX-16)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    lbl <- paste0("export_crosstab(), ", nm)
+    d <- add_dom_na(add_gen_fixture(designs[[nm]]))
+    d_dom <- d
+    d_dom@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d_dom@data$group == "A"
+
+    fresh_path(out)
+    w <- expect_warning(
+      crosstab_quiet(
+        d_dom,
+        vars = c(q1, dom_na),
+        banner = gen,
+        file_name = out,
+        min_eff_n = 0
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+    expect_match(
+      conditionMessage(w),
+      "dom_na",
+      fixed = TRUE,
+      label = paste0(lbl, ": names dom_na")
+    )
+    expect_identical(data_sheets(out), "q1", label = paste0(lbl, ": domain"))
+
+    fresh_path(out)
+    expect_no_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, dom_na),
+        banner = gen,
+        file_name = out,
+        min_eff_n = 0
+      )
+    )
+    expect_identical(
+      data_sheets(out),
+      c("q1", "dom_na"),
+      label = paste0(lbl, ": no domain")
+    )
   }
 })
