@@ -24,12 +24,11 @@ text and dependencies. Create a TodoWrite task list.
 Run the baseline:
 
 ```r
-devtools::test()
 devtools::check()
 ```
 
-Both must pass before starting. If either fails, report and stop — do not
-proceed into section dispatch.
+It must pass before starting. `devtools::check()` runs the full test suite. If
+it fails, report and stop — do not proceed into section dispatch.
 
 ---
 
@@ -47,7 +46,7 @@ Provide the subagent with:
 
 The subagent follows Mode A pre-flight (skip branch creation — branch already
 exists), TDD Iron Law, and verification. It reports back when
-`devtools::test()` and `devtools::check()` both pass.
+`devtools::check()` passes.
 
 **If the subagent asks questions before implementing:** answer clearly and
 completely before letting it proceed. Do not rush it.

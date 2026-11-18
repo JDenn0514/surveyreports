@@ -15,8 +15,10 @@ Error:
 
 Local repro:
   Rscript -e "devtools::check()"
-  Rscript -e "devtools::test()"
 ```
+
+`devtools::check()` runs the full test suite, so the repro needs no separate
+`devtools::test()`.
 
 After showing the block, tell the user:
 

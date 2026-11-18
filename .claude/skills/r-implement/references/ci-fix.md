@@ -14,8 +14,10 @@ test), which job (OS + R version), and the exact error message.
 
 ```bash
 Rscript -e "devtools::check()"
-Rscript -e "devtools::test()"
 ```
+
+`devtools::check()` runs the full test suite, so a test failure shows in its
+output.
 
 Match the failure to what CI reported. If the failure does not reproduce
 locally, report that and describe what you see instead — do not guess.
@@ -38,7 +40,6 @@ Do not continue attempting after 3 failures.
 ## Step 4: Verify
 
 ```bash
-Rscript -e "devtools::test()"
 Rscript -e "devtools::check()"
 ```
 
@@ -48,7 +49,7 @@ Run `devtools::document()` if any roxygen2 tags changed.
 
 ## Step 5: Report
 
-When both pass:
+When `devtools::check()` passes:
 
 > "Fixed. Re-invoke `/commit-and-pr` — it will push the fix and resume
 > monitoring CI."

@@ -112,20 +112,71 @@ is populated.
 
 ## Step 3: Pre-flight Checks
 
-Run AFTER the changelog entry is confirmed:
+Run AFTER the changelog entry is confirmed.
+
+### 3a. Skip when the tester already passed this code
+
+Find the `audit.md` for this branch. Its path is the `Audit:` line of the
+shipper's SHIP READY block, or the user gives it. If no audit path is known,
+go to 3b.
+
+Skip the pre-flight check only when all three are true:
+
+1. `audit.md` has `**Verdict**: PASS`.
+2. `audit.md` has a `Tree:` line.
+3. The `Tree:` value equals the output of this command:
 
 ```bash
-Rscript -e "devtools::check()"
-Rscript -e "devtools::test()"
+bash .claude/scripts/tree-hash.sh
 ```
+
+The hash covers every file in the working tree except `changelog/`. Equal
+values mean the code has not changed since the tester ran the gates. The
+tester ran the full test suite, R CMD check, and `pkgdown::check_pkgdown()`
+on that code.
+
+When you skip, record this line in the task metadata and in your report to the
+user:
+
+```
+Pre-flight: SKIPPED — tree unchanged since audit {path}
+```
+
+Then go to Step 4.
+
+### 3b. Run the pre-flight check
+
+Run this when 3a does not skip: no audit is known, the verdict is not PASS,
+the audit has no `Tree:` line, or the hashes differ.
+
+```bash
+log_dir="$(mktemp -d)"
+Rscript -e 'devtools::check(error_on = "warning")' \
+  > "$log_dir/check.log" 2>&1
+echo "check exit: $?"
+Rscript -e 'pkgdown::check_pkgdown()' > "$log_dir/pkgdown.log" 2>&1
+echo "pkgdown exit: $?"
+```
+
+`devtools::check()` runs the full test suite and the examples, so do not run
+`devtools::test()` as well. Keep the logs out of the repo, so they do not show
+in `git status`.
+
+Read only the end of each log and its error lines:
+
+```bash
+tail -25 "$log_dir/check.log"
+grep -E "ERROR|WARNING|NOTE|FAIL" "$log_dir/check.log"
+tail -25 "$log_dir/pkgdown.log"
+```
+
+Required results:
+- `devtools::check()` — 0 errors, 0 warnings, ≤2 notes, no test failures
+- `pkgdown::check_pkgdown()` — no problems
 
 **If either fails: STOP.** Inform the user of the failure. Do not proceed to
 commits. Ask the user to invoke `r-implement` to fix the issue, then re-invoke
 `commit-and-pr`.
-
-Required results:
-- `devtools::check()` — 0 errors, 0 warnings, ≤2 notes
-- `devtools::test()` — no failures
 
 ---
 
@@ -295,7 +346,9 @@ time (`mergeAfterCI` flag). When in doubt, stop after CI.**
 |---|---|
 | Read `.R` files to understand what was implemented | Yes |
 | Create `changelog/{branch-name}.md` | Yes |
-| Run `devtools::check()` and `devtools::test()` | Yes |
+| Run `devtools::check()` and `pkgdown::check_pkgdown()` | Yes |
+| Skip the pre-flight check when the tree hash equals a PASS audit's `Tree:` | Yes |
+| Run `devtools::test()` after `devtools::check()` | **NO** — check runs the tests |
 | Stage and commit files | Yes |
 | Push the branch | Yes |
 | Create the PR | Yes |
