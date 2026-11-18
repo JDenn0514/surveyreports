@@ -19,6 +19,10 @@ the tester once. Most of the changes port surveycore 1d78525 (#370).
 - One covr run now gives the test counts, the failing tests and the coverage.
   Gates 2 and 7 are one gate, `tests + covr`. The tests run against the
   installed, instrumented package, as in `R CMD check`.
+- The gate needs covr 4.0.0 or newer. `covr-report.R` prints
+  `COVR_VERSION=`, and the summary row names the version. On an older covr
+  the gate fails before it runs the tests, and the tester treats that as a
+  HOLD. The cloud scripts install or flag an older covr.
 - Gate 5 runs `R CMD check --no-tests`. Gate 2 ran the suite, and CI runs the
   check with tests on 5 OS.
 - Gate 3 (`devtools::run_examples()`) is removed. The check runs the examples.

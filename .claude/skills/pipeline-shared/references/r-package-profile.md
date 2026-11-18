@@ -41,8 +41,10 @@ Two caveats apply to gate 2:
   them. A test that works only under `load_all()` fails here.
 - **Measure Before and After on the same covr version.** Different covr
   versions count lines differently, so a Before figure from one version and
-  an After figure from another are not comparable. The installed version is
-  covr 4.0.0.
+  an After figure from another are not comparable. Gate 2 needs covr 4.0.0
+  or newer. `covr-report.R` prints `COVR_VERSION=`, and the summary row names
+  the version. On an older covr the gate fails before it runs the tests; the
+  tester treats that failure as a HOLD.
 
 Gate 5 does not run the tests. Gate 2 already ran them, and CI runs
 `R CMD check` with tests on five operating system and R version pairs.

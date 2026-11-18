@@ -38,7 +38,16 @@ pkgs <- unlist(strsplit(fields[!is.na(fields)], ","))
 pkgs <- trimws(sub("\\(.*", "", pkgs))
 pkgs <- c(pkgs, "devtools", "roxygen2", "rcmdcheck", "covr", "pkgdown")
 pkgs <- unique(setdiff(pkgs, c("", rownames(installed.packages(priority = "base")))))
-installed <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
+
+# run-gates.sh needs covr 4.0.0 or newer, so an older covr counts as missing.
+# pak installs the newest covr when it is asked for covr by name.
+is_ready <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    return(FALSE)
+  }
+  pkg != "covr" || utils::packageVersion("covr") >= "4.0.0"
+}
+installed <- vapply(pkgs, is_ready, logical(1))
 missing <- pkgs[!installed]
 
 for (pkg in missing) {
@@ -48,7 +57,7 @@ for (pkg in missing) {
   )
 }
 
-still_missing <- missing[!vapply(missing, requireNamespace, logical(1), quietly = TRUE)]
+still_missing <- missing[!vapply(missing, is_ready, logical(1))]
 cat("Cloud session: R", as.character(getRversion()), "\n")
 if (length(still_missing) > 0) {
   cat(

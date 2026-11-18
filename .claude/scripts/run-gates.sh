@@ -89,12 +89,20 @@ gate_test_covr() {
   changed=$(changed_r_files)
   NOT_CRAN=true CHANGED_R_FILES="$changed" \
     Rscript .claude/scripts/covr-report.R > "$log" 2>&1
+  local covr_ver
+  covr_ver=$(grep -oE '^COVR_VERSION=[0-9.]+' "$log" | tail -1 | cut -d= -f2)
+  if grep -q '^COVR_TOO_OLD' "$log"; then
+    local covr_min
+    covr_min=$(grep -oE '^COVR_TOO_OLD minimum=[0-9.]+' "$log" | cut -d= -f2)
+    fail_gate "$name" "$log" "covr ${covr_ver} is older than ${covr_min}; update covr with pak::pak('covr') (environment HOLD, not a code BLOCK)"
+    return
+  fi
   local summary nfail pct nunc
   summary=$(grep -E '^\[ FAIL [0-9]+' "$log" | tail -1)
   nfail=$(grep -oE '^TEST_FAILURES=[0-9]+' "$log" | tail -1 | cut -d= -f2)
   pct=$(grep -oE '^COVERAGE_PCT=[0-9.]+' "$log" | tail -1 | cut -d= -f2)
   nunc=$(grep -oE '^UNCOVERED_COUNT=[0-9]+' "$log" | tail -1 | cut -d= -f2)
-  local detail="${summary}; coverage ${pct}%"
+  local detail="${summary}; coverage ${pct}% (covr ${covr_ver:-unknown})"
   if [ -n "$nunc" ]; then
     detail="${detail}; changed R/ files: $(grep -c '^CHANGED_FILE_PCT' "$log"), uncovered lines in them: ${nunc}"
   fi

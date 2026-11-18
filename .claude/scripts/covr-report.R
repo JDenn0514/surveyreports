@@ -6,6 +6,7 @@
 # test results and the coverage come from the same run.
 #
 # The script prints, in this order:
+#   COVR_VERSION=<version>                the installed covr version
 #   TEST_FAILURES=<n> TEST_WARNINGS=<n> TEST_SKIPS=<n> TEST_PASSES=<n>
 #   [ FAIL n | WARN n | SKIP n | PASS n ]  the same shape as testthat's summary
 #   FAILED_TEST <file>: <test>            one line per failing test block
@@ -27,6 +28,20 @@
 #
 # Run with NOT_CRAN=true. It matches CI. Without it testthat skips every
 # expect_snapshot() and every skip_on_cran() block, and coverage reads low.
+#
+# covr must be 4.0.0 or newer. Older covr runs the suite much more slowly, and
+# it counts lines differently, so its coverage is not comparable with a 4.x
+# figure. On an older covr the script prints COVR_TOO_OLD and stops with
+# status 2 before it runs anything.
+
+# --- Check the covr version ----------------------------------------------------
+covr_min <- "4.0.0"
+covr_version <- as.character(utils::packageVersion("covr"))
+cat(sprintf("COVR_VERSION=%s\n", covr_version))
+if (utils::compareVersion(covr_version, covr_min) < 0) {
+  cat(sprintf("COVR_TOO_OLD minimum=%s\n", covr_min))
+  quit(save = "no", status = 2)
+}
 
 # --- Read inputs ---------------------------------------------------------------
 changed <- Sys.getenv("CHANGED_R_FILES")

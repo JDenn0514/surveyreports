@@ -80,6 +80,11 @@ pkgs <- c(
   "devtools", "roxygen2", "rcmdcheck", "pkgdown", "lintr"
 )
 pak::pkg_install(pkgs, upgrade = FALSE, ask = FALSE)
+# run-gates.sh needs covr 4.0.0 or newer.
+if (utils::packageVersion("covr") < "4.0.0") {
+  cat("covr", as.character(utils::packageVersion("covr")),
+      "is older than 4.0.0. The test and coverage gate will fail.\n")
+}
 EOF
 
 # 4. The air formatter. It downloads from a GitHub release, which the GitHub

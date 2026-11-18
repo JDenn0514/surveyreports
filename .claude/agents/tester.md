@@ -160,7 +160,10 @@ After column comes from the Step 1 gate run. If no baseline was passed, write
 - Any line added by this PR is uncovered (from the `UNCOVERED_LINE` entries in
   `gate-2-test-covr.log`) → BLOCK
 - The Before and After coverage come from different covr versions → HOLD.
-  The two figures are not comparable
+  The two figures are not comparable. Each `tests + covr` row names its covr
+  version; compare the baseline row with your row
+- The `tests + covr` row says covr is older than 4.0.0 → HOLD, not BLOCK.
+  The builder cannot fix the environment
 
 ## Step 5 — Verdict
 
