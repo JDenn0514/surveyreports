@@ -210,7 +210,8 @@ test_that("export_crosstab() renders interaction spanner groups in workbook", {
       vars = q1,
       banner = c(group, q2),
       file_name = out,
-      interactions = list(c("group", "q2"))
+      interactions = list(c("group", "q2")),
+      min_eff_n = 0
     )
   )
 
@@ -5394,7 +5395,7 @@ test_that("export_crosstab() drops a below-floor level's heading and cells (XW-0
 
     expect_warning(
       result <- write_gen_q1(d, out, gen_floor),
-      class = "surveyreports_warning_subgroup_suppressed"
+      class = "surveyreports_warning_subgroup_withheld"
     )
     expect_identical(result, out, label = paste0(nm, ": the path"))
     expect_true(file.exists(out), label = paste0(nm, ": file exists"))
@@ -5413,16 +5414,6 @@ test_that("export_crosstab() drops a below-floor level's heading and cells (XW-0
       label = paste0(nm, ": no cell beyond the headings")
     )
   }
-
-  expect_snapshot(
-    export_crosstab(
-      add_gen_fixture(designs$taylor),
-      vars = q1,
-      banner = gen,
-      file_name = out,
-      min_eff_n = gen_floor
-    )
-  )
 })
 
 test_that("export_crosstab() leaves the surviving column unchanged (XW-02)", {
@@ -5437,7 +5428,7 @@ test_that("export_crosstab() leaves the surviving column unchanged (XW-02)", {
 
     expect_warning(
       write_gen_q1(d, out, gen_floor),
-      class = "surveyreports_warning_subgroup_suppressed"
+      class = "surveyreports_warning_subgroup_withheld"
     )
     write_gen_q1(d, ref, 0)
 
@@ -5463,7 +5454,7 @@ test_that("export_crosstab() shrinks the spanner of a withheld level (XW-03)", {
 
     expect_warning(
       write_gen_q1(d, out, gen_floor),
-      class = "surveyreports_warning_subgroup_suppressed"
+      class = "surveyreports_warning_subgroup_withheld"
     )
     write_gen_q1(d, ref, 0)
 
@@ -5512,7 +5503,7 @@ test_that("export_crosstab() tests the floor on effective N, not raw N (XW-05)",
 
     expect_warning(
       write_gen_q1(d, out, floor_n),
-      class = "surveyreports_warning_subgroup_suppressed"
+      class = "surveyreports_warning_subgroup_withheld"
     )
 
     headings <- heading_cells(out, "q1")
@@ -5533,7 +5524,7 @@ test_that("export_crosstab() removes a withheld column, not blanks it (XW-12)", 
 
     expect_warning(
       write_gen_q1(d, out, gen_floor),
-      class = "surveyreports_warning_subgroup_suppressed"
+      class = "surveyreports_warning_subgroup_withheld"
     )
     write_gen_q1(d, ref, 0)
 
@@ -5599,9 +5590,10 @@ test_that("export_crosstab() withholds a below-floor column from SATA and batter
           banner = gen,
           file_name = out,
           min_eff_n = gen_floor,
-          show_n = show_n
+          show_n = show_n,
+          withheld_note = "every"
         ),
-        class = "surveyreports_warning_subgroup_suppressed"
+        class = "surveyreports_warning_subgroup_withheld"
       )
 
       for (sheet in c("sata_a", "bat_1")) {
@@ -6142,6 +6134,22 @@ test_that("export_crosstab() aborts when every variable is all-NA (XE-16)", {
       label = paste0(nm, ": not the role guard class")
     )
     expect_false(file.exists(out), label = paste0(nm, ": no file"))
+
+    # The second call, at the default floor: Female falls below it, but the
+    # abort at step 15 comes before any withholding warning (spec 3.11).
+    fresh_path(out)
+    expect_no_warning(
+      expect_error(
+        crosstab_quiet(
+          d,
+          vars = c(all_na_var, all_na_2),
+          banner = gen,
+          file_name = out
+        ),
+        class = "surveyreports_error_vars_all_na"
+      )
+    )
+    expect_false(file.exists(out), label = paste0(nm, ": no file, default"))
   }
 
   d <- add_gen_fixture(designs$taylor)
@@ -6416,6 +6424,979 @@ test_that("export_crosstab() drops a variable all-NA inside the domain only (XX-
       data_sheets(out),
       c("q1", "dom_na"),
       label = paste0(lbl, ": no domain")
+    )
+  }
+})
+
+# 28. The withheld notices -----------------------------------------------------
+# The floor reaches the crossed cells of an interaction. Three warnings report
+# what the floor did, after the all-NA drop, and `withheld_note` decides where
+# the withheld lines are written: on the About sheet, under each table, or
+# nowhere (spec 3.5, spec 3.11, spec 3.14, spec 3.18).
+
+# The oracle of each crossed gen x reg cell, from surveycore, over a column
+# built here from the two fixtures' value labels.
+cross_oracle <- function(d) {
+  gen_lab <- c("Male", "Female")[d@data$gen]
+  reg_lab <- c("North", "South")[d@data$reg]
+  d@data$cross <- paste(gen_lab, reg_lab, sep = " × ")
+  ref <- suppressWarnings(
+    surveycore::get_effective_n(d, group = cross),
+    classes = c(
+      "surveycore_warning_small_cell",
+      "surveycore_warning_nonprob_srs_fallback"
+    )
+  )
+  tibble::tibble(level = as.character(ref$cross), n_eff = ref$n_eff)
+}
+
+# A floor between the smallest crossed cell and the next one, rounded to a
+# whole number, so at least one cell falls below it and at least one clears
+# it on every design.
+cross_floor <- function(ref) {
+  sorted <- sort(ref$n_eff)
+  round((sorted[[1L]] + sorted[[2L]]) / 2)
+}
+
+# Writes the q1 crosstab of the gen and reg fixtures, crossed, at a floor.
+write_crossed_at <- function(d, path, min_eff_n, ...) {
+  fresh_path(path)
+  crosstab_quiet(
+    d,
+    vars = q1,
+    banner = c(gen, reg),
+    interactions = list(c("gen", "reg")),
+    file_name = path,
+    min_eff_n = min_eff_n,
+    ...
+  )
+}
+
+test_that("export_crosstab() withholds a crossed cell below the floor (XW-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+    ref <- cross_oracle(d)
+    floor_n <- cross_floor(ref)
+    below <- ref$level[ref$n_eff < floor_n]
+    above <- ref$level[ref$n_eff >= floor_n]
+    expect_gt(length(below), 0L, label = paste0(nm, ": a cell below"))
+    expect_gt(length(above), 0L, label = paste0(nm, ": a cell above"))
+
+    suppressWarnings(
+      write_crossed_at(d, out, floor_n),
+      classes = "surveyreports_warning_subgroup_withheld"
+    )
+
+    headings <- heading_cells(out, "q1")
+    expect_false(
+      any(below %in% headings),
+      label = paste0(nm, ": no below-floor crossed heading")
+    )
+    expect_true(
+      all(above %in% headings),
+      label = paste0(nm, ": every surviving crossed heading")
+    )
+  }
+})
+
+# The expected withheld line of one subgroup, built here from the wording of
+# spec 3.14: the subgroup, its banner variable and its effective N at one
+# decimal, and no raw N.
+withheld_line <- function(level, banner_var, n_eff, floor_n) {
+  paste0(
+    "\"",
+    level,
+    "\" (",
+    banner_var,
+    ") withheld: effective sample size ",
+    formatC(n_eff, format = "f", digits = 1L),
+    ", below the minimum of ",
+    floor_n,
+    "."
+  )
+}
+
+# The withheld lines of the About sheet: column B of each `Not shown` row.
+about_withheld <- function(path) {
+  about <- about_sheet(path)
+  about$B[about$A %in% "Not shown"]
+}
+
+test_that("export_crosstab() names the subgroup, banner and effective N in each line (XW-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    female <- gen_oracle(d, "Female")
+    expected <- withheld_line("Female", "gen", female$n_eff, gen_floor)
+
+    w <- expect_warning(
+      write_gen_q1(d, out, gen_floor),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+
+    lines <- about_withheld(out)
+    expect_identical(lines, expected, label = paste0(nm, ": the About line"))
+    expect_match(
+      conditionMessage(w),
+      expected,
+      fixed = TRUE,
+      label = paste0(nm, ": the warning line")
+    )
+    for (text in c(lines, conditionMessage(w))) {
+      expect_no_match(
+        text,
+        paste0("\\b", female$n, "\\b"),
+        label = paste0(nm, ": no raw N")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() warns once per call for withheld subgroups (XV-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    female <- gen_oracle(d, "Female")
+
+    for (note in c("once", "every", "none")) {
+      lbl <- paste0(nm, ", withheld_note = ", note)
+      fresh_path(out)
+      w <- expect_warning(
+        result <- crosstab_quiet(
+          d,
+          vars = q1,
+          banner = gen,
+          file_name = out,
+          min_eff_n = gen_floor,
+          withheld_note = note
+        ),
+        class = "surveyreports_warning_subgroup_withheld"
+      )
+      msg <- conditionMessage(w)
+      expect_match(msg, "\"Female\" (gen)", fixed = TRUE, label = lbl)
+      expect_match(
+        msg,
+        formatC(female$n_eff, format = "f", digits = 1L),
+        fixed = TRUE,
+        label = paste0(lbl, ": effective N")
+      )
+      expect_identical(result, out, label = paste0(lbl, ": the path"))
+      expect_true(file.exists(out), label = paste0(lbl, ": file exists"))
+
+      fresh_path(out)
+      msgs <- testthat::capture_warnings(
+        crosstab_quiet(
+          d,
+          vars = q1,
+          banner = gen,
+          file_name = out,
+          min_eff_n = gen_floor,
+          withheld_note = note
+        )
+      )
+      expect_length(msgs, 1L)
+    }
+  }
+
+  expect_snapshot(
+    export_crosstab(
+      add_gen_fixture(designs$taylor),
+      vars = q1,
+      banner = gen,
+      file_name = out,
+      min_eff_n = gen_floor
+    )
+  )
+})
+
+# The full sample's effective N, from surveycore.
+full_oracle <- function(d) {
+  suppressWarnings(
+    surveycore::get_effective_n(d),
+    classes = c(
+      "surveycore_warning_small_cell",
+      "surveycore_warning_nonprob_srs_fallback"
+    )
+  )$n_eff
+}
+
+test_that("export_crosstab() warns when every level of a banner is withheld (XV-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    male <- gen_oracle(d, "Male")$n_eff
+    full <- full_oracle(d)
+    # Above every gen level and below the full sample, so the full-sample
+    # warning is not due.
+    floor_n <- round((male + full) / 2)
+    expect_true(male < floor_n && floor_n <= full, label = nm)
+
+    w <- expect_warning(
+      expect_warning(
+        result <- write_gen_q1(d, out, floor_n),
+        class = "surveyreports_warning_subgroup_withheld"
+      ),
+      class = "surveyreports_warning_banner_all_withheld"
+    )
+
+    expect_match(conditionMessage(w), "gen", fixed = TRUE, label = nm)
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    headings <- heading_cells(out, "q1")
+    expect_true("Total" %in% headings, label = paste0(nm, ": Total kept"))
+    expect_false(
+      any(c("Male", "Female") %in% headings),
+      label = paste0(nm, ": no gen column")
+    )
+    expect_false(
+      "Gender" %in% spanner_cells(out, "q1"),
+      label = paste0(nm, ": no gen spanner")
+    )
+  }
+
+  d <- add_gen_fixture(designs$taylor)
+  floor_n <- round((gen_oracle(d, "Male")$n_eff + full_oracle(d)) / 2)
+  expect_snapshot(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = gen,
+      file_name = out,
+      min_eff_n = floor_n
+    )
+  )
+})
+
+test_that("export_crosstab() warns when the full sample is below the floor (XV-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  ref <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    floor_n <- ceiling(full_oracle(d)) + 1
+
+    w <- expect_warning(
+      expect_warning(
+        expect_warning(
+          result <- write_gen_q1(d, out, floor_n),
+          class = "surveyreports_warning_subgroup_withheld"
+        ),
+        class = "surveyreports_warning_banner_all_withheld"
+      ),
+      class = "surveyreports_warning_full_sample_below_min"
+    )
+    write_gen_q1(d, ref, 0)
+
+    expect_match(
+      conditionMessage(w),
+      formatC(full_oracle(d), format = "f", digits = 1L),
+      fixed = TRUE,
+      label = paste0(nm, ": the full-sample effective N")
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    # Nothing is removed for the full sample: its column is written in full.
+    total <- column_cells(out, "q1", "Total")
+    expect_gt(length(total), 1L)
+    expect_identical(
+      total,
+      column_cells(ref, "q1", "Total"),
+      label = paste0(nm, ": the Total column")
+    )
+
+    fresh_path(out)
+    msgs <- testthat::capture_warnings(write_gen_q1(d, out, floor_n))
+    expect_identical(
+      sum(grepl("full sample", msgs, fixed = TRUE)),
+      1L,
+      label = paste0(nm, ": one full-sample warning")
+    )
+  }
+
+  d <- add_gen_fixture(designs$taylor)
+  expect_snapshot(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = gen,
+      file_name = out,
+      min_eff_n = ceiling(full_oracle(d)) + 1
+    )
+  )
+})
+
+# The class of a captured warning, read from the fixed wording of its first
+# line. testing.md forbids a calling handler in a test, and
+# testthat::capture_warnings() returns the messages in order but not the
+# conditions, so each class is matched by a phrase only its message holds.
+warning_class_of <- function(msg) {
+  phrases <- c(
+    role_dropped = "for a non-substantive role",
+    unknown_role = "with an unrecognized role",
+    missing_variable_label = "no variable_label",
+    all_na_dropped = "with no non-missing value",
+    subgroup_withheld = "are withheld.",
+    banner_all_withheld = "Every subgroup of",
+    full_sample_below_min = "of the full sample"
+  )
+  first_line <- strsplit(msg, "\n", fixed = TRUE)[[1L]][[1L]]
+  hit <- vapply(
+    phrases,
+    function(p) grepl(p, first_line, fixed = TRUE),
+    logical(1L)
+  )
+  paste0("surveyreports_warning_", names(phrases)[hit])
+}
+
+test_that("export_crosstab() raises the seven warnings in the order of spec 3.11 (XV-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  expected <- paste0(
+    "surveyreports_warning_",
+    c(
+      "role_dropped",
+      "unknown_role",
+      "missing_variable_label",
+      "all_na_dropped",
+      "subgroup_withheld",
+      "banner_all_withheld",
+      "full_sample_below_min"
+    )
+  )
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_var_extra(
+      add_nolab_fixture(guard_design(designs[[nm]])),
+      q2 = list(role = "free_text"),
+      q1 = list(role = "banana")
+    )
+    # A floor above the full sample, so all three withholding warnings fire.
+    expect_lt(full_oracle(d), 1000, label = nm)
+
+    msgs <- testthat::capture_warnings(
+      crosstab_quiet(
+        d,
+        vars = c(q1, q2, all_na_var),
+        banner = nolab,
+        file_name = out,
+        min_eff_n = 1000
+      )
+    )
+
+    classes <- vapply(msgs, warning_class_of, character(1L), USE.NAMES = FALSE)
+    expect_identical(classes, expected, label = paste0(nm, ": the order"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+  }
+})
+
+test_that("export_crosstab() raises no condition of the renamed class (XV-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  # Built in two parts, so a search of the tree for the old class finds no
+  # use of it (spec VIII).
+  old_class <- paste0("surveyreports_warning_subgroup_", "suppressed")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+
+    w <- expect_warning(
+      write_gen_q1(d, out, gen_floor),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+
+    expect_false(inherits(w, old_class), label = paste0(nm, ": not the old"))
+  }
+})
+
+test_that("export_crosstab() raises no warning when every subgroup clears the floor (XV-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    # No column carries a role, and every group level clears a floor of 10.
+    d <- guard_design(designs[[nm]])
+
+    expect_no_warning(
+      result <- crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = group,
+        file_name = out,
+        min_eff_n = 10
+      )
+    )
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+  }
+})
+
+test_that("export_crosstab() lets no surveycore small-cell warning through (XV-13)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    # Female holds 20 rows, or fewer on twophase, so its effective N is
+    # below 30, the raw-N threshold of surveycore's small-cell warning.
+    expect_lt(gen_oracle(d, "Female")$n_eff, 30, label = nm)
+
+    expect_no_warning(
+      write_gen_q1(d, out, 0),
+      class = "surveycore_warning_small_cell"
+    )
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+  }
+})
+
+# Writes the gen-fixture crosstab of `vars` at gen_floor under one
+# withheld_note value. Female is withheld, so the call warns; the warning is
+# asserted by XV-03 and absorbed here.
+write_gen_note <- function(d, path, note, vars, layout = "per_question") {
+  fresh_path(path)
+  suppressWarnings(
+    crosstab_quiet(
+      d,
+      vars = tidyselect::all_of(vars),
+      banner = gen,
+      file_name = path,
+      layout = layout,
+      min_eff_n = gen_floor,
+      withheld_note = note
+    ),
+    classes = "surveyreports_warning_subgroup_withheld"
+  )
+}
+
+# The last written cell of column A of one sheet.
+last_col_a <- function(path, sheet) {
+  col_a <- sheet_col_a(path, sheet)
+  col_a[[max(which(!is.na(col_a)))]]
+}
+
+test_that("export_crosstab() writes the withheld lines once, on the About sheet (XW-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    line <- withheld_line(
+      "Female",
+      "gen",
+      gen_oracle(d, "Female")$n_eff,
+      gen_floor
+    )
+
+    write_gen_note(d, out, "once", c("q1", "q2"))
+
+    expect_identical(about_withheld(out), line, label = paste0(nm, ": About"))
+    for (sheet in c("q1", "q2")) {
+      expect_false(
+        any(grepl("withheld", sheet_text(out, sheet), fixed = TRUE)),
+        label = paste0(nm, ": no line under ", sheet)
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() writes the withheld lines under each table at withheld_note = every (XW-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    line <- withheld_line(
+      "Female",
+      "gen",
+      gen_oracle(d, "Female")$n_eff,
+      gen_floor
+    )
+
+    write_gen_note(d, out, "every", c("q1", "q2"))
+    for (sheet in c("q1", "q2")) {
+      expect_identical(
+        last_col_a(out, sheet),
+        line,
+        label = paste0(nm, ": the block ", sheet, " ends with the line")
+      )
+    }
+    about <- about_sheet(out)
+    expect_false(
+      "Subgroups not shown" %in% about$A,
+      label = paste0(nm, ": no withheld block on the About sheet")
+    )
+
+    # The SATA and battery routes end their blocks the same way.
+    group_vars <- c("sata_a", "sata_b", "sata_c", "bat_1", "bat_2", "bat_3")
+    write_gen_note(d, out, "every", group_vars)
+    for (sheet in c("sata_a", "bat_1")) {
+      expect_identical(
+        last_col_a(out, sheet),
+        line,
+        label = paste0(nm, ": the block ", sheet, " ends with the line")
+      )
+    }
+
+    # On the stacked sheet each block carries its own copy.
+    write_gen_note(d, out, "every", c("q1", "q2"), layout = "stacked")
+    expect_identical(
+      sum(sheet_col_a(out, "Crosstab") %in% line),
+      2L,
+      label = paste0(nm, ": one line per stacked block")
+    )
+  }
+})
+
+test_that("export_crosstab() writes no withheld line at withheld_note = none (XW-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+
+    fresh_path(out)
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = gen,
+        file_name = out,
+        min_eff_n = gen_floor,
+        withheld_note = "none"
+      ),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+
+    for (sheet in openxlsx2::wb_load(out)$sheet_names) {
+      expect_false(
+        any(grepl("withheld", sheet_text(out, sheet), fixed = TRUE)),
+        label = paste0(nm, ": no line on ", sheet)
+      )
+    }
+    # The column is still withheld at "none".
+    expect_false(
+      "Female" %in% heading_cells(out, "q1"),
+      label = paste0(nm, ": Female withheld")
+    )
+  }
+})
+
+test_that("export_crosstab() names an interaction whose every cell is withheld (XV-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+    ref <- cross_oracle(d)
+    male <- gen_oracle(d, "Male")$n_eff
+    # Above every crossed cell and below Male, so the interaction empties
+    # and the gen column group keeps Male.
+    floor_n <- round((max(ref$n_eff) + male) / 2)
+    expect_true(max(ref$n_eff) < floor_n && floor_n <= male, label = nm)
+
+    w <- expect_warning(
+      expect_warning(
+        write_crossed_at(d, out, floor_n),
+        class = "surveyreports_warning_subgroup_withheld"
+      ),
+      class = "surveyreports_warning_banner_all_withheld"
+    )
+
+    expect_match(
+      conditionMessage(w),
+      "gen × reg",
+      fixed = TRUE,
+      label = paste0(nm, ": names the interaction")
+    )
+    expect_false(
+      "Gender × Region" %in% spanner_cells(out, "q1"),
+      label = paste0(nm, ": no interaction spanner")
+    )
+    expect_true(
+      "Male" %in% heading_cells(out, "q1"),
+      label = paste0(nm, ": Male kept")
+    )
+  }
+})
+
+test_that("export_crosstab() lists a withheld crossed cell on the About sheet (XW-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+    ref <- cross_oracle(d)
+    floor_n <- cross_floor(ref)
+    below <- ref[ref$n_eff < floor_n, ]
+    expected <- withheld_line(
+      below$level,
+      "gen × reg",
+      below$n_eff,
+      floor_n
+    )
+
+    suppressWarnings(
+      write_crossed_at(d, out, floor_n),
+      classes = "surveyreports_warning_subgroup_withheld"
+    )
+
+    lines <- about_withheld(out)
+    expect_true(
+      all(expected %in% lines),
+      label = paste0(nm, ": each crossed cell is listed")
+    )
+    expect_true(
+      any(grepl("(gen)", lines, fixed = TRUE)),
+      label = paste0(nm, ": the banner level is listed too")
+    )
+  }
+})
+
+test_that("export_crosstab() writes None when the floor withholds nothing (XA-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- guard_design(designs[[nm]])
+
+    expect_no_warning(
+      crosstab_quiet(
+        d,
+        vars = q1,
+        banner = group,
+        file_name = out,
+        min_eff_n = 10
+      )
+    )
+
+    about <- about_sheet(out)
+    expect_true(
+      "Subgroups not shown" %in% about$A,
+      label = paste0(nm, ": the block")
+    )
+    expect_identical(
+      about$B[about$A %in% "Minimum effective sample size"],
+      "10",
+      label = paste0(nm, ": the minimum")
+    )
+    expect_identical(about_withheld(out), "None", label = paste0(nm, ": None"))
+  }
+})
+
+test_that("export_crosstab() writes no withheld block at min_eff_n = 0 (XA-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- guard_design(designs[[nm]])
+
+    crosstab_quiet(d, vars = q1, banner = group, file_name = out, min_eff_n = 0)
+
+    about <- about_sheet(out)
+    expect_false(
+      "Subgroups not shown" %in% about$A,
+      label = paste0(nm, ": no withheld block")
+    )
+    expect_true(
+      "What these numbers mean" %in% about$A,
+      label = paste0(nm, ": the glossary")
+    )
+  }
+})
+
+# TRUE when the cell's resolved font is bold. A cell with no style of its own
+# takes style 0, the workbook default. test-export-topline.R holds the same
+# helper; helper-export.R is outside this change.
+cell_is_bold <- function(wb, sheet, dims) {
+  style <- unname(openxlsx2::wb_get_cell_style(wb, sheet, dims))
+  style_id <- if (is.na(style) || !nzchar(style)) 0L else as.integer(style)
+  xf <- wb$styles_mgr$styles$cellXfs[[style_id + 1L]]
+  font_id <- as.integer(sub('.*fontId="([0-9]+)".*', "\\1", xf))
+  font <- wb$styles_mgr$styles$fonts[[font_id + 1L]]
+  grepl("<b/>|<b val=\"1\"/>|<b val=\"true\"/>", font)
+}
+
+test_that("export_crosstab() writes the About header and block headings bold (XA-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  headings <- c("Subgroups not shown", "What these numbers mean")
+
+  for (nm in names(designs)) {
+    d <- surveycore::set_dataset_metadata(
+      add_gen_fixture(designs[[nm]]),
+      survey_name = "Test Survey",
+      data_name = "Test Data v2",
+      vendor = "Test Vendor",
+      field_start = "2024-03-01",
+      field_end = "2024-03-31",
+      field_period = "Spring 2024"
+    )
+
+    suppressWarnings(
+      write_gen_q1(d, out, gen_floor),
+      classes = "surveyreports_warning_subgroup_withheld"
+    )
+
+    about <- about_sheet(out)
+    # The survey block has content, so all three blocks are present.
+    expect_identical(about$A[1:2], c("Key", "Survey"), label = nm)
+    expect_true(all(headings %in% about$A), label = paste0(nm, ": blocks"))
+
+    wb <- openxlsx2::wb_load(out)
+    for (dims in c("A1", "B1")) {
+      expect_true(
+        cell_is_bold(wb, "About", dims),
+        label = paste0(nm, ": ", dims, " is bold")
+      )
+    }
+    for (h in headings) {
+      expect_true(
+        cell_is_bold(wb, "About", paste0("A", match(h, about$A))),
+        label = paste0(nm, ": ", h, " is bold")
+      )
+    }
+    min_row <- match("Minimum effective sample size", about$A)
+    for (dims in paste0(c("A", "B"), min_row)) {
+      expect_false(
+        cell_is_bold(wb, "About", dims),
+        label = paste0(nm, ": ", dims, " is not bold")
+      )
+    }
+  }
+})
+
+# A one-row design: surveycore builds no design from one row, so the domain
+# keeps one row, a phase-2 row so that the twophase design tabulates it.
+# surveycore warns that the banner then holds one level; that warning is
+# fixture setup and is muffled.
+one_row_design <- function(d) {
+  d <- guard_design(d)
+  k <- which(d@data$in_phase2)[[1L]]
+  d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- seq_len(nrow(d@data)) == k
+  d
+}
+
+test_that("export_crosstab() withholds every subgroup of a one-row design (XX-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- one_row_design(designs[[nm]])
+    expect_identical(full_oracle(d), 1, label = paste0(nm, ": one row"))
+
+    expect_warning(
+      expect_warning(
+        expect_warning(
+          result <- suppressWarnings(
+            crosstab_quiet(d, vars = q1, banner = group, file_name = out),
+            classes = "surveycore_warning_single_level"
+          ),
+          class = "surveyreports_warning_subgroup_withheld"
+        ),
+        class = "surveyreports_warning_banner_all_withheld"
+      ),
+      class = "surveyreports_warning_full_sample_below_min"
+    )
+
+    expect_identical(result, out, label = paste0(nm, ": the path"))
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    expect_false(
+      any(c("A", "B", "C") %in% heading_cells(out, "q1")),
+      label = paste0(nm, ": no group column")
+    )
+  }
+})
+
+test_that("export_crosstab() writes no column and no entry for an unused factor level (XX-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- guard_design(designs[[nm]])
+    d@data$fb <- factor(
+      rep(c("Low", "Medium", "High"), length.out = nrow(d@data)),
+      levels = c("Low", "Medium", "High", "Unused")
+    )
+    d <- surveycore::set_var_label(d, fb = "Factor banner")
+
+    # A floor of 10 withholds a level with no rows if one reaches the floor.
+    expect_no_warning(
+      crosstab_quiet(d, vars = q1, banner = fb, file_name = out, min_eff_n = 10)
+    )
+
+    expect_false(
+      "Unused" %in% heading_cells(out, "q1"),
+      label = paste0(nm, ": no column")
+    )
+    expect_identical(about_withheld(out), "None", label = paste0(nm, ": None"))
+    expect_false(
+      any(grepl("Unused", sheet_text(out, "About"), fixed = TRUE)),
+      label = paste0(nm, ": no entry")
+    )
+  }
+})
+
+test_that("export_crosstab() never mentions an unobserved value label (XX-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- surveycore::set_val_labels(
+      add_gen_fixture(designs[[nm]]),
+      gen = c(Male = 1, Female = 2, Other = 3)
+    )
+
+    expect_no_warning(
+      crosstab_quiet(
+        d,
+        vars = q1,
+        banner = gen,
+        file_name = out,
+        min_eff_n = 10
+      )
+    )
+
+    for (sheet in openxlsx2::wb_load(out)$sheet_names) {
+      expect_false(
+        any(grepl("Other", sheet_text(out, sheet), fixed = TRUE)),
+        label = paste0(nm, ": no mention on ", sheet)
+      )
+    }
+    expect_identical(about_withheld(out), "None", label = paste0(nm, ": None"))
+  }
+})
+
+test_that("export_crosstab() withholds one unlabelled code as a missing label (XX-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    d@data$gen <- c(rep(1, 150), rep(2, 30), rep(3, 20))
+    d <- suppressWarnings(
+      surveycore::set_val_labels(d, gen = c(Male = 1, Female = 2)),
+      classes = "surveycore_warning_missing_labels"
+    )
+    ref <- suppressWarnings(
+      surveycore::get_effective_n(d, group = gen),
+      classes = c(
+        "surveycore_warning_small_cell",
+        "surveycore_warning_nonprob_srs_fallback"
+      )
+    )
+    unlabelled <- ref[is.na(ref$gen), ]
+    # Its true unweighted count: the code-3 rows the design tabulates.
+    tabulated <- if (nm == "twophase") d@data$in_phase2 else TRUE
+    expect_identical(
+      unlabelled$n,
+      sum(d@data$gen == 3 & tabulated),
+      label = paste0(nm, ": the true count")
+    )
+
+    w <- expect_warning(
+      write_gen_q1(d, out, gen_floor),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+
+    line <- paste0(
+      "[no value label] (gen) withheld: effective sample size ",
+      formatC(unlabelled$n_eff, format = "f", digits = 1L),
+      ", below the minimum of ",
+      gen_floor,
+      "."
+    )
+    expect_true(line %in% about_withheld(out), label = paste0(nm, ": About"))
+    expect_match(conditionMessage(w), line, fixed = TRUE, label = nm)
+    expect_false(
+      any(grepl("\"3\"", about_withheld(out), fixed = TRUE)),
+      label = paste0(nm, ": not named as code 3")
+    )
+  }
+})
+
+test_that("export_crosstab() skips a self-banner column for its own variable (XX-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- guard_design(designs[[nm]])
+
+    expect_no_warning(
+      crosstab_quiet(
+        d,
+        vars = c(q1, q2),
+        banner = q1,
+        file_name = out,
+        min_eff_n = 10
+      )
+    )
+
+    expect_false(
+      "Question one" %in% spanner_cells(out, "q1"),
+      label = paste0(nm, ": skipped for q1")
+    )
+    expect_true(
+      "Question one" %in% spanner_cells(out, "q2"),
+      label = paste0(nm, ": kept for q2")
     )
   }
 })

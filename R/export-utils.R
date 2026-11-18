@@ -686,27 +686,44 @@
   result
 }
 
+# The name of one interaction: its banner column names joined by the
+# multiplication sign. It is the frame's subgroup_var for the crossed rows,
+# and the banner_var of a withheld crossed cell.
 #' @keywords internal
 #' @noRd
-.compute_interaction_freq <- function(design, var, banner_vars, ...) {
-  interact_col <- "..interaction.."
-  # Each banner column is translated to its value labels first, so a crossed
-  # heading reads `Male x North` and not `1 x 1`. A factor keeps its level
-  # order, so interaction() does not sort its levels alphabetically
-  # (spec 3.8).
+.interaction_label <- function(banner_vars) {
+  paste(banner_vars, collapse = " \u00d7 ")
+}
+
+# The design with the synthetic interaction column `..interaction..` added.
+# Each banner column is translated to its value labels first, so a crossed
+# level reads `Male x North` and not `1 x 1`. A factor keeps its level order,
+# so interaction() does not sort its levels alphabetically (spec 3.8). The
+# frequency helper and the floor both read this one column, so a crossed
+# level has the same string in the frame and in the withheld frame (spec 3.5).
+#' @keywords internal
+#' @noRd
+.build_interaction_design <- function(design, banner_vars) {
   labelled <- lapply(banner_vars, function(col) {
     .banner_levels_labelled(design, col)
   })
-  design@data[[interact_col]] <- do.call(
+  design@data[["..interaction.."]] <- do.call(
     interaction,
     c(labelled, list(sep = " \u00d7 "))
   )
+  design
+}
+
+#' @keywords internal
+#' @noRd
+.compute_interaction_freq <- function(design, var, banner_vars, ...) {
+  design <- .build_interaction_design(design, banner_vars)
 
   result <- withCallingHandlers(
     surveycore::get_freqs(
       design,
       !!rlang::sym(var),
-      group = !!rlang::sym(interact_col),
+      group = !!rlang::sym("..interaction.."),
       ...
     ),
     surveycore_warning_small_cell = function(w) invokeRestart("muffleWarning"),
@@ -721,7 +738,7 @@
   result$subgroup_value <- as.character(result$subgroup_value)
   result$value <- as.character(result$value)
 
-  interact_label <- paste(banner_vars, collapse = " \u00d7 ")
+  interact_label <- .interaction_label(banner_vars)
   result$variable <- var
   result$question_text <- lm$question_text
   result$var_label <- lm$var_label
@@ -879,45 +896,41 @@
   }
 
   # Standard path
-  suppressed <- .empty_suppressed()
-
-  # Withholding (spec 3.5): one .resolve_eff_n() call per banner column, then
+  # Withholding (spec 3.5): one .resolve_eff_n() call per banner column and
+  # one per interaction, on the synthetic interaction column, then
   # .build_withheld(), which holds the only floor test. The kept levels are
   # the set difference on `level`, so no second comparison runs here. The
   # levels are labels, the vocabulary of the frame's subgroup_value.
-  # Interactions are not tested yet.
-  kept_levels <- list()
-  for (banner_var in banner_resolved) {
-    counts <- .resolve_eff_n(design, group_var = banner_var)
-    withheld <- .build_withheld(counts, min_eff_n, banner_var)
-    kept_levels[[banner_var]] <- setdiff(counts$level, withheld$level)
-    suppressed <- dplyr::bind_rows(
-      suppressed,
-      tibble::tibble(
-        subgroup_var = withheld$banner_var,
-        subgroup_value = withheld$level,
-        eff_n = withheld$n_eff,
-        raw_n = counts$n[match(withheld$level, counts$level)],
-        threshold = rep(as.numeric(min_eff_n), nrow(withheld))
+  floor_groups <- c(
+    lapply(banner_resolved, function(bv) {
+      list(name = bv, design = design, col = bv)
+    }),
+    lapply(interactions, function(int_vars) {
+      list(
+        name = .interaction_label(int_vars),
+        design = .build_interaction_design(design, int_vars),
+        col = "..interaction.."
       )
-    )
+    })
+  )
+  # A group whose every level is withheld is recorded in emptied_groups, for
+  # surveyreports_warning_banner_all_withheld (spec 3.5). That is a test on
+  # the kept set, not a second floor comparison.
+  kept_levels <- list()
+  withheld_list <- list()
+  emptied_groups <- character(0)
+  for (g in floor_groups) {
+    counts <- .resolve_eff_n(g$design, group_var = g$col)
+    withheld <- .build_withheld(counts, min_eff_n, g$name)
+    kept_levels[[g$name]] <- setdiff(counts$level, withheld$level)
+    withheld_list[[length(withheld_list) + 1L]] <- withheld
+    if (nrow(withheld) > 0L && length(kept_levels[[g$name]]) == 0L) {
+      emptied_groups <- c(emptied_groups, g$name)
+    }
   }
-
-  if (nrow(suppressed) > 0L) {
-    dropped <- paste(
-      suppressed$subgroup_var,
-      suppressed$subgroup_value,
-      sep = "=",
-      collapse = ", "
-    )
-    cli::cli_warn(
-      c(
-        "!" = "{nrow(suppressed)} subgroup{?s} suppressed due to small sample size.",
-        "i" = "Suppressed: {dropped}."
-      ),
-      class = "surveyreports_warning_subgroup_suppressed"
-    )
-  }
+  # No warning is raised here. export_crosstab() raises the withholding
+  # warnings from this frame after the all-NA drop, at step 16 of spec 3.11.
+  withheld <- dplyr::bind_rows(withheld_list)
 
   # Frame building
   all_rows <- lapply(vars_resolved, function(var) {
@@ -950,13 +963,21 @@
 
     if (!is.null(interactions)) {
       for (banner_vars in interactions) {
-        rows[[length(rows) + 1L]] <- do.call(
+        r <- do.call(
           .compute_interaction_freq,
           c(
             list(design = design, var = var, banner_vars = banner_vars),
             freq_args
           )
         )
+        # A withheld crossed cell leaves the frame, on the same set
+        # difference as a banner level (spec 3.5).
+        kept <- kept_levels[[.interaction_label(banner_vars)]]
+        rows[[length(rows) + 1L]] <- r[
+          r$subgroup_value %in% kept,
+          ,
+          drop = FALSE
+        ]
       }
     }
 
@@ -988,7 +1009,15 @@
   if (emit_label_warning) {
     .emit_missing_label_warning(all_rows)
   }
-  list(frame = all_rows, suppressed = suppressed)
+  # `suppressed` feeds the footnote of the export_topline() render helpers.
+  # Topline passes no banner, so it is always empty. export_crosstab() reads
+  # `withheld` and `emptied_groups` instead (spec 3.11, spec 3.14).
+  list(
+    frame = all_rows,
+    suppressed = .empty_suppressed(),
+    withheld = withheld,
+    emptied_groups = emptied_groups
+  )
 }
 
 # The all-NA drop: step 15 of spec 3.11 in export_crosstab(), step 9 of the
@@ -1373,11 +1402,15 @@
 #' @noRd
 .write_suppression_footnote <- function(wb, sheet, suppressed, start_row) {
   # nocov start
-  # Defensive: all callers guard with nrow(suppressed) > 0L before calling.
+  # Unreachable through the public API. Its only callers are the three
+  # export_topline() render helpers, and each guards with
+  # nrow(suppressed) > 0L. export_topline() passes no banner, so
+  # .build_freq_frame() always returns an empty `suppressed` frame to it.
+  # export_crosstab() writes .write_withheld_lines() instead. Spec 2.1 and
+  # spec VI keep this helper in the tree until the topline pass retires it.
   if (nrow(suppressed) == 0L) {
     return(invisible(wb))
   }
-  # nocov end
 
   # The threshold is min_eff_n, which may be fractional, so it is formatted
   # as text and not with %d.
@@ -1400,6 +1433,7 @@
   }
 
   invisible(wb)
+  # nocov end
 }
 
 # -- Base-note support (export_topline() / export_crosstab()) -------------------
@@ -1689,16 +1723,24 @@
 # uses the word "withheld" (spec VI) and the label "effective sample size" of
 # the sample-size row (spec 3.4), and states the floor so a line read alone in
 # a block footer or a console warning still explains itself.
+# A level of NA is the one unlabelled observed code that spec 3.7 keeps. It
+# is named `[no value label]`, without quotes, so the line names a missing
+# label and not the code or the string "NA" (test-spec XX-08). The spec gives
+# no wording for it.
 #' @keywords internal
 #' @noRd
 .format_withheld_lines <- function(withheld, min_eff_n) {
   if (is.null(withheld) || nrow(withheld) == 0L) {
     return(character(0))
   }
+  level_text <- ifelse(
+    is.na(withheld$level),
+    "[no value label]",
+    paste0("\"", withheld$level, "\"")
+  )
   paste0(
-    "\"",
-    withheld$level,
-    "\" (",
+    level_text,
+    " (",
     withheld$banner_var,
     ") withheld: effective sample size ",
     formatC(withheld$n_eff, format = "f", digits = 1L),

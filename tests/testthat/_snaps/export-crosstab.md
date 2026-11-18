@@ -224,16 +224,6 @@
       i Got -5.
       v Use a single number at or above 0, such as the default 100.
 
-# export_crosstab() drops a below-floor level's heading and cells (XW-01)
-
-    Code
-      export_crosstab(add_gen_fixture(designs$taylor), vars = q1, banner = gen,
-      file_name = out, min_eff_n = gen_floor)
-    Condition
-      Warning:
-      ! 1 subgroup suppressed due to small sample size.
-      i Suppressed: gen=Female.
-
 # export_crosstab() names an unlabelled banner column in the missing-label warning (XV-06)
 
     Code
@@ -287,4 +277,47 @@
       x No variable in `vars` has a non-missing value.
       i All-NA variables: all_na_var and all_na_2.
       v Select at least one variable with data in `vars`.
+
+# export_crosstab() warns once per call for withheld subgroups (XV-03)
+
+    Code
+      export_crosstab(add_gen_fixture(designs$taylor), vars = q1, banner = gen,
+      file_name = out, min_eff_n = gen_floor)
+    Condition
+      Warning:
+      ! 1 subgroup is below `min_eff_n` and is withheld.
+      * "Female" (gen) withheld: effective sample size 18.1, below the minimum of 50.
+      i Each withheld subgroup has no column in any table.
+
+# export_crosstab() warns when every level of a banner is withheld (XV-04)
+
+    Code
+      export_crosstab(d, vars = q1, banner = gen, file_name = out, min_eff_n = floor_n)
+    Condition
+      Warning:
+      ! 2 subgroups are below `min_eff_n` and are withheld.
+      * "Male" (gen) withheld: effective sample size 166.9, below the minimum of 176.
+      * "Female" (gen) withheld: effective sample size 18.1, below the minimum of 176.
+      i Each withheld subgroup has no column in any table.
+      Warning:
+      ! Every subgroup of 1 column group is below `min_eff_n`: gen.
+      i The tables are written without that column group.
+
+# export_crosstab() warns when the full sample is below the floor (XV-05)
+
+    Code
+      export_crosstab(d, vars = q1, banner = gen, file_name = out, min_eff_n = ceiling(
+        full_oracle(d)) + 1)
+    Condition
+      Warning:
+      ! 2 subgroups are below `min_eff_n` and are withheld.
+      * "Male" (gen) withheld: effective sample size 166.9, below the minimum of 186.
+      * "Female" (gen) withheld: effective sample size 18.1, below the minimum of 186.
+      i Each withheld subgroup has no column in any table.
+      Warning:
+      ! Every subgroup of 1 column group is below `min_eff_n`: gen.
+      i The tables are written without that column group.
+      Warning:
+      ! The effective sample size of the full sample, 185.0, is below `min_eff_n` (186).
+      i The full sample is not a subgroup, so its column is still written.
 
