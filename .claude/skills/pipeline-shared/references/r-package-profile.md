@@ -11,13 +11,41 @@ which is auto-loaded. Where the two overlap, the rule file wins.
 | # | Command | Gate | On fail |
 |---|---------|------|---------|
 | 1 | `Rscript -e "devtools::document()"` | NAMESPACE/man/ unchanged after the run | BLOCK (the builder forgot `document()`) |
-| 2 | `Rscript -e "devtools::test()"` | all tests pass | BLOCK (numerical-miss or contract-miss) |
-| 3 | `Rscript -e "devtools::run_examples()"` | all `@examples` run clean | BLOCK (examples use unloaded Imports or broken syntax) |
+| 2 | `NOT_CRAN=true Rscript .claude/scripts/covr-report.R` | all tests pass; package coverage is 95% or more (target 98%); per-file % and uncovered lines for the changed `R/` files | BLOCK if a test fails, covr did not run, or coverage is below 95%; HOLD if 95–98% and dropped vs baseline |
+| 3 | removed | R CMD check (gate 5) runs every `@examples` block | — |
 | 4 | `R CMD build .` | tarball produced | BLOCK (build failure) |
-| 5 | `R CMD check --as-cran <tarball>` | 0 ERRORs, 0 WARNINGs; NOTEs reviewed | BLOCK on ERROR/WARNING |
-| 6 | `Rscript -e "pkgdown::build_site(preview = FALSE)"` | site builds, no errored pages | BLOCK (unless skipped, see below) |
-| 7 | `Rscript -e "covr::package_coverage()"` | 95% floor, 98% target | BLOCK below 95%; HOLD if 95–98% and dropped vs baseline |
+| 5 | `R CMD check --as-cran --no-manual --no-tests <tarball>` | 0 ERRORs, 0 WARNINGs; NOTEs reviewed; examples run clean | BLOCK on ERROR/WARNING |
+| 6 | `Rscript -e "pkgdown::check_pkgdown()"` | every export is in the `_pkgdown.yml` reference index | BLOCK (unless skipped, see below) |
+| 7 | removed | gate 2 is the covr run | — |
 | 8 | `air format --check .` | every R file already formatted | BLOCK — run `air format .` as its own commit, then redo the change |
+
+Gates 3 and 7 are gone. The other gates keep their numbers and log names,
+so `gate-5-check.log` and the rest still match older audits.
+
+Gate 2 is one covr run. `covr-report.R` runs the whole `tests/testthat`
+directory with `testthat::test_dir()` inside `covr::package_coverage()`, so
+the test results and the coverage come from the same run. Its log is
+`gate-2-test-covr.log`. The log and the PASS row show the test counts in
+testthat's own shape, `[ FAIL n | WARN n | SKIP n | PASS n ]`, then the
+package total and the per-file detail. The gate runs on every PR, also when
+no `R/` file changed.
+
+The changed-file list feeds the per-file report only. It takes committed,
+uncommitted and untracked `R/` files against the newer merge base of
+`develop` and `origin/develop`.
+
+Two caveats apply to gate 2:
+
+- **The tests run against the installed, instrumented package.** They do
+  not run through `devtools::load_all()`. This is how `R CMD check` runs
+  them. A test that works only under `load_all()` fails here.
+- **Measure Before and After on the same covr version.** Different covr
+  versions count lines differently, so a Before figure from one version and
+  an After figure from another are not comparable. The installed version is
+  covr 4.0.0.
+
+Gate 5 does not run the tests. Gate 2 already ran them, and CI runs
+`R CMD check` with tests on five operating system and R version pairs.
 
 ### Canonical runner
 
@@ -27,10 +55,16 @@ Run the whole table with ONE background command:
 bash .claude/scripts/run-gates.sh <log-dir> [--skip-pkgdown]
 ```
 
-It logs each gate to `<log-dir>`, prints one summary table plus a `Tree:` hash,
-and exits 0 only when every gate passes. `--baseline` mode (gates 2 and 7 only)
-captures the Before-column numbers on a clean tree. Never run the gates one
-command at a time.
+It logs each gate to `<log-dir>`, prints one summary table plus a `Tree:`
+line, and exits 0 only when every gate passes. `--baseline` mode runs gate 2
+only. Use it to capture the Before-column numbers on a clean tree. Never run
+the gates one command at a time.
+
+The `Tree:` line comes from `bash .claude/scripts/tree-hash.sh`. The hash
+covers the working tree, uncommitted and untracked files included, with
+`changelog/` left out. `commit-and-pr` runs the script again and compares the
+two values. When they are equal, the code has not changed since the gates
+ran, and `commit-and-pr` skips its pre-flight check.
 
 ## Output discipline (all gates)
 
@@ -45,19 +79,23 @@ when diagnosing that gate's failure.
 
 ### pkgdown skip condition
 
-The tester MAY skip gate 6 when the PR's write surface does not touch:
+Gate 6 runs `pkgdown::check_pkgdown()`. It reads `_pkgdown.yml` and does not
+build the site, so it takes seconds. Run it on every PR. The CI pkgdown job
+(`.github/workflows/pkgdown.yaml`) still builds the full site on every PR.
+
+The tester MAY skip gate 6 with `--skip-pkgdown` only when the PR touches
+none of these:
 
 - `R/` (any source file)
-- `vignettes/`
-- `README.Rmd`, `README.md`
+- `NAMESPACE` or `man/`
 - `_pkgdown.yml`
-- `DESCRIPTION` (Title, Description, Imports)
+- `vignettes/`
 
-A skip is logged in the `audit.md` Profile gates table as `SKIPPED — scope`.
+Log a skip in the `audit.md` Profile gates table as `SKIPPED — scope`.
 
-**No skip when exports change.** If the PR adds, removes, or renames any
-exported function, pkgdown MUST run — a non-empty NAMESPACE diff means no
-exception.
+**No skip when exports change.** When the `NAMESPACE` diff is not empty, gate
+6 must run. `R CMD check --as-cran` does not find an export that is missing
+from the `_pkgdown.yml` reference index. `check_pkgdown()` does.
 
 ## Pre-approved NOTEs
 

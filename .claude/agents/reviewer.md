@@ -89,9 +89,9 @@ Open `audit.md`, Cross-design coverage table. Every function in the write
 surface that accepts a `design` must have a passing cell for taylor,
 replicate, twophase, and nonprob — the four `survey_base` subclasses.
 
-A function that takes no design (`pool_pvals()`) has no row to fill. So does a
-row marked `gap` for nonprob while `make_all_designs()` still returns three
-designs — note it, do not BLOCK on it.
+A function that takes no design (`pool_pvals()`) has no row to fill.
+`make_all_designs()` returns all four designs, so a nonprob cell marked `gap`
+is an empty cell.
 
 - An empty cell → BLOCK, traceable to the tester
 - A cell marked N/A → check `spec-{id}.md`, Design support matrix. N/A is
@@ -139,9 +139,9 @@ Any violation → BLOCK, traceable to the builder.
 
 ## Step 6 — Coverage floor check
 
-From `audit.md`, Profile gates section:
+From `audit.md`, Profile gates section, the `tests + covr` row (gate 2):
 
-- covr at or above 95% → OK
+- Coverage at or above 95% → OK
 - 95–98% AND dropped against the baseline → HOLD should already have been
   raised by the tester; confirm it was. If it was not, BLOCK traceable to the
   tester

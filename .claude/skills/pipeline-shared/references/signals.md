@@ -52,10 +52,11 @@ Maximum 3 BLOCK cycles per PR.
 - A numerical test failed outside the tolerance from `test-spec-{id}.md`
 - A named error class test failed (wrong class thrown, or no error thrown)
 - A snapshot test failed and the message change was not intended
-- `R CMD check --as-cran` has an ERROR or a WARNING
-- `devtools::run_examples()` errored
-- `pkgdown::build_site()` errored (when not skipped)
-- Coverage dropped below 95%
+- `R CMD check --as-cran` has an ERROR or a WARNING, including an
+  `@examples` block that errored
+- `pkgdown::check_pkgdown()` errored (when not skipped)
+- Gate 2 (tests + covr) failed: a test failed, covr did not run, or
+  coverage dropped below 95%
 - `air format --check .` reports an unformatted file
 - A cross-design test passed for one design type and failed for another
 

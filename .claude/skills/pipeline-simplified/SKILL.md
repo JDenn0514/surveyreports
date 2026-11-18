@@ -108,8 +108,9 @@ background. The tree is still clean, because the builder has not run:
 bash .claude/scripts/run-gates.sh {run-dir}/logs/baseline --baseline
 ```
 
-Use `run_in_background: true`. The summary becomes the tester's Before column.
-Do not wait for it here. Collect the result before Step 2b.
+`--baseline` runs gate 2 only: the whole test suite once under covr. It gives
+the test counts and the coverage in one row. Use `run_in_background: true`.
+The summary becomes the tester's Before column. Do not wait for it here. Collect the result before Step 2b.
 
 On return, verify `request.md` carries all four new sections. Append `PLANNED`
 to `status.md`.

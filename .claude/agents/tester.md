@@ -80,10 +80,6 @@ passes.
 `pool_pvals()` takes a list of tibbles, not a design. This rule does not apply
 to it; mark its row N/A.
 
-`make_all_designs()` does not yet return a nonprob design. Until it does, mark
-the nonprob column `gap` rather than `pass` or an empty cell, and say so in
-`audit.md`.
-
 Fill in the Cross-design coverage table in `audit.md` for every function in
 scope. An empty cell is a BLOCK.
 
@@ -106,6 +102,10 @@ poll loops. Measured cost of ignoring this: one tester spent 683 turns polling.
    `r-package-profile.md`.
 
 The gates are defined in `r-package-profile.md`, Validation commands section.
+Gate 2 runs the test suite once under covr and reports the test counts and
+the coverage together, in `gate-2-test-covr.log`. Gate 5 runs
+`R CMD check` without the tests and runs the examples. There is no gate 3 or
+gate 7.
 
 ## Step 2 — Validate the per-function scenarios
 
@@ -113,7 +113,7 @@ For each function in `test-spec-{id}.md`, Per-function test plan section:
 
 - Run each happy-path scenario against the oracle. Compare the estimate, the
   SE, and the CI bounds against the tolerance. Run it for taylor, replicate,
-  and twophase
+  twophase, and nonprob
 - Run each error-path scenario. Verify the correct `class = ...` is thrown AND
   the snapshot matches
 - Run each warning-path scenario
@@ -158,7 +158,9 @@ After column comes from the Step 1 gate run. If no baseline was passed, write
 - Coverage dropped 0.5 points or more AND is below 98% → HOLD
 - Coverage below 95% → BLOCK
 - Any line added by this PR is uncovered (from the `UNCOVERED_LINE` entries in
-  the covr log) → BLOCK
+  `gate-2-test-covr.log`) → BLOCK
+- The Before and After coverage come from different covr versions → HOLD.
+  The two figures are not comparable
 
 ## Step 5 — Verdict
 
