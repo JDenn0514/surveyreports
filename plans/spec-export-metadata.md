@@ -921,6 +921,23 @@ stops calling that helper, so the distinction leaves the crosstab cell. The
 helper itself stays unchanged and keeps the distinction for
 `export_topline()` — section 2.3.
 
+**Decision (2026-11-19): code 1 is "chosen" in a SATA cell, read before value
+labels are applied.** `get_freqs()` returns the label, not the code, so the
+chosen value is the string in the frame's `value` column that stands for code 1.
+`.extract_sata_chosen()` in `R/export-utils.R` finds it, and
+`.build_freq_frame()` marks the matching rows in the logical column
+`sata_chosen`. Both export functions read that column. The rule:
+
+| The item | Its chosen value |
+|---|---|
+| has value labels, and one label's code is 1 | that label, e.g. `Yes` for `1 = Yes, 2 = No` |
+| is logical, with no code-1 label | `TRUE`, because R stores `TRUE` as 1 |
+| any other item: unlabelled 0/1, a factor, labels with no code 1 such as `0 = No, 2 = Yes` | `1` |
+
+An item with no row for its chosen value gets the true-zero rule above: `0`
+where the item has a base. No warning is raised. A `survey_collection` reads the
+labels of its first member, the member `export_topline()` classifies on.
+
 **The rounding mode is half to even**, which is what `round()` and `sprintf()`
 both do in R and what the current code already does. A reader who hand-checks
 `41.25` at one decimal gets `41.3`; the workbook prints `41.2`. That is the

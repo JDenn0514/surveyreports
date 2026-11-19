@@ -1148,8 +1148,8 @@ export_crosstab <- function(
   )
   wb <- pre$wb
 
-  # Data rows: one row per SATA item; pct where value == "1", with
-  # true-zero handling (see .sata_pct_cell())
+  # Data rows: one row per SATA item; pct for the item's chosen value
+  # (code 1), with true-zero handling (see .sata_pct_cell())
   data_start <- pre$next_row
   for (j in seq_along(sata_vars)) {
     var <- sata_vars[[j]]

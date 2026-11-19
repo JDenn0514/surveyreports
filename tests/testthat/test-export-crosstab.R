@@ -1449,6 +1449,71 @@ test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA t
   )
 })
 
+test_that("export_crosstab() prints the code-1 share for a labelled SATA item", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    unlink(out)
+    # sata_a coded 1 = Yes, 2 = No: the chosen value is code 1, "Yes"
+    d <- designs[[nm]]
+    d@data$sata_a <- ifelse(d@data$sata_a == 1L, 1, 2)
+    d@metadata@value_labels[["sata_a"]] <- c(Yes = 1, No = 2)
+    d <- surveycore::set_sata(d, variable = c("sata_a", "sata_b", "sata_c"))
+    d <- surveycore::set_var_label(
+      d,
+      variable = c("sata_a", "sata_b", "sata_c", "group"),
+      label = c("Option A", "Option B", "Option C", "Group")
+    )
+
+    crosstab_quiet(
+      d,
+      vars = c(sata_a, sata_b, sata_c),
+      banner = group,
+      file_name = out,
+      min_eff_n = 0
+    )
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    df <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
+    col_1 <- as.character(df[[1L]])
+    row_a <- which(col_1 == "Option A")
+    expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
+    header <- as.character(unlist(df[which(col_1 == "Item")[[1L]], ]))
+
+    ref_total <- quiet_nonprob(surveycore::get_freqs(d, sata_a))
+    expect_equal(
+      as.numeric(df[row_a, match("Total", header)]),
+      round(100 * ref_total$pct[as.character(ref_total[[1L]]) == "Yes"], 1L),
+      tolerance = 1e-10,
+      label = paste0(nm, ": Total cell")
+    )
+
+    # The reference call is not the subject: twophase raises the small-cell
+    # warning here, as the Total-column SATA block's reference call can.
+    ref_group <- suppressWarnings(
+      surveycore::get_freqs(d, sata_a, group = group),
+      classes = c(
+        "surveycore_warning_small_cell",
+        "surveycore_warning_nonprob_srs_fallback"
+      )
+    )
+    for (lvl in c("A", "B", "C")) {
+      ref_pct <- ref_group$pct[
+        as.character(ref_group$group) == lvl &
+          as.character(ref_group$sata_a) == "Yes"
+      ]
+      expect_equal(
+        as.numeric(df[row_a, match(lvl, header)]),
+        round(100 * ref_pct, 1L),
+        tolerance = 1e-10,
+        label = paste0(nm, ": cell for ", lvl)
+      )
+    }
+  }
+})
+
 # 19. Metadata readers: unwired helpers ---------------------------------------
 # These five helpers have no caller yet, so the coverage floor has no indirect
 # path to them. Later PRs wire them into export_crosstab() and
