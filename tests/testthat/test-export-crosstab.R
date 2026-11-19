@@ -5257,13 +5257,13 @@ heading_cells <- function(path, sheet, label = "Response") {
   as.character(unlist(rows[heading_index(rows, label), ]))
 }
 
-# The cells of one heading's column, from the first response row through the
-# "Total" row of column A, as text.
+# The cells of one heading's column, from the first row under the heading row
+# through the last written row of column A, as text.
 column_cells <- function(path, sheet, heading) {
   rows <- sheet_rows(path, sheet)
   h <- heading_index(rows)
   j <- match(heading, as.character(unlist(rows[h, ])))
-  last <- match("Total", as.character(rows[[1L]][-seq_len(h)])) + h
+  last <- max(which(!is.na(as.character(rows[[1L]]))))
   as.character(rows[[j]][seq.int(h + 1L, last)])
 }
 
@@ -7770,5 +7770,747 @@ test_that("export_crosstab() leaves the second label column blank on battery sam
     expect_false(anyNA(at), label = paste0(nm, ": both rows"))
     expect_true(all(is.na(rows[[2L]][at])), label = paste0(nm, ": blank"))
     expect_false(anyNA(rows[[3L]][at]), label = paste0(nm, ": counts"))
+  }
+})
+
+# 30. Sheet properties ---------------------------------------------------------
+# The single route writes no `Total` row of `100%` cells (spec 3.9). The
+# column widths, the wraps, the heading row height and the freeze pane are
+# fixed by the arguments, never by the cell text (spec 3.16).
+
+test_that("export_crosstab() writes no 100% cell on any sheet (XH-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    for (layout in c("per_question", "stacked")) {
+      fresh_path(out)
+      crosstab_quiet(
+        guard_design(designs[[nm]]),
+        vars = c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+        banner = group,
+        file_name = out,
+        min_eff_n = 0,
+        layout = layout
+      )
+
+      for (sheet in data_sheets(out)) {
+        lbl <- paste0(nm, ", ", layout, ": ", sheet)
+        expect_true(
+          "Response" %in%
+            sheet_text(out, sheet) ||
+            "Item" %in% sheet_text(out, sheet),
+          label = paste(lbl, "a block")
+        )
+        expect_false("100%" %in% sheet_text(out, sheet), label = lbl)
+      }
+    }
+  }
+})
+
+# The stored width of each column of one sheet, read after wb_load(), as the
+# integer part. openxlsx2 1.28 stores a set width w as w + 0.711, so the
+# integer part is the width that was set. A column with no stored width is
+# NA. The vector is indexed by column number.
+col_widths <- function(path, sheet) {
+  wb <- openxlsx2::wb_load(path)
+  attrs <- wb$worksheets[[match(sheet, wb$get_sheet_names())]]$cols_attr
+  out <- rep(NA_integer_, 0L)
+  for (a in attrs) {
+    from <- as.integer(sub('.*min="([0-9]+)".*', "\\1", a))
+    to <- as.integer(sub('.*max="([0-9]+)".*', "\\1", a))
+    if (!grepl('width="', a, fixed = TRUE)) {
+      next
+    }
+    width <- as.numeric(sub('.*width="([0-9.]+)".*', "\\1", a))
+    out[from:to] <- as.integer(floor(width))
+  }
+  out
+}
+
+# The number of columns of the first block on a sheet: the non-blank cells of
+# its heading row.
+block_width <- function(path, sheet, label = "Response") {
+  sum(!is.na(heading_cells(path, sheet, label)))
+}
+
+# Writes `vars` over banner = gen on a gen-fixture design, with nothing
+# withheld. `vars` is a character vector; `...` reaches export_crosstab().
+write_gen_vars <- function(d, path, vars, ...) {
+  fresh_path(path)
+  crosstab_quiet(
+    d,
+    vars = tidyselect::all_of(vars),
+    banner = gen,
+    file_name = path,
+    min_eff_n = 0,
+    ...
+  )
+  path
+}
+
+test_that("export_crosstab() sets the label and data column widths (XB-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  bat <- c("bat_1", "bat_2", "bat_3")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+
+    write_gen_vars(d, out, "q1")
+    n_cols <- block_width(out, "q1")
+    expect_identical(n_cols, 4L, label = paste0(nm, ": Response, Total, 2"))
+    expect_identical(
+      col_widths(out, "q1")[seq_len(n_cols)],
+      c(44L, rep(12L, n_cols - 1L)),
+      label = paste0(nm, ": q1")
+    )
+
+    write_gen_vars(d, out, bat)
+    n_cols <- block_width(out, "bat_1", "Item")
+    expect_identical(n_cols, 5L, label = paste0(nm, ": Item, Response, 3"))
+    expect_identical(
+      col_widths(out, "bat_1")[seq_len(n_cols)],
+      c(44L, 20L, rep(12L, n_cols - 2L)),
+      label = paste0(nm, ": battery")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps the same widths when the labels grow (XB-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  short <- c("Yes", "No")
+  long <- c(
+    "Yes, without any doubt at all, in every case that I can think of",
+    "No, not under any circumstances that I am able to imagine today"
+  )
+
+  for (nm in names(designs)) {
+    widths <- list()
+    for (labels in list(short, long)) {
+      d <- add_gen_fixture(designs[[nm]])
+      d@data$q1 <- rep(labels, length.out = nrow(d@data))
+      write_gen_vars(d, out, "q1")
+      expect_true(
+        all(labels %in% sheet_col_a(out, "q1")),
+        label = paste0(nm, ": the labels are written")
+      )
+      widths[[length(widths) + 1L]] <- col_widths(out, "q1")
+    }
+
+    expect_gt(min(nchar(long)), 5L * max(nchar(short)))
+    expect_identical(widths[[2L]], widths[[1L]], label = nm)
+    expect_identical(widths[[1L]], c(44L, 12L, 12L, 12L), label = nm)
+  }
+})
+
+# TRUE when the cell's resolved alignment wraps. A cell with no style of its
+# own takes style 0, the workbook default.
+cell_wraps <- function(wb, sheet, dims) {
+  style <- unname(openxlsx2::wb_get_cell_style(wb, sheet, dims))
+  style_id <- if (is.na(style) || !nzchar(style)) 0L else as.integer(style)
+  xf <- wb$styles_mgr$styles$cellXfs[[style_id + 1L]]
+  grepl('wrapText="1"|wrapText="true"', xf)
+}
+
+# The stored height of one sheet row, or NA when the row has none of its own.
+row_height <- function(wb, sheet, row) {
+  attrs <- wb$worksheets[[match(
+    sheet,
+    wb$get_sheet_names()
+  )]]$sheet_data$row_attr
+  ht <- attrs$ht[attrs$r == as.character(row)]
+  if (length(ht) == 0L || !nzchar(ht)) NA_real_ else as.numeric(ht)
+}
+
+test_that("export_crosstab() wraps the label column and the heading row (XB-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    write_gen_vars(add_gen_fixture(designs[[nm]]), out, "q1")
+    col_a <- sheet_col_a(out, "q1")
+    h <- match("Response", col_a)
+    n_cols <- block_width(out, "q1")
+    wb <- openxlsx2::wb_load(out)
+
+    # Column A from the heading row down: the heading, the two sample-size
+    # labels and every response label.
+    for (row in seq.int(h, length(col_a))) {
+      expect_true(
+        cell_wraps(wb, "q1", paste0("A", row)),
+        label = paste0(nm, ": A", row, " wraps")
+      )
+    }
+    for (col in seq_len(n_cols)) {
+      dims <- openxlsx2::wb_dims(rows = h, cols = col)
+      expect_true(
+        cell_wraps(wb, "q1", dims),
+        label = paste0(nm, ": heading ", dims, " wraps")
+      )
+    }
+    # The estimate cell: the Total column of the first response row.
+    estimate <- openxlsx2::wb_dims(rows = h + 3L, cols = 2L)
+    expect_false(
+      cell_wraps(wb, "q1", estimate),
+      label = paste0(nm, ": ", estimate, " does not wrap")
+    )
+
+    expect_identical(
+      row_height(wb, "q1", h),
+      30,
+      label = paste0(nm, ": the heading row height")
+    )
+    expect_identical(
+      row_height(wb, "q1", h + 3L),
+      NA_real_,
+      label = paste0(nm, ": a data row has no height")
+    )
+  }
+})
+
+# The freeze pane of one sheet, read after wb_load(): the <pane> XML as one
+# string, "" when the sheet has no pane.
+freeze_pane <- function(path, sheet) {
+  wb <- openxlsx2::wb_load(path)
+  pane <- wb$worksheets[[match(sheet, wb$get_sheet_names())]]$freezePane
+  if (length(pane) == 0L) "" else pane
+}
+
+test_that("export_crosstab() freezes the pane under \"top\" and not under \"bottom\" (XB-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+
+    write_gen_vars(d, out, "q1", sample_size_display = "top")
+    last_ss <- match(ss_labels[[2L]], sheet_col_a(out, "q1"))
+    pane <- freeze_pane(out, "q1")
+    expect_match(
+      pane,
+      paste0('ySplit="', last_ss, '"'),
+      fixed = TRUE,
+      label = paste0(nm, ": top, the split")
+    )
+    expect_match(
+      pane,
+      paste0('topLeftCell="A', last_ss + 1L, '"'),
+      fixed = TRUE,
+      label = paste0(nm, ": top, the first data row")
+    )
+
+    write_gen_vars(d, out, "q1", sample_size_display = "bottom")
+    expect_identical(
+      freeze_pane(out, "q1"),
+      "",
+      label = paste0(nm, ": bottom, no pane")
+    )
+  }
+})
+
+# The stacked call of XB-11 and XB-12: the first block holds the title in
+# row 1, the base note in row 2, the spanner in row 3, the heading row in row
+# 4 and the two sample-size rows in rows 5 and 6.
+write_stacked_pane <- function(d, path, vars, notes) {
+  write_gen_vars(
+    d,
+    path,
+    vars,
+    layout = "stacked",
+    base_notes = notes,
+    variance = NULL,
+    sample_size_display = "top",
+    show_ess = TRUE
+  )
+}
+
+test_that("export_crosstab() takes the stacked sheet's pane from its first block (XB-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  notes <- c(q1 = "Base: all adults", q2 = "Base: all adults")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_stacked_pane(d, out, c("q1", "q2"), notes)
+
+    col_a <- sheet_col_a(out, "Crosstab")
+    expect_identical(
+      col_a[1:6],
+      c("Question one", "Base: all adults", NA, "Response", ss_labels),
+      label = paste0(nm, ": the first block")
+    )
+    # The second block's first data row, below its own sample-size rows.
+    second_ss <- which(col_a == ss_labels[[2L]])
+    expect_identical(length(second_ss), 2L, label = paste0(nm, ": 2 blocks"))
+
+    pane <- freeze_pane(out, "Crosstab")
+    expect_match(pane, 'topLeftCell="A7"', fixed = TRUE, label = nm)
+    expect_match(pane, 'ySplit="6"', fixed = TRUE, label = nm)
+    expect_false(
+      grepl(
+        paste0('topLeftCell="A', second_ss[[2L]] + 1L, '"'),
+        pane,
+        fixed = TRUE
+      ),
+      label = paste0(nm, ": not the second block")
+    )
+  }
+})
+
+test_that("export_crosstab() keeps the stacked pane when the first variable is dropped (XB-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    w <- expect_warning(
+      write_stacked_pane(
+        d,
+        out,
+        c("all_na_var", "q1"),
+        c(q1 = "Base: all adults")
+      ),
+      class = "surveyreports_warning_all_na_dropped"
+    )
+    expect_match(conditionMessage(w), "all_na_var", fixed = TRUE, label = nm)
+
+    expect_false(
+      "all_na_var" %in% sheet_text(out, "Crosstab"),
+      label = paste0(nm, ": nothing written")
+    )
+    expect_identical(
+      sheet_col_a(out, "Crosstab")[1:6],
+      c("Question one", "Base: all adults", NA, "Response", ss_labels),
+      label = paste0(nm, ": q1 starts at row 1")
+    )
+    pane <- freeze_pane(out, "Crosstab")
+    expect_match(pane, 'topLeftCell="A7"', fixed = TRUE, label = nm)
+    expect_match(pane, 'ySplit="6"', fixed = TRUE, label = nm)
+  }
+})
+
+test_that("export_crosstab() widens column B of a stacked sheet with a battery (XB-13)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_gen_vars(
+      d,
+      out,
+      c("q1", "bat_1", "bat_2", "bat_3"),
+      layout = "stacked",
+      variance = NULL
+    )
+    rows <- sheet_rows(out, "Crosstab")
+    col_a <- as.character(rows[[1L]])
+    col_b <- as.character(rows[[2L]])
+
+    # The battery block: Item, Response, Total, Male, Female.
+    expect_identical(
+      col_widths(out, "Crosstab")[1:5],
+      c(44L, 20L, 12L, 12L, 12L),
+      label = paste0(nm, ": widths")
+    )
+
+    # The q1 estimate rows sit between its sample-size rows and the blank
+    # row that ends the block. The battery's Response cells sit in column B
+    # below its own sample-size rows.
+    ss_at <- which(col_a == ss_labels[[2L]])
+    expect_identical(length(ss_at), 2L, label = paste0(nm, ": 2 blocks"))
+    q1_end <- which(is.na(col_a) & seq_along(col_a) > ss_at[[1L]])[[1L]] - 1L
+    q1_rows <- seq.int(ss_at[[1L]] + 1L, q1_end)
+    bat_rows <- seq.int(ss_at[[2L]] + 1L, length(col_b))
+    bat_rows <- bat_rows[!is.na(col_b[bat_rows])]
+    expect_gt(length(q1_rows), 0L)
+    expect_identical(
+      length(bat_rows),
+      sum(vapply(
+        c("bat_1", "bat_2", "bat_3"),
+        function(v) n_values(d, v),
+        integer(1L)
+      )),
+      label = paste0(nm, ": battery rows")
+    )
+
+    wb <- openxlsx2::wb_load(out)
+    for (row in bat_rows) {
+      expect_true(
+        cell_wraps(wb, "Crosstab", paste0("B", row)),
+        label = paste0(nm, ": Response B", row, " wraps")
+      )
+    }
+    for (row in q1_rows) {
+      expect_false(
+        cell_wraps(wb, "Crosstab", paste0("B", row)),
+        label = paste0(nm, ": q1 estimate B", row, " does not wrap")
+      )
+    }
+  }
+})
+
+# 31. Edge cases: response rows and sample sizes -------------------------------
+# A block with fewer response rows keeps its sample-size rows, because they
+# count the design's rows, not the tabulated variable (spec 3.4, spec 3.19).
+# XX-01 and XX-04 turn on the design and the variable, not on a banner, so
+# they run against both export functions.
+
+export_fns <- c("export_crosstab", "export_topline")
+
+# The rows a design tabulates: the phase-2 subset of a twophase design, then
+# the in-domain rows when the design carries a domain column.
+# test-export-topline.R holds the same helper as in_scope_rows();
+# helper-export.R is outside this change.
+tabulated_rows <- function(d) {
+  keep <- rep(TRUE, nrow(d@data))
+  if (S7::S7_inherits(d, surveycore::survey_twophase)) {
+    keep <- keep & d@data[[d@variables$subset]]
+  }
+  if (surveycore::SURVEYCORE_DOMAIN_COL %in% names(d@data)) {
+    keep <- keep & d@data[[surveycore::SURVEYCORE_DOMAIN_COL]]
+  }
+  sum(keep)
+}
+
+# Writes the block of one variable with one of the two export functions:
+# banner = group, with nothing withheld, for the crosstab. `var` is a
+# character scalar.
+write_one <- function(fn, d, path, var) {
+  fresh_path(path)
+  if (fn == "export_crosstab") {
+    crosstab_quiet(
+      d,
+      vars = tidyselect::all_of(var),
+      banner = group,
+      file_name = path,
+      min_eff_n = 0
+    )
+  } else {
+    topline_quiet(d, vars = tidyselect::all_of(var), file_name = path)
+  }
+}
+
+# The block that write_one() wrote for `var`: its response labels, and its
+# sample sizes. The crosstab gives its two sample-size rows, every column.
+# The topline gives the N cell of its Total row, its one unweighted count.
+block_summary <- function(fn, path, var) {
+  if (fn == "export_crosstab") {
+    rows <- sheet_rows(path, var)
+    h <- heading_index(rows)
+    list(
+      responses = as.character(estimate_rows(rows, h, 2L)[[1L]]),
+      n = as.integer(rows[[2L]][[h + 1L]]),
+      sizes = as.character(unlist(rows[h + 1:2, ]))
+    )
+  } else {
+    rows <- openxlsx2::wb_to_df(
+      path,
+      sheet = "Topline",
+      col_names = FALSE,
+      skip_empty_rows = FALSE
+    )
+    col_a <- as.character(rows[[1L]])
+    h <- match("Response", col_a)
+    total <- match("Total", col_a)
+    list(
+      responses = col_a[seq.int(h + 1L, total - 1L)],
+      n = as.integer(rows[[3L]][[total]]),
+      sizes = as.character(rows[[3L]][[total]])
+    )
+  }
+}
+
+test_that("both export functions report a sample size of 1 on a one-row design (XX-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- one_row_design(designs[[nm]])
+    expect_identical(tabulated_rows(d), 1L, label = paste0(nm, ": one row"))
+
+    for (fn in export_fns) {
+      lbl <- paste0(nm, ", ", fn)
+      result <- suppressWarnings(
+        write_one(fn, d, out, "q1"),
+        classes = "surveycore_warning_single_level"
+      )
+      expect_identical(result, out, label = paste0(lbl, ": the path"))
+      expect_identical(
+        block_summary(fn, out, "q1")$n,
+        1L,
+        label = paste0(lbl, ": the unweighted sample size")
+      )
+    }
+  }
+})
+
+test_that("both export functions write one response row for a single-value variable (XX-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    d@data$constant <- "Agree"
+    d <- surveycore::set_var_label(d, constant = "A constant")
+
+    for (fn in export_fns) {
+      lbl <- paste0(nm, ", ", fn)
+      write_one(fn, d, out, "q1")
+      other <- block_summary(fn, out, "q1")
+      write_one(fn, d, out, "constant")
+      single <- block_summary(fn, out, "constant")
+
+      expect_identical(single$responses, "Agree", label = lbl)
+      expect_gt(length(other$responses), 1L)
+      expect_identical(
+        single$sizes,
+        other$sizes,
+        label = paste0(lbl, ": the sample sizes")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() writes no response row for an unused factor level", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    d@data$fq <- factor(
+      rep(c("Low", "High"), length.out = nrow(d@data)),
+      levels = c("Low", "Medium", "High")
+    )
+    d <- surveycore::set_var_label(d, fq = "A factor")
+
+    write_one("export_crosstab", d, out, "q1")
+    other <- block_summary("export_crosstab", out, "q1")
+    write_one("export_crosstab", d, out, "fq")
+    fq <- block_summary("export_crosstab", out, "fq")
+
+    expect_identical(fq$responses, c("Low", "High"), label = nm)
+    expect_false("Medium" %in% sheet_text(out, "fq"), label = nm)
+    expect_identical(fq$sizes, other$sizes, label = paste0(nm, ": sizes"))
+  }
+})
+
+test_that("export_crosstab() writes the stacked layout on one sheet (XX-11)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    crosstab_quiet(
+      guard_design(designs[[nm]]),
+      vars = c(q1, q2),
+      banner = group,
+      file_name = out,
+      min_eff_n = 0,
+      layout = "stacked"
+    )
+
+    expect_identical(
+      openxlsx2::wb_load(out)$sheet_names,
+      c("About", "Crosstab"),
+      label = paste0(nm, ": two sheets")
+    )
+
+    col_a <- sheet_col_a(out, "Crosstab")
+    h <- which(col_a == "Response")
+    expect_identical(length(h), 2L, label = paste0(nm, ": two blocks"))
+    # Each block's sample-size rows sit under its own heading row.
+    for (k in 1:2) {
+      expect_identical(
+        col_a[h[[k]] + 1:2],
+        ss_labels,
+        label = paste0(nm, ": block ", k)
+      )
+    }
+    # One blank row between the last row of q1 and the title of q2.
+    q2_title <- h[[2L]] - 2L
+    expect_identical(col_a[[q2_title]], "Question two", label = nm)
+    expect_true(is.na(col_a[[q2_title - 1L]]), label = paste0(nm, ": blank"))
+    expect_false(
+      is.na(col_a[[q2_title - 2L]]),
+      label = paste0(nm, ": one blank row")
+    )
+  }
+})
+
+test_that("export_crosstab() counts more rows than the answers, with no warning (XX-12)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    d@data$q1[1:60] <- NA_character_
+    expect_identical(sum(is.na(d@data$q1)), 60L)
+
+    expect_no_warning(write_one("export_crosstab", d, out, "q1"))
+
+    summary <- block_summary("export_crosstab", out, "q1")
+    answered <- sum(oracle_freqs(d, "q1")$n)
+    expect_identical(summary$n, tabulated_rows(d), label = nm)
+    expect_lt(answered, summary$n, label = paste0(nm, ": the response rows"))
+  }
+})
+
+# 32. Numerical accuracy: the sample-size counts -------------------------------
+# The two sample-size rows match surveycore::get_effective_n(), the oracle,
+# for the full sample and for a subgroup, and follow the rows the design
+# tabulates (spec 3.4, spec 3.20).
+
+# The two counts of one column of the q1 block: the cells of the unweighted
+# and the effective sample-size rows, under the heading row, in column
+# `col`, as numbers. Column 2 is the Total column.
+ss_cells <- function(path, col = 2L) {
+  rows <- sheet_rows(path, "q1")
+  h <- heading_index(rows)
+  expect_identical(
+    as.character(rows[[1L]][h + 1:2]),
+    ss_labels,
+    label = "the sample-size rows under the heading row"
+  )
+  list(
+    n = as.integer(rows[[col]][[h + 1L]]),
+    n_eff = as.numeric(rows[[col]][[h + 2L]])
+  )
+}
+
+# The full-sample oracle row: n and n_eff from surveycore.
+full_counts_oracle <- function(d) {
+  suppressWarnings(
+    surveycore::get_effective_n(d),
+    classes = oracle_classes
+  )
+}
+
+test_that("export_crosstab() writes the full-sample unweighted count (XN-01) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_gen_vars(d, out, "q1")
+    expect_identical(
+      ss_cells(out)$n,
+      as.integer(full_counts_oracle(d)$n),
+      label = nm
+    )
+  }
+})
+
+test_that("export_crosstab() writes the full-sample effective N (XN-02) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_gen_vars(d, out, "q1")
+    expect_equal(
+      ss_cells(out)$n_eff,
+      round(full_counts_oracle(d)$n_eff, 1L),
+      tolerance = 1e-8,
+      label = nm
+    )
+  }
+})
+
+test_that("export_crosstab() writes a subgroup's two counts (XN-03) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_gen_vars(d, out, "q1")
+    heading <- heading_cells(out, "q1")
+
+    for (level in c("Male", "Female")) {
+      cells <- ss_cells(out, match(level, heading))
+      ref <- gen_oracle(d, level)
+      lbl <- paste0(nm, ": ", level)
+      expect_identical(cells$n, as.integer(ref$n), label = paste(lbl, "n"))
+      expect_equal(
+        cells$n_eff,
+        round(ref$n_eff, 1L),
+        tolerance = 1e-8,
+        label = paste(lbl, "n_eff")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() counts the rows the design tabulates (XN-04) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    write_gen_vars(d, out, "q1")
+    expected <- tabulated_rows(d)
+    if (nm == "twophase") {
+      # The phase-2 subset, not every row of @data.
+      expect_identical(expected, 119L)
+      expect_lt(expected, nrow(d@data))
+    }
+    expect_identical(ss_cells(out)$n, expected, label = nm)
+  }
+})
+
+test_that("export_crosstab() counts the in-domain rows on a restricted design (XN-05) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    d@data[[surveycore::SURVEYCORE_DOMAIN_COL]] <- d@data$group == "A"
+    # Missing q1 answers inside the domain, so the variable's N differs from
+    # the in-domain row count.
+    d@data$q1[d@data$group == "A"][1:10] <- NA_character_
+    write_gen_vars(d, out, "q1")
+
+    expected <- tabulated_rows(d)
+    expect_lt(expected, nrow(d@data))
+    answered <- sum(oracle_freqs(d, "q1")$n)
+    expect_lt(answered, expected, label = paste0(nm, ": the variable's N"))
+    expect_identical(ss_cells(out)$n, expected, label = nm)
   }
 })
