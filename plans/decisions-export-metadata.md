@@ -1700,3 +1700,108 @@ REQUIRED issues of this pass are fixed, with no further review pass.
 
 The spec and the test-spec stay at `SPEC_READY`. The plan is v4.9.0 at
 `PLAN_READY`, with no further review pass, by the user's decision.
+
+## [2026-11-19] — House style B1
+
+### Context
+
+The spec fixed what each workbook row holds, and said little about how it
+looks. Bold on the title, italic on the notes and the sample-size rows, fixed
+widths, two 30-point heights and a freeze pane were the whole of it. A mockup
+pass, `plans/mockups/build-mockups.R`, built the workbooks from `ns_wave1`
+and found 22 gaps, listed in `plans/mockups/spec-gaps.md`. Gaps 1 to 7 are
+styling.
+
+The script then wrote the same content in several looks, in
+`plans/mockups/variants/`:
+
+- A, clean rules: no fills, horizontal rules only.
+- B, banded header: a navy band over the spanner and heading rows, zebra
+  stripes, a grey box around each block.
+- C, full grid: a border on every cell, grey fills, a tinted Total column.
+- D, report accent: a navy title bar, tints per banner group, a rule at the
+  start of each column group.
+
+The user's notes on the first round asked for:
+
+- shading for the rows, to follow a row across the table
+- a rule between column groups
+- the navy band on the question text only, not on the headings
+- the interval on its own line in the estimate cell
+- frozen label columns and frozen heading rows
+
+B1, B2 and B3 revise B with those notes. They share the navy title band, the
+stripes, the two-line interval cell and the frozen label columns. They differ
+in how the column groups are set apart: B1 draws a medium navy rule at the
+left edge of each group, B2 adds tinted spanners, and B3 boxes each group and
+the Total column. The user opened the B1 files in desktop Excel and confirmed
+that the freeze panes and the two-line interval cells show.
+
+### Questions & Decisions
+
+**Q: Which look do both workbooks take?**
+- Options considered: A, B, C, D, B1, B2, B3.
+- **Decision:** B1, chosen by the user.
+- **What it is:** a navy title bar with white bold text, merged across the
+  block. Spanner and heading rows in navy bold text on light blue-grey fills,
+  with a medium navy rule under the heading row. Zebra stripes on the response
+  rows. A medium navy rule at the left edge of each column group. The interval
+  on a second line of the estimate cell, smaller and grey. Right-aligned data
+  cells and centered data headings. Frozen panes down to the first data row,
+  plus column A on single-response and SATA sheets and columns A and B on
+  battery sheets. A wide, wrapped column B on the About sheet.
+- **Reach:** `export_crosstab()` under both layouts, `export_topline()`, and
+  the About sheet of both. No argument controls it.
+- **Effect:** spec 3.21 holds the style tables, taken from the B1 table of
+  `plans/mockups/variants/README.md` and from section 6 of the script. One
+  definition, `.build_house_style()`, in `R/export-utils.R`, serves both
+  functions.
+
+**Q: What does it settle?**
+- **Decision:** gaps 1 to 7 of `spec-gaps.md`: right-aligned data cells and
+  centered data headings; About column B at 90 with wrap on; a bold, centered,
+  wrapped spanner at least two lines high; the fills and rules of the tables;
+  a 9-point `#595959` interval line; the battery item label on the item's
+  first row only; and the sample-size formats `#,##0` and `#,##0.0`.
+- The user chose B1 as a whole, so B1's values also settle gaps 10, 11, 13
+  and 20: the note rows merged and wrapped, the title and note rows wrapped,
+  the withheld-line style, and the base font, Calibri 11.
+- Gap 22 stays open: whether the house style reaches `export_topline()` in
+  `feature/house-style` or waits for the topline pass. Spec 3.21.4 and the
+  `TY-` rows depend on it. The other gaps are not styling, and the user
+  decides them separately.
+
+**Q: Where does it land?**
+- **Decision:** a new PR, `feature/house-style`, after
+  `feature/crosstab-total-and-missing` and before `docs/export-metadata`. It
+  styles the final block shape, so it comes after the last PR that changes the
+  shape. The PRs before it keep building and testing the older rules.
+
+### What it replaces
+
+- Spec 3.4: "no fill, no border, no second colour" on the sample-size rows.
+  The rows keep italic at one point smaller, and gain the note grey, the
+  number formats and, under `"top"`, a rule under the last row.
+- Spec 3.12: the 30-point estimate row and the wrap only under `"cell"`. The
+  interval line is now 9 points and `#595959`.
+- Spec 3.14: the About styling row. Column B is 90, not 12.
+- Spec 3.16: the wrapping row, both 30-point height rows, and the freeze pane
+  on rows only. Every row height now comes from one formula, spec 3.21.6, and
+  the pane freezes the label columns too.
+- Spec 1.3, 2.1 and 4.1: "no presentation change" to `export_topline()`, for
+  the styles alone. Its cell values, rows and columns do not change.
+
+### Changes
+
+- Spec v0.28.0: new section 3.21. Sections 1.2, 1.3, 2.1, 2.2, 3.4, 3.12,
+  3.14, 3.16, 4.1, 4.2, 5.2, VIII, 8.1 and XI name the replacement.
+- Test-spec v0.23.0: new `XY-` and `TY-` rows. `XB-03`, `XB-04`, `XB-09`,
+  `XB-10`, `XB-11`, `XB-12` and `XB-13` state what holds from
+  `feature/house-style`.
+- Plan v4.10.0: new PR 19, `feature/house-style`. The documentation PR becomes
+  PR 20.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.10.0. The new
+PR has had no review pass.

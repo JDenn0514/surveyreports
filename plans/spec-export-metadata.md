@@ -1,8 +1,8 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.27.0
-**Date:** 2026-11-05
+**Version:** 0.28.0
+**Date:** 2026-11-19
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
 **Target version:** 0.1.0.9000
@@ -79,6 +79,12 @@ warning — section 3.11, step 15. It is not metadata and not presentation, so
 it carries no A or B number. Section 4.1 records how it reaches
 `export_topline()`. Decision 2026-11-05.
 
+**A second behavior is in neither part and reaches both functions: the house
+style.** Section 3.21 gives every sheet of both workbooks one fixed look:
+fonts, fills, borders, alignment, row heights, the topline and About widths,
+and frozen label columns. It changes no cell value, so it is not Part B's
+presentation of content. It carries no A or B number. Decision 2026-11-19.
+
 **Part B — presentation, `export_crosstab()` only**
 
 | # | Change | Type |
@@ -91,7 +97,7 @@ it carries no A or B number. Section 4.1 records how it reaches
 | B6 | `total_label`; the Total column loses its spanner; the `100%` row is removed | Breaking |
 | B7 | `na.rm` and `na_label` | New behavior |
 | B8 | `variance_display`, and a legend row | New behavior |
-| B9 | Column widths, text wrapping, and a freeze pane | New behavior |
+| B9 | Column widths, text wrapping, and a freeze pane. Section 3.21 replaces the wrap and the row heights, and adds frozen label columns | New behavior |
 
 ### 1.3 Out
 
@@ -102,11 +108,16 @@ it carries no A or B number. Section 4.1 records how it reaches
   properties exist upstream and stay unread. Parked.
 - No cleanup of the 39 existing `adldata` datasets.
 - **No presentation change to `export_topline()`.** Its own pass follows.
+  **Replaced in part by section 3.21.** From `feature/house-style`, the
+  topline sheet takes the house style: its fonts, fills, borders, alignment,
+  row heights and widths change. Its cell values, its rows and its columns do
+  not. The content stays out of scope.
 - **No `crosstab_style()` options object.** Six of the arguments below are
   presentation, and collapsing them into one object buys a shorter signature and
   a reusable house default. It is deferred: the payoff is a look shared with
   `export_topline()`, and that function has not been rebuilt yet. Revisit when
-  the topline pass would otherwise duplicate all six.
+  the topline pass would otherwise duplicate all six. The house style of
+  section 3.21 is a constant with no argument, so it does not reopen this.
 - **No significance testing between banner columns.** Unrelated to this spec and
   named here only because a crosstab rebuild invites it.
 - **No `\dontrun{}` conversion.** Both functions still wrap their `@examples` in
@@ -323,6 +334,14 @@ reaches the same branch. Every read site for `spanner` and `levels` is in
 messages, and none carries the text `Total`, `Eff` or `spanner`. This is what
 keeps section 4.1 true where it says the presentation does not change, and it
 is what satisfies section 5.2's snapshot gate.
+
+**Section 3.21 replaces "byte for byte" for the styles.** From
+`feature/house-style`, the topline sheet takes the house style, so its cell
+styles, row heights and widths change. Its cell values stay as this paragraph
+states. The house style adds three helpers to `R/export-utils.R`:
+`.build_house_style()`, `.build_row_height()` and `.write_block_style()`.
+Section 3.21.7 gives them. They are not among the 19 above, and the counts in
+gate VIII name them separately.
 
 ### 2.2 New helper signatures
 
@@ -612,6 +631,8 @@ is what satisfies section 5.2's snapshot gate.
 #    Sets the freeze pane only when start_row == 1L, so a sheet takes its
 #    pane from its first block. No argument carries that fact — section
 #    3.16, Freeze pane.
+#    From feature/house-style it gains freeze_cols, the number of frozen
+#    label columns, 1 or 2 — section 3.21.3. The caller passes it.
 
 # The closing sequence of one question block: the two sample-size rows
 # under sample_size_display == "bottom", then the withheld lines under
@@ -965,6 +986,14 @@ number, so a data column stays as wide as the percentage it shows.
 
 Both rows are **italic and one point smaller than the body text**. Nothing else
 distinguishes them: no fill, no border, no second colour.
+
+**Replaced by section 3.21 from `feature/house-style`.** The rows stay italic
+and one point smaller, at 10 points. They also take the note grey, `#404040`,
+and the label cells are left-aligned and the number cells right-aligned. Each
+cell holds a number: the unweighted row takes the format `#,##0` and the
+effective row `#,##0.0`, so `963.0` keeps its decimal. Under
+`sample_size_display = "top"` a thin navy rule runs under the last
+sample-size row. The rows take no fill and no stripe.
 
 Labels are spelled out and parallel, so the pair reads as two measures of one
 quantity. The abbreviation `ESS` appears nowhere in the workbook body; it
@@ -1621,7 +1650,7 @@ it.
 
 | `variance_display` | Where it goes |
 |---|---|
-| `"cell"` | a second line inside the estimate cell, written with `openxlsx2::fmt_txt()` at a smaller size and a lighter colour. The default |
+| `"cell"` | a second line inside the estimate cell, written with `openxlsx2::fmt_txt()` at a smaller size and a lighter colour: 9 points and `#595959`, against 11 points and `#000000` for the estimate — section 3.21.3. The default |
 | `"row"` | its own row directly under each estimate row, with the label columns blank |
 
 **The sheet must make room for the variance.** Section 3.16 sets three rules
@@ -1629,6 +1658,12 @@ that depend on these two arguments. Under `variance = "ci"`, each data column
 is `15 + 2 * decimals` characters wide, under both displays. When `variance`
 is set and `variance_display = "cell"`, wrapping is on for every data cell of
 an estimate row, and every estimate row is fixed at 30 points.
+
+**Replaced in part by section 3.21 from `feature/house-style`.** The width
+rule stays. Wrapping is on for every estimate cell under every `variance`
+value. An estimate row takes the height formula of section 3.21.6. With the
+interval in the cell it is at least 31 points, which holds an 11-point line
+and a 9-point line. A variance row under `"row"` is 17 points.
 
 **A legend row is written under the question title whenever `variance` is set**,
 and only then:
@@ -1756,7 +1791,7 @@ why the table looks as it does.
 | Active sheet | The written file opens on `"About"`. Measured on openxlsx2 1.28: `get_active_sheet()` returns `numeric(0)` while the workbook is in memory and `1` after a save and reload. Adding later sheets does not move it. A check that reads the active sheet from a workbook still in memory proves nothing |
 | Block headings | bold, in column A, with column B empty; one blank row between blocks, none after the last |
 | Name collision | a data sheet named `About` is suffixed `About_2`, then `About_3`, because the cover sheet's name is fixed and a caller cannot rename it. The comparison folds case — section 2.2 |
-| Styling | bold, the block structure, and the column widths of section 3.16. No merged cells |
+| Styling | bold, the block structure, and the column widths of section 3.16. No merged cells. **Replaced by section 3.21.5 from `feature/house-style`:** each block is a small table with a styled heading row, a box and a zebra stripe. Column A is 44 and column B is **90**, with wrap on and top alignment in both, so a glossary entry reads as a short paragraph. Still no merged cells |
 
 `.unique_sheet_name()` serves the three per-question `wb_add_worksheet()` calls
 in `R/export-crosstab.R`. The fourth writes the stacked-layout sheet under the
@@ -1775,7 +1810,8 @@ their first 31 characters abort today, for the same reason.
 **A collection writes one block per wave**, in `@surveys` order: the wave name
 alone in column A, then that wave's set keys, then one blank row. None after the
 last. A wave with no keys set still gets its heading, so the sheet shows that the
-wave carries no metadata. This path belongs to `export_topline()`. The unanimity
+wave carries no metadata. Section 3.21.5 styles each wave name as a block
+heading row. This path belongs to `export_topline()`. The unanimity
 rule of section 3.6 does **not** apply: a cover sheet has room to show every
 wave's value, so there is no need to collapse disagreement into silence.
 
@@ -1884,6 +1920,12 @@ The label column is `Response` for a single-response block, `Item` for SATA, and
 wider than the others, and its sample-size rows leave the second label column
 blank.
 
+**The battery item label is written once per item**, on the item's first row,
+in column A. Column A of the item's other rows is blank, and it is not merged.
+Section 3.21.3 gives its style. The column names in this table say what each
+row holds. Section 3.21 says how each row looks, and from
+`feature/house-style` it replaces the "bold" and "italic" of rows 1 to 3.
+
 **Every rendered block has at least one response row.** An all-NA variable
 gives a frequency frame with no rows. Pass 5 of the plan review measured it:
 the fixture's `all_na_var` returns zero rows from `.build_freq_frame()`. Step
@@ -1919,10 +1961,10 @@ rows and the withheld lines are the only things below the data rows.
 | Sheet property | Rule |
 |---|---|
 | Column widths | fixed: 44 characters for the label column, column A. The second label column of a battery block, its `Response` column, is **20 characters**. On a per-question battery sheet that column is column B. Each data column is **12 characters**, except under `variance = "ci"`, where each data column is **`15 + 2 * decimals` characters** — 17 at the default `decimals = 1L`, 15 at 0, 19 at 2. The `"ci"` rule holds under both `variance_display` values, because under `"row"` the interval sits in the same column. A width is set per column, not per block. On a stacked sheet that holds at least one battery block, column B is a label column in each battery block and a data column in each other block. So column B there takes **the larger of 20 and the data-column width in force**: 20 at a data width of 12, 15, 17 or 19, and `15 + 2 * decimals` under `variance = "ci"` from `decimals = 3` up, where that width is 21 or more. The width depends on the arguments only, never on cell content. **Not auto-fit** — openxlsx2 estimates width from character counts, so an auto-fit workbook shifts whenever a label changes and every snapshot moves with it |
-| Wrapping | on for the label column, for the `Response` label cells of a battery block, and for the heading row. On a stacked sheet the wrap of column B is set on the battery block's label cells only, so a data cell of another block in column B keeps the data-cell rule below. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line |
-| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed |
-| Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height |
-| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. A variable whose frequency frame has no rows leaves the output at step 15 of section 3.11, before rendering, so it never holds row 1 and the next block takes it. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. The frozen rows are the first block's title and headings. The floor ignores the tabulated variable — section 3.5 — so every block withholds the same banner levels. But a battery block is one column wider, so above a battery block the frozen headings sit one column to the left of its data. The frozen title names the first question only. The rule is kept with these limits, because a pane set by a later block falls deep in the sheet, where the frozen rows can be taller than the window. A row added above the first block breaks this condition, and `XB-04`, `XB-11` and `XB-12` then fail |
+| Wrapping | on for the label column, for the `Response` label cells of a battery block, and for the heading row. On a stacked sheet the wrap of column B is set on the battery block's label cells only, so a data cell of another block in column B keeps the data-cell rule below. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line. **Replaced by section 3.21.3 from `feature/house-style`:** wrap is on for the title, note and withheld rows, the spanner and heading rows, every label cell and every estimate cell under every `variance` value. It is off for the sample-size rows |
+| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed. **Replaced by section 3.21.6 from `feature/house-style`:** every row of a block gets a height from the package's own formula, so the height follows the text but not Excel or openxlsx2. The heading row and the spanner row are at least two lines, 34 points |
+| Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height. **Replaced by section 3.21.6 from `feature/house-style`:** every estimate row gets a height from the formula, at least 19 points, and at least 31 points with the interval in the cell |
+| Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. A variable whose frequency frame has no rows leaves the output at step 15 of section 3.11, before rendering, so it never holds row 1 and the next block takes it. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. The frozen rows are the first block's title and headings. The floor ignores the tabulated variable — section 3.5 — so every block withholds the same banner levels. But a battery block is one column wider, so above a battery block the frozen headings sit one column to the left of its data. The frozen title names the first question only. The rule is kept with these limits, because a pane set by a later block falls deep in the sheet, where the frozen rows can be taller than the window. A row added above the first block breaks this condition, and `XB-04`, `XB-11` and `XB-12` then fail. **Amended by section 3.21.3 from `feature/house-style`:** the rows stay as above, and the pane also freezes the label columns — column A, or columns A and B on a battery sheet and on a stacked sheet that holds a battery. The top-left cell of the pane moves from column A to column B or C |
 
 **Where `15 + 2 * decimals` comes from.** An interval string is `(`, a bound,
 ` – `, a bound and `)`, so it is 5 characters plus the two bounds. Section 3.12
@@ -2057,6 +2099,346 @@ One branch reads the domain, and it is not a branch on the subclass.
 `total_label` default and the cover-sheet domain row — behave the same way
 on all four subclasses.
 
+### 3.21 House style
+
+**Decision (2026-11-19): house style B1.** Every workbook that either export
+function writes takes one fixed look: the question sheets of
+`export_crosstab()` under both layouts, the `"Topline"` sheet of
+`export_topline()`, and the `"About"` sheet of both. The decision log entry
+"House style B1" gives the context and the choice.
+
+This section is in Part III, but it reaches both functions. Like the all-NA
+drop, it is in neither Part A nor Part B — section 1.2. It changes how a cell
+looks. It changes no cell value, no row order and no sheet name.
+
+**No argument controls it.** The look is a constant, so it does not reopen the
+`crosstab_style()` deferral of section 1.3.
+
+**Older rules that this section replaces.** Each place says so where it
+stands: sections 1.3, 2.1, 3.4, 3.12, 3.14, 3.16 and 4.1. Where an older rule
+and this section disagree, this section wins from the PR
+`feature/house-style`. Until that PR lands, the older rule holds, so the PRs
+before it build and test the older rule.
+
+**The reference files.** `plans/mockups/variants/B1-crosstab.xlsx`,
+`B1-crosstab-stacked.xlsx` and `B1-topline.xlsx` show the look. The script
+`plans/mockups/build-mockups.R` writes them, and
+`plans/mockups/variants/README.md` holds the B1 table this section is taken
+from. The tables below are the contract. The files are an illustration: their
+content is mockup data, and they do not cover every argument value.
+
+#### 3.21.1 How to read the tables
+
+- Every font is Calibri. A size is in points.
+- A colour is hex RGB. The file stores it as ARGB with alpha `FF`, so
+  `#1F3864` is stored as `FF1F3864`.
+- A border is written `side style #colour`, with an Excel border style (`thin`
+  or `medium`).
+- `none` means no fill or no border. `-` means the element takes the value of
+  the cell it sits in.
+- A cell that a table does not name takes the base font, no fill, no border
+  and general alignment.
+
+The colours, by name. Each one is defined once — section 3.21.7.
+
+| Name | Hex | Used for |
+|---|---|---|
+| navy | `#1F3864` | the title fill, the heading text, the rules |
+| spanner fill | `#C8D4E6` | a labelled spanner cell |
+| heading fill | `#DDE5F0` | the heading row, the About heading rows |
+| stripe | `#EDF1F8` | the zebra stripe |
+| box grey | `#7F7F7F` | the block box |
+| note grey | `#404040` | the notes, the withheld lines, the sample-size rows |
+| interval grey | `#595959` | the interval line and the variance row |
+| white | `#FFFFFF` | the title text |
+| black | `#000000` | the body text |
+
+#### 3.21.2 Workbook rules
+
+| Item | Rule |
+|---|---|
+| Base font | Calibri 11, `#000000`, regular. The font entry names no theme scheme, so Excel shows Calibri and not the theme font. Closes gap 20 |
+| Gridlines | hidden on every sheet. The sheet is added with `wb_add_worksheet(grid_lines = FALSE)`. `wb_set_grid_lines()` is not used: the mockup script records that it drops the freeze pane |
+| One style per cell | each styled cell carries one complete style: font, fill, four borders, alignment, wrap, indent and number format |
+| Column widths, crosstab | as section 3.16: column A 44, the battery `Response` column 20, a data column 12, or `15 + 2 * decimals` under `variance = "ci"`. On a stacked sheet that holds a battery, column B is the larger of 20 and the data width |
+| Column widths, topline | column A 44, every data column 10. **Depends on gap 22** — section 3.21.4 |
+| Column widths, About | column A 44, column B 90 |
+| Blank rows | a blank row between two blocks has no style and no set height |
+
+#### 3.21.3 Crosstab question block
+
+The same rules hold on a per-question sheet and on the stacked `"Crosstab"`
+sheet. "The block" is columns 1 to the block's last column, from its title row
+to its last row. On the stacked sheet each block uses its own columns.
+
+| Element | Size | Bold, italic | Text colour | Fill | Alignment (h, v) | Wrap | Merge | Number format |
+|---|---|---|---|---|---|---|---|---|
+| Title row (question text or group preface) | 12 | bold | white | navy | left, center, indent 1 | on | across the block | - |
+| Base-note row, legend row | 10 | italic | note grey | none | left, center | on | across the block | - |
+| Withheld line under a block (`withheld_note = "every"`) | 10 | italic | note grey | none | left, center | on | across the block | - |
+| Spanner cell with a label | 11 | bold | navy | spanner fill | center, center | on | across the group's columns, when the group has two or more | - |
+| Spanner cell, empty (over the label columns and over the Total column) | - | - | - | none | - | - | no | - |
+| Heading cell, label column (`Response`, `Item`) | 11 | bold | navy | heading fill | left, center | on | no | - |
+| Heading cell, data column | 11 | bold | navy | heading fill | center, center | on | no | - |
+| Sample-size label cell (column A, and the blank second label cell of a battery) | 10 | italic | note grey | none | left, center | off | no | - |
+| Sample-size number cell | 10 | italic | note grey | none | right, center | off | no | `#,##0` on the unweighted row, `#,##0.0` on the effective row |
+| Label cell (response, item, and the battery `Response` column) | 11 | regular | black | none | left, center | on | no | - |
+| Battery item label (column A) | 11 | bold | black | none | left, top | on | no | - |
+| Estimate cell | 11 | regular | black | none | right, center | on | no | - |
+| Interval line (`variance_display = "cell"`) | 9 | regular | interval grey | - | the second line of the estimate cell | - | - | - |
+| Variance row data cell (`variance_display = "row"`) | 9 | regular | interval grey | none | right, center | on | no | - |
+
+Every cell of a merged range carries the style of the range, so its fill and
+its borders show across the whole range.
+
+**The title, notes and withheld lines.** The text is in column A, and the
+range is merged across the block when the block has two or more columns. The
+withheld lines sit directly under the last table row, with no blank row before
+them.
+
+**The sample-size cells hold numbers.** The unweighted cell holds the count.
+The effective cell holds `round(n_eff, 1)`. The number format writes the
+thousands separator and, on the effective row, one decimal even when it is
+zero: `963.0`.
+
+**The battery item label.** It is written on the item's first row only. Column
+A of the item's other rows is blank. Column A is not merged down the item.
+
+**The interval line.** Under `variance` set and `variance_display = "cell"`,
+an estimate cell that has an interval holds rich text in two runs, written
+with `openxlsx2::fmt_txt()`. Run 1 is the estimate string at Calibri 11,
+black. Run 2 is a line break followed by the variance string of section 3.12,
+at Calibri 9, interval grey. A cell with no variance string, such as `-`,
+holds the estimate alone, as plain text.
+
+**The zebra stripe.** The stripe fill goes on every cell of the block's
+columns, label and data columns alike, on alternate response rows:
+
+- A single-response block counts its response rows from 1. Rows 2, 4, 6 and
+  so on take the stripe.
+- A SATA block counts its item rows the same way.
+- A battery block counts items, not rows. Every row of items 2, 4, 6 and so on
+  takes the stripe.
+- Under `variance_display = "row"`, a variance row takes the stripe of the
+  estimate row above it.
+- The title, note, spanner, heading, sample-size and withheld rows take no
+  stripe.
+
+**The rules.** Apply them in this order. Where two set the same side of one
+cell, the later one wins.
+
+| # | Rule | Border | Where |
+|---|---|---|---|
+| 1 | Under the heading row | bottom medium navy | every cell of the heading row |
+| 2 | Under the sample-size rows | bottom thin navy | every cell of the last sample-size row, when those rows sit above the response rows (`sample_size_display = "top"`) |
+| 3 | Block box | thin box grey | top of every title-row cell; bottom of every cell of the last table row; left of column A and right of the block's last column, on every row from the title row to the last table row |
+| 4 | Column-group edge | left medium navy | the first column of each column group, the Total group included, on every row from the spanner row to the last table row |
+
+The last table row is the last response or variance row, or the last
+sample-size row under `sample_size_display = "bottom"`. The withheld lines are
+not table rows: they take no border.
+
+No other border is written. There is no rule between response rows, between
+battery items, or above the spanner row.
+
+**The freeze pane.** Section 3.16 sets the frozen rows. This section adds the
+frozen columns:
+
+| Sheet | Frozen columns | Top-left cell of the pane |
+|---|---|---|
+| Per-question, single-response or SATA block | column A | column B of the first data row |
+| Per-question, battery block | columns A and B | column C of the first data row |
+| Stacked, with at least one battery block | columns A and B | column C of the first data row |
+| Stacked, with no battery block | column A | column B of the first data row |
+
+The rest of the section 3.16 rule stands: one pane per sheet, from the first
+block, and no pane under `sample_size_display = "bottom"`. On the stacked
+sheet, column B is a data column of a non-battery block. Freezing it keeps the
+battery's label columns in view, and the first data column of the other blocks
+stays in view too.
+
+#### 3.21.4 Topline sheet
+
+**This part depends on gap 22, which is open.** The user decides whether the
+house style reaches `export_topline()` in `feature/house-style` or waits for
+the topline pass. The rules below are B1's topline rules. If the topline
+waits, this part, the topline widths of section 3.21.2 and the topline rows
+of section 3.21.6 move to that pass, and the About sheet of a topline
+workbook still takes section 3.21.5 through the shared cover-sheet writer.
+
+The block shapes of section 4.2 stay: the cells, the `N` column, the
+`Total` row of `100%`, and one table per battery item. Only the look changes.
+
+| Element | Size | Bold, italic | Text colour | Fill | Alignment (h, v) | Wrap | Merge | Number format |
+|---|---|---|---|---|---|---|---|---|
+| Title row (question text, or a SATA or battery preface) | 12 | bold | white | navy | left, center, indent 1 | on | across the block | - |
+| Base-note row | 10 | italic | note grey | none | left, center | on | across the block | - |
+| Battery item heading (each item's variable label) | 11 | bold | navy | none | left, center | on | across the block | - |
+| Heading cell, label column (`Response`, `Item`) | 11 | bold | navy | heading fill | left, center | on | no | - |
+| Heading cell, data column (`%`, `N`, `Total`, a wave) | 11 | bold | navy | heading fill | center, center | on | no | - |
+| Label cell | 11 | regular | black | none | left, center | on | no | - |
+| Percentage cell | 11 | regular | black | none | right, center | on | no | General. The cell stays a number |
+| `N` cell | 11 | regular | black | none | right, center | on | no | `#,##0` |
+| `Total` row | 11 | bold | black | none | label left, center; data cells right, center | on | no | the `N` cell `#,##0` |
+
+**The zebra stripe** goes on every cell of the block on alternate body rows,
+counted from the first row under the heading row: rows 2, 4, 6 and so on. The
+`Total` row takes no stripe.
+
+**The rules**, in this order:
+
+| # | Rule | Border | Where |
+|---|---|---|---|
+| 1 | Under the heading row | bottom medium navy | every cell of the heading row |
+| 2 | Above the `Total` row | top thin navy | every cell of the `Total` row |
+| 3 | Block box | thin box grey | an outline from the title row, or the battery item heading row, to the last table row |
+| 4 | Column-group edge | left medium navy | column B, from the heading row to the last table row. One edge per table, on the collection path too |
+
+**The battery block.** The preface title row and its base note stand alone,
+with no box and no rule. Each item is then its own table: the item heading
+row, the heading row, the body rows and the `Total` row, boxed from the item
+heading row to the `Total` row.
+
+**No freeze pane** on the `"Topline"` sheet.
+
+#### 3.21.5 About sheet
+
+Each block of section 3.14 is styled as a small two-column table. The block
+heading row is its heading row: the `Key` / `Value` row, `Subgroups not
+shown`, `What these numbers mean`, and on a collection each wave name.
+
+| Element | Size | Bold, italic | Text colour | Fill | Alignment (h, v) | Wrap | Border |
+|---|---|---|---|---|---|---|---|
+| Block heading row, cells A and B | 11 | bold | navy | heading fill | left, center | on | bottom medium navy |
+| Body cell, column A | 11 | regular; a glossary term is bold | black | none | left, top | on | none |
+| Body cell, column B | 11 | regular | black | none | left, top | on | none |
+
+- **The zebra stripe** goes on cells A and B of alternate body rows of each
+  block, counted from 1: rows 2, 4, 6 and so on.
+- **The block box** is a thin box-grey outline from the block's heading row to
+  its last body row.
+- **On a collection**, the `Key` / `Value` row stands alone as the first
+  block's heading row, and each wave block is boxed from its wave-name row to
+  its last key row. A wave with no keys is its heading row alone, boxed.
+- No column-group edge, no merged cell (section 3.14) and no freeze pane.
+
+#### 3.21.6 Row heights
+
+Every row of a table gets a set height, on all three sheet types. Excel does
+not fit a merged cell to its text, so the package computes each height from
+the text with one formula. The height follows the text, so a longer label
+gives a taller row. The formula is in the package, not in Excel and not in
+openxlsx2, so the same text always gives the same height.
+
+**The line count.** `lines(text, w, s, bold)` is the number of lines a text
+takes in a cell `w` characters wide at size `s`:
+
+1. Characters per line: `cpl = max(1, floor((w - 1) * 11 / s * b))`, where
+   `b` is 0.9 for bold text and 1 otherwise.
+2. Split the text at each `\n`. Each part starts a new line.
+3. Within a part, split at each single space. Place the words in order. A word
+   joins the current line when the line's length plus one plus the word's
+   length is `cpl` or less. Otherwise it starts a new line.
+4. While the current line is longer than `cpl`, count one more line and take
+   `cpl` characters off the current line. This breaks a long word.
+5. An empty text or `NA` is one line.
+
+**The height** of a cell is `ceiling(lines * 1.35 * s + 4)` points. A row's
+height is the largest of its cells' heights, over the cells the table below
+names. `w` is the width set on the column, before openxlsx2 adds `0.711`. For
+a merged range, `w` is the sum of the widths of its columns.
+
+| Row | Cells that count | At least |
+|---|---|---|
+| Title row | the title, at the block width, 12 pt, bold | 1 line: 21 |
+| Base-note, legend and withheld rows | the text, at the block width, 10 pt | 1 line: 18 |
+| Spanner row (crosstab) | each labelled spanner, at its merged width, 11 pt, bold | 2 lines: 34 |
+| Heading row (crosstab) | every heading cell, at its column width, 11 pt, bold | 2 lines: 34 |
+| Heading row (topline) | every heading cell, at its column width, 11 pt, bold | 1 line: 19. At width 10, `w1\n(n=200)` is 2 lines, 34, and `%\n(Eff N=1,234)` is 3 lines, 49 |
+| Sample-size row | one line at 10 pt | 18 |
+| Response row (crosstab) | each label cell, at its column width, 11 pt; bold for a battery item label | 1 line: 19. With the interval in the cell, at least `ceiling(1.35 * 11 + 1.35 * 9 + 4)`: 31 |
+| Variance row | one line at 9 pt | 17 |
+| Battery item heading (topline) | the variable label, at the block width, 11 pt, bold | 1 line: 19 |
+| Body row (topline) | the label in column A, at 44, 11 pt | 1 line: 19 |
+| `Total` row (topline) | `Total`, 11 pt, bold | 19 |
+| About heading row | the column A text, at 44, 11 pt, bold | 1 line: 19 |
+| About body row | the column A text at 44, 11 pt, bold for a glossary term; the column B text at 90, 11 pt | 1 line: 19 |
+
+The block width is the sum of the widths of the block's columns.
+
+**Limit.** The formula estimates the width of a line from a count of
+characters. A text with many wide letters can still need more room than the
+formula gives, and a text with many narrow letters gets more than it needs. The
+contract is the formula. A test checks the stored height against it. It does
+not check how Excel draws the text.
+
+#### 3.21.7 Where the style lives
+
+**One definition, in `R/export-utils.R`.** Both export functions and the cover
+sheet read it. No other file holds a colour, a font size, a border style or a
+fill.
+
+```r
+# The house style: every colour, font size, border, fill, alignment, number
+# format and width of section 3.21, keyed by element.
+.build_house_style <- function()
+# -> named list. One entry per element of the tables in sections 3.21.3 to
+#    3.21.5, each a list of size, bold, italic, colour, fill, h, v, wrap,
+#    indent and number format; the four rules of each table; the column
+#    widths; and the row-height constants 1.35, 4 and 0.9.
+
+# The row height of section 3.21.6 for one cell.
+.build_row_height <- function(text, width, size, bold = FALSE,
+                              min_lines = 1L)
+# -> numeric(1), in points.
+
+# The style of one block: fonts, fills, borders, alignment, wrap, number
+# formats and row heights, from a record of the block's rows.
+.write_block_style <- function(wb, sheet, layout, style)
+# layout: the block's rows by role (title, note, withheld, item heading,
+#     spanner, heading, sample size, response, variance, total), its
+#     columns, its label-column count, its column groups (columns, labelled
+#     or not, Total or not), the stripe number of each body row, and the
+#     table's first and last rows.
+# -> wb
+#    Applies the rules in the order of the tables. Registers one cell style
+#    per distinct cell record. The render routes, the topline routes and
+#    .write_cover_sheet() each build a layout and call it once per block.
+```
+
+These three helpers are new in `feature/house-style`. They are not among the
+19 of section 2.1. `.render_block_preamble()` gains one argument,
+`freeze_cols`, the number of frozen columns of section 3.21.3: 1 or 2. The
+writers that style cells today lose their style calls, and keep their values
+and merges: `.write_question_title()`, `.write_base_note()`,
+`.write_sample_size_rows()`, `.write_cover_sheet()`, the wrap of
+`.write_sheet_columns()`, the wrap and height of `.render_block_preamble()`,
+and the wrap of `.render_crosstab_battery()`.
+
+#### 3.21.8 Gaps this section closes
+
+`plans/mockups/spec-gaps.md` lists 22 gaps. The user chose B1 as a whole, so
+this section closes gaps 1 to 7 and gaps 10, 11, 13 and 20:
+
+| Gap | Rule |
+|---|---|
+| 1. Alignment of the percentage cells | estimate and sample-size cells are right-aligned; data headings are centered — section 3.21.3 |
+| 2. The width of column B on the About sheet | 90, wrap on, top-aligned — sections 3.14 and 3.21.5 |
+| 3. The spanner row | bold, navy, centered, wrap on, spanner fill, at least two lines high — sections 3.21.3 and 3.21.6 |
+| 4. Bold, borders and fill | the tables and the rules of section 3.21.3 |
+| 5. The second line of a variance cell | 9 points, `#595959` — sections 3.12 and 3.21.3 |
+| 6. The item label in a battery block | on the item's first row only, bold, top-aligned, not merged — sections 3.16 and 3.21.3 |
+| 7. How the sample-size numbers are shown | numbers, formatted `#,##0` and `#,##0.0` — sections 3.4 and 3.21.3 |
+| 10. The base-note and legend rows | merged across the block, wrap on — sections 3.21.3 and 3.21.4 |
+| 11. Which rows of column A wrap | the title, note and withheld rows wrap, with heights from section 3.21.6 |
+| 13. The style of a withheld line | 10 pt italic, note grey, merged across the block, wrap on, directly under the table — section 3.21.3 |
+| 20. The base font | Calibri 11, `#000000`, with no theme scheme — section 3.21.2 |
+
+**Gap 22 stays open, and section 3.21.4 depends on it.** The user decides
+whether the house style reaches `export_topline()` in `feature/house-style`
+or waits for the topline pass. Gaps 8, 9, 12 and 14 to 19 and 21 are not
+styling, and the user decides them separately.
+
 ---
 
 ## IV. `export_topline()` — what it inherits
@@ -2110,6 +2492,14 @@ topline cell is a number, so calling the formatter at any of the three would
 change the presentation this section holds fixed. Section 2.3 lists all five
 inline conversions and names the two that retire.
 
+**Section 3.21 is the one exception, from `feature/house-style`.** The topline
+sheet takes the house style: the title band, the heading fill, the zebra
+stripe, the rules, the row heights and the widths of section 3.21.4. The
+values above stay. A percentage cell is still a number, the `N` column and the
+`Total` row of `100%` stay, and the three inline conversions stay. The topline
+render routes gain one call each, to `.write_block_style()`, and the battery
+route marks its item titles as item headings.
+
 `export_topline()` has no `banner` argument, so every banner-only condition in
 section III is `export_crosstab()`-only: the two label aborts, the banner role
 error, and all three withholding warnings.
@@ -2147,6 +2537,11 @@ Stated here so it is a known cost and not a discovery:
 
 Withholding is genuinely absent rather than deferred by accident: the loop runs
 only when a banner is resolved, and `export_topline()` never resolves one.
+
+**The look is no longer one of these differences.** From
+`feature/house-style`, both workbooks take the house style of section 3.21:
+the same font, colours, title band, heading fill, stripe and rules. The rows
+above are differences of content, and they stay until the topline pass.
 
 **The `Total\n(Eff N=…)` form never reached a cell, and this spec deletes
 the branch that would have written it.** The branch at
@@ -2220,6 +2615,9 @@ What this change adds is a scope line. `export_topline()` snapshots are the
 narrow case: only its `show_eff_n` snapshots on twophase and domain-restricted
 designs should move. **A moved topline snapshot outside that set is a defect in
 Part A's scope line**, not a snapshot to accept.
+
+The house style of section 3.21 moves no snapshot. The committed snapshots
+hold error and warning messages, and the house style changes no message.
 
 ---
 
@@ -2347,7 +2745,16 @@ without running the suite. The suite gates live with the scenarios.
       `R/export-crosstab.R` holds the 3 helpers section 2.1 assigns to it —
       `.render_block_preamble()`, `.render_block_footer()` and
       `.unique_sheet_name()` — below the exported function. No `R/utils.R` was
-      created
+      created. From `feature/house-style`, `R/export-utils.R` also holds the
+      three house-style helpers of section 3.21.7
+- [ ] `grep -rn "1F3864\|C8D4E6\|DDE5F0\|EDF1F8\|7F7F7F\|404040\|595959" R/`
+      returns lines in `R/export-utils.R` only, inside `.build_house_style()`.
+      The house style has one definition — section 3.21.7
+- [ ] `grep -rn "wb_add_font\|wb_add_fill\|wb_add_border\|wb_add_cell_style\|wb_set_row_heights" R/export-topline.R R/export-crosstab.R`
+      returns nothing. Every cell style and row height goes through
+      `.write_block_style()` — section 3.21.7
+- [ ] `grep -rn "wb_set_grid_lines" R/` returns nothing, and every
+      `wb_add_worksheet()` call passes `grid_lines = FALSE` — section 3.21.2
 - [ ] The PR description states why `.fmt_variance()`,
       `.write_sample_size_rows()` and `.build_withheld()` sit in
       `R/export-utils.R` with one call-site file today — section 2.1
@@ -2410,6 +2817,10 @@ without reading the spec twice:
 - The separator between two interval bounds is an en-dash, U+2013, with one
   space on each side. The minus sign on a negative bound is a hyphen-minus,
   U+002D — section 3.12.
+- From `feature/house-style`: every sheet hides its gridlines; every row of a
+  table has the height of section 3.21.6; every title row carries the navy
+  fill across its merged range; and a crosstab sheet's freeze pane freezes
+  its label columns — section 3.21.
 
 ---
 
@@ -2497,4 +2908,13 @@ entry "Plan review Pass 6: issues 37 to 41, and the plan is ready" records the
 user's decision: the frequency helpers catch that class, and the variable is
 dropped whatever the `na.rm` value — sections 2.3, 3.18 and 3.19.
 
-No open questions remain. Every question this spec raises is answered inside it.
+**The house style of section 3.21 is logged under 2026-11-19**, in the entry
+"House style B1". It replaces the older styling rules of sections 3.4, 3.12,
+3.14 and 3.16, and the topline scope line of sections 1.3, 2.1 and 4.1, for
+the styles alone. It closes gaps 1 to 7, 10, 11, 13 and 20 of
+`plans/mockups/spec-gaps.md`.
+
+The other gaps of that file are open questions for the user. Gap 22 decides
+whether section 3.21.4, the topline house style, lands in
+`feature/house-style`. Every other question this spec raises is answered
+inside it.
