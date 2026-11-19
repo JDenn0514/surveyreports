@@ -550,8 +550,8 @@ export_topline <- function(
     )
   }
 
-  # Data rows: one row per SATA item, pct for value == "1", with
-  # true-zero handling (see .sata_pct_cell())
+  # Data rows: one row per SATA item, pct for the item's chosen value
+  # (code 1), with true-zero handling (see .sata_pct_cell())
   data_start <- header_row + 1L
   for (j in seq_along(sata_vars)) {
     var <- sata_vars[[j]]

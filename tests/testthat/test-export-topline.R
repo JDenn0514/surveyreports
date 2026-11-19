@@ -853,6 +853,216 @@ test_that("export_topline() leaves a never-asked SATA item blank, not 0", {
   }
 })
 
+# The "chosen" value of a SATA item is code 1, read before value labels are
+# applied. The blocks below recode sata_a in the test body. `codes` holds the
+# new codes for the fixture's 0 and 1; `labels` is the item's value labels.
+# The three items get variable labels, so each row is found by its label.
+recode_sata_a <- function(d, codes, labels = NULL) {
+  d@data$sata_a <- ifelse(d@data$sata_a == 1L, codes[[2L]], codes[[1L]])
+  d@metadata@value_labels[["sata_a"]] <- labels
+  d <- surveycore::set_sata(d, variable = c("sata_a", "sata_b", "sata_c"))
+  surveycore::set_var_label(
+    d,
+    variable = c("sata_a", "sata_b", "sata_c"),
+    label = c("Option A", "Option B", "Option C")
+  )
+}
+
+# The row of the Topline sheet whose first cell is `label`.
+topline_row <- function(df, label) {
+  which(as.character(df[[1L]]) == label)
+}
+
+test_that("export_topline() prints the code-1 share for a labelled SATA item", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    unlink(out)
+    d <- recode_sata_a(designs[[nm]], c(2, 1), c(Yes = 1, No = 2))
+
+    topline_quiet(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+    row_a <- topline_row(df, "Option A")
+    expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
+
+    ref <- quiet_nonprob(surveycore::get_freqs(d, sata_a))
+    ref_pct <- ref$pct[as.character(ref[[1L]]) == "Yes"]
+    expect_equal(
+      as.numeric(df[row_a, 2L]),
+      round(100 * ref_pct, 1L),
+      tolerance = 1e-10,
+      label = paste0(nm, ": % cell")
+    )
+  }
+})
+
+test_that("export_topline() prints the code-1 N for a labelled SATA item", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    unlink(out)
+    d <- recode_sata_a(designs[[nm]], c(2, 1), c(Yes = 1, No = 2))
+
+    topline_quiet(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+    row_a <- topline_row(df, "Option A")
+    expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
+
+    ref <- quiet_nonprob(surveycore::get_freqs(d, sata_a))
+    ref_n <- ref$n[as.character(ref[[1L]]) == "Yes"]
+    expect_identical(
+      as.integer(df[row_a, 3L]),
+      as.integer(ref_n),
+      label = paste0(nm, ": N cell")
+    )
+  }
+})
+
+test_that("export_topline() prints the Yes share for labelled ns_wave1 SATA items", {
+  skip_if_not_installed("surveycore")
+  sata_vars <- grep("^news_sources_", names(ns_wave1), value = TRUE)[1:3]
+  d <- surveycore::as_survey_nonprob(ns_wave1, weights = weight)
+  d <- surveycore::set_sata(d, variable = sata_vars)
+  item_labels <- c("Source 1", "Source 2", "Source 3")
+  d <- surveycore::set_var_label(d, variable = sata_vars, label = item_labels)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  topline_quiet(d, vars = tidyselect::all_of(sata_vars), file_name = out)
+
+  expect_true(file.exists(out))
+  df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  for (j in seq_along(sata_vars)) {
+    row_j <- topline_row(df, item_labels[[j]])
+    expect_identical(length(row_j), 1L, label = paste0(sata_vars[[j]], ": row"))
+
+    ref <- quiet_nonprob(
+      surveycore::get_freqs(d, tidyselect::all_of(sata_vars[[j]]))
+    )
+    ref_pct <- ref$pct[as.character(ref[[1L]]) == "Yes"]
+    expect_equal(
+      as.numeric(df[row_j, 2L]),
+      round(100 * ref_pct, 1L),
+      tolerance = 1e-10,
+      label = paste0(sata_vars[[j]], ": % cell")
+    )
+  }
+})
+
+test_that("export_topline() prints the TRUE share for a logical SATA item", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    unlink(out)
+    d <- recode_sata_a(designs[[nm]], c(FALSE, TRUE))
+
+    topline_quiet(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+    row_a <- topline_row(df, "Option A")
+    expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
+
+    ref <- quiet_nonprob(surveycore::get_freqs(d, sata_a))
+    ref_pct <- ref$pct[as.character(ref[[1L]]) == "TRUE"]
+    expect_equal(
+      as.numeric(df[row_a, 2L]),
+      round(100 * ref_pct, 1L),
+      tolerance = 1e-10,
+      label = paste0(nm, ": % cell")
+    )
+  }
+})
+
+test_that("export_topline() prints 0 for a SATA item with no code 1", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    unlink(out)
+    d <- recode_sata_a(designs[[nm]], c(0, 2), c(No = 0, Yes = 2))
+
+    topline_quiet(d, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+    expect_true(file.exists(out), label = paste0(nm, ": file exists"))
+    df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+    row_a <- topline_row(df, "Option A")
+    expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
+
+    expect_identical(
+      as.numeric(df[row_a, 2L]),
+      0,
+      label = paste0(nm, ": % cell")
+    )
+    expect_identical(
+      as.numeric(df[row_a, 3L]),
+      0,
+      label = paste0(nm, ": N cell")
+    )
+  }
+})
+
+test_that("export_topline() prints the code-1 share for a labelled SATA item in a collection", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  coll <- surveycore::as_survey_collection(
+    wave1 = recode_sata_a(designs$taylor, c(2, 1), c(Yes = 1, No = 2)),
+    wave2 = recode_sata_a(designs$replicate, c(2, 1), c(Yes = 1, No = 2))
+  )
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_topline(coll, vars = c(sata_a, sata_b, sata_c), file_name = out)
+
+  expect_true(file.exists(out))
+  df <- openxlsx2::wb_to_df(out, sheet = "Topline", col_names = FALSE)
+  row_a <- topline_row(df, "Option A")
+  expect_identical(length(row_a), 1L)
+  expect_gt(as.numeric(df[row_a, 2L]), 0)
+})
+
+test_that(".build_freq_frame() marks only the chosen SATA rows in sata_chosen", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  vars <- c("q1", "sata_a", "sata_b", "sata_c")
+
+  for (nm in names(designs)) {
+    d <- recode_sata_a(designs[[nm]], c(2, 1), c(Yes = 1, No = 2))
+    clf <- surveycore::classify_question_type(d, tidyselect::all_of(vars))
+
+    frame <- quiet_nonprob(
+      surveyreports:::.build_freq_frame(
+        d,
+        vars,
+        clf,
+        show_eff_n = TRUE,
+        emit_label_warning = FALSE
+      )
+    )$frame
+
+    expect_true(
+      is.logical(frame$sata_chosen),
+      label = paste0(nm, ": logical")
+    )
+    expect_false(anyNA(frame$sata_chosen), label = paste0(nm, ": no NA"))
+    chosen <- frame[frame$sata_chosen, c("variable", "value")]
+    expect_identical(
+      paste(chosen$variable, chosen$value),
+      c("sata_a Yes", "sata_b 1", "sata_c 1"),
+      label = paste0(nm, ": chosen rows")
+    )
+  }
+})
+
 # 13. Cover sheet ---------------------------------------------------------------
 # Every workbook gains an "About" sheet as sheet 1 (spec 3.14, spec 4.1). A
 # topline workbook withholds nothing and writes numeric cells, so its glossary

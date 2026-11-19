@@ -626,6 +626,51 @@
   list(question_text = question_text, var_label = var_label)
 }
 
+# The "chosen" value of one SATA item: the string that marks a selection in
+# the frame's `value` column. The rule is code 1, read before value labels
+# are applied:
+# 1. The item has value labels and one label's code is 1: that label.
+# 2. Otherwise, the item's column is logical: "TRUE" (R stores TRUE as 1).
+# 3. Otherwise: "1". An item with no code-1 row gets the true-zero rule of
+#    .sata_pct_cell().
+# A survey_collection reads its first member, the one export_topline()
+# classifies on. Called by .build_freq_frame().
+#' @keywords internal
+#' @noRd
+.extract_sata_chosen <- function(design, var) {
+  if (S7::S7_inherits(design, surveycore::survey_collection)) {
+    design <- design@surveys[[1L]]
+  }
+
+  labels <- design@metadata@value_labels[[var]]
+  if (!is.null(labels) && !is.null(names(labels))) {
+    hit <- which(as.character(labels) == "1" & nzchar(names(labels)))
+    if (length(hit) > 0L) {
+      return(names(labels)[[hit[[1L]]]])
+    }
+  }
+
+  if (is.logical(design@data[[var]])) {
+    return("TRUE")
+  }
+
+  "1"
+}
+
+# `frame` with the logical column `sata_chosen`: TRUE on a row whose variable
+# is a SATA item and whose value is that item's chosen value, FALSE on every
+# other row. `chosen` is a character vector of chosen values, named by SATA
+# variable. Called twice by .build_freq_frame(), once per path.
+#' @keywords internal
+#' @noRd
+.build_sata_chosen <- function(frame, chosen) {
+  item_chosen <- unname(chosen[frame$variable])
+  frame$sata_chosen <- !is.na(frame$value) &
+    !is.na(item_chosen) &
+    frame$value == item_chosen
+  frame
+}
+
 #' @keywords internal
 #' @noRd
 .compute_total_freq <- function(design, var, ...) {
@@ -770,6 +815,19 @@
 ) {
   freq_args <- list(variance = variance, conf_level = conf_level)
 
+  # The chosen value of each SATA variable, named by variable. Both paths
+  # mark the matching rows in the frame's sata_chosen column.
+  sata_vars <- vars_resolved[
+    vars_resolved %in% classify_out$variable[classify_out$type %in% "sata"]
+  ]
+  sata_chosen <- vapply(
+    sata_vars,
+    function(var) .extract_sata_chosen(design, var),
+    character(1L),
+    USE.NAMES = FALSE
+  )
+  names(sata_chosen) <- sata_vars
+
   # survey_collection path
   if (S7::S7_inherits(design, surveycore::survey_collection)) {
     wave_names <- names(design@surveys)
@@ -888,6 +946,7 @@
     )
     names(all_rows)[names(all_rows) == "type"] <- "var_type"
     names(all_rows)[names(all_rows) == "group"] <- "group_id"
+    all_rows <- .build_sata_chosen(all_rows, sata_chosen)
 
     if (emit_label_warning) {
       .emit_missing_label_warning(all_rows)
@@ -1007,6 +1066,7 @@
   )
   names(all_rows)[names(all_rows) == "type"] <- "var_type"
   names(all_rows)[names(all_rows) == "group"] <- "group_id"
+  all_rows <- .build_sata_chosen(all_rows, sata_chosen)
 
   if (emit_label_warning) {
     .emit_missing_label_warning(all_rows)
@@ -1573,21 +1633,22 @@
   frame[keep, ]
 }
 
-# SATA "true zero" percentage cell: an item whose value == "1" row is
-# missing but whose base exists (a row for this var + column with a
-# genuinely positive n) prints 0 instead of blank -- blank stays reserved
-# for "not asked". get_freqs() emits a placeholder row (n = 0, pct = NA)
-# for a subgroup with zero non-NA observations even when the item was
-# never asked there at all, so "a row exists" alone is not sufficient:
-# the row's own n must be > 0.
+# SATA "true zero" percentage cell. The item's chosen row is the row the
+# frame marks in sata_chosen (code 1; see .extract_sata_chosen()). An item
+# whose chosen row is missing but whose base exists (a row for this var +
+# column with a genuinely positive n) prints 0 instead of blank -- blank
+# stays reserved for "not asked". get_freqs() emits a placeholder row
+# (n = 0, pct = NA) for a subgroup with zero non-NA observations even when
+# the item was never asked there at all, so "a row exists" alone is not
+# sufficient: the row's own n must be > 0.
 #' @keywords internal
 #' @noRd
 .sata_pct_cell <- function(frame, var, cg, level, decimals) {
-  one_rows <- .cell_rows(frame, cg, level, val = "1", var = var)
+  any_rows <- .cell_rows(frame, cg, level, var = var)
+  one_rows <- any_rows[which(any_rows$sata_chosen), , drop = FALSE]
   if (nrow(one_rows) > 0L && !is.na(one_rows$pct[[1L]])) {
     return(round(one_rows$pct[[1L]] * 100, decimals))
   }
-  any_rows <- .cell_rows(frame, cg, level, var = var)
   has_base <- nrow(any_rows) > 0L && any(any_rows$n > 0L, na.rm = TRUE)
   if (has_base) 0 else NA_real_
 }
@@ -1598,17 +1659,11 @@
 #' @keywords internal
 #' @noRd
 .sata_n_cell <- function(frame, var) {
-  total_one <- .cell_rows(
-    frame,
-    .total_col_group(),
-    "Total",
-    val = "1",
-    var = var
-  )
+  total_any <- .cell_rows(frame, .total_col_group(), "Total", var = var)
+  total_one <- total_any[which(total_any$sata_chosen), , drop = FALSE]
   if (nrow(total_one) > 0L && !is.na(total_one$n[[1L]])) {
     return(total_one$n[[1L]])
   }
-  total_any <- .cell_rows(frame, .total_col_group(), "Total", var = var)
   has_base <- nrow(total_any) > 0L && any(total_any$n > 0L, na.rm = TRUE)
   if (has_base) 0L else NA_integer_
 }
