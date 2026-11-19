@@ -917,12 +917,14 @@
   # surveyreports_warning_banner_all_withheld (spec 3.5). That is a test on
   # the kept set, not a second floor comparison.
   kept_levels <- list()
+  group_counts <- list()
   withheld_list <- list()
   emptied_groups <- character(0)
   for (g in floor_groups) {
     counts <- .resolve_eff_n(g$design, group_var = g$col)
     withheld <- .build_withheld(counts, min_eff_n, g$name)
     kept_levels[[g$name]] <- setdiff(counts$level, withheld$level)
+    group_counts[[g$name]] <- counts
     withheld_list[[length(withheld_list) + 1L]] <- withheld
     if (nrow(withheld) > 0L && length(kept_levels[[g$name]]) == 0L) {
       emptied_groups <- c(emptied_groups, g$name)
@@ -1012,11 +1014,16 @@
   # `suppressed` feeds the footnote of the export_topline() render helpers.
   # Topline passes no banner, so it is always empty. export_crosstab() reads
   # `withheld` and `emptied_groups` instead (spec 3.11, spec 3.14).
+  # `group_counts` holds the .resolve_eff_n() frame of each banner column and
+  # each interaction, keyed by its name. export_crosstab() builds the counts
+  # frame of the sample-size rows from it, so each count is resolved once
+  # (spec 3.4).
   list(
     frame = all_rows,
     suppressed = .empty_suppressed(),
     withheld = withheld,
-    emptied_groups = emptied_groups
+    emptied_groups = emptied_groups,
+    group_counts = group_counts
   )
 }
 
@@ -1406,7 +1413,7 @@
   # export_topline() render helpers, and each guards with
   # nrow(suppressed) > 0L. export_topline() passes no banner, so
   # .build_freq_frame() always returns an empty `suppressed` frame to it.
-  # export_crosstab() writes .write_withheld_lines() instead. Spec 2.1 and
+  # export_crosstab() writes .render_block_footer() instead. Spec 2.1 and
   # spec VI keep this helper in the tree until the topline pass retires it.
   if (nrow(suppressed) == 0L) {
     return(invisible(wb))
@@ -1759,7 +1766,10 @@
 # of `counts` from column label_cols + 1, in the order of `counts`. The
 # unweighted row carries n; the effective row carries n_eff at one decimal and
 # is written only when `show_ess` is TRUE. A zero-row `counts` frame writes the
-# labels and no data cell. Returns list(wb = , next_row = ).
+# labels and no data cell. The label cell and the data cells of each row are
+# italic and one point smaller than the workbook's base font, which an
+# estimate cell uses (spec 3.4). A blank second label column takes no style.
+# Returns list(wb = , next_row = ).
 #' @keywords internal
 #' @noRd
 .write_sample_size_rows <- function(
@@ -1777,6 +1787,10 @@
       values = round(counts$n_eff, 1L)
     )
   }
+
+  base <- openxlsx2::wb_get_base_font(wb)
+  size <- as.numeric(base$size$val) - 1
+  styled_cols <- c(1L, label_cols + seq_len(nrow(counts)))
 
   row <- start_row
   for (r in rows) {
@@ -1798,6 +1812,14 @@
         col_names = FALSE
       )
     }
+    wb <- openxlsx2::wb_add_font(
+      wb,
+      sheet = sheet,
+      dims = openxlsx2::wb_dims(rows = row, cols = styled_cols),
+      name = base$name$val,
+      size = size,
+      italic = TRUE
+    )
     row <- row + 1L
   }
 

@@ -541,75 +541,10 @@ test_that("export_crosstab() produces a valid file with variance='se'", {
   expect_true(file.exists(out))
 })
 
-# 9. show_n and show_eff_n --------------------------------------------------------
-
-test_that("export_crosstab() show_n=FALSE produces no N row-level data in workbook", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  suppressWarnings(
-    export_crosstab(
-      d,
-      vars = q1,
-      banner = group,
-      file_name = out,
-      show_n = FALSE
-    )
-  )
-
-  wb <- openxlsx2::wb_load(out)
-  df <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
-  # With show_n=FALSE the workbook should not contain standalone "N" column
-  cells <- as.character(unlist(df)[!is.na(unlist(df))])
-  expect_false(
-    any(grepl("^N$", cells)),
-    label = "no N header when show_n=FALSE"
-  )
-})
-
-test_that("export_crosstab() show_n=TRUE includes N column in workbook", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  suppressWarnings(
-    export_crosstab(
-      d,
-      vars = q1,
-      banner = group,
-      file_name = out,
-      show_n = TRUE
-    )
-  )
-
-  wb <- openxlsx2::wb_load(out)
-  df <- openxlsx2::wb_to_df(wb, sheet = "q1", col_names = FALSE)
-  cells <- as.character(unlist(df)[!is.na(unlist(df))])
-  expect_true(
-    any(grepl("^N$", cells)),
-    label = "N header present when show_n=TRUE"
-  )
-})
-
-test_that("export_crosstab() show_eff_n=TRUE produces file without error", {
-  skip_if_not_installed("surveycore")
-  d <- make_all_designs(seed = 42)$taylor
-  out <- withr::local_tempfile(fileext = ".xlsx")
-
-  expect_no_error(
-    suppressWarnings(
-      export_crosstab(
-        d,
-        vars = q1,
-        banner = group,
-        file_name = out,
-        show_eff_n = TRUE
-      )
-    )
-  )
-  expect_true(file.exists(out))
-})
+# 9. The count-column arguments: removed --------------------------------------
+# The N column and its two arguments are removed (spec 5.1). Section 29 covers
+# what replaces them: XS-05 for show_ess, XS-08 for the removed N column, and
+# XE-07 for a call that still passes either argument.
 
 # 10. Suppression: N/A ---------------------------------------------------------
 # The argument with two suppression modes is removed (spec 3.5), so neither
@@ -1130,7 +1065,7 @@ test_that("export_crosstab() show_total=FALSE restores the banner-only layout", 
   )
 })
 
-test_that("export_crosstab() show_total shifts the N column one position right", {
+test_that("export_crosstab() show_total puts the Total column in front of the banner columns", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
@@ -1164,9 +1099,10 @@ test_that("export_crosstab() show_total shifts the N column one position right",
     openxlsx2::wb_to_df(out_without, sheet = "q1", col_names = FALSE)[3L, ]
   ))
 
-  # 1 label + Total + 3 banner levels -> N at column 6; without Total -> 5
-  expect_identical(which(hdr_with == "N"), 6L)
-  expect_identical(which(hdr_without == "N"), 5L)
+  # 1 label, then Total, then the 3 banner levels; without Total, the levels
+  # start in column 2
+  expect_identical(hdr_with[2:5], c("Total", "A", "B", "C"))
+  expect_identical(hdr_without[2:4], c("A", "B", "C"))
 })
 
 test_that("export_crosstab() SATA tables gain the Total column by default", {
@@ -1420,7 +1356,7 @@ test_that("export_crosstab() battery tables use Item and Response label columns"
   )
 })
 
-test_that("export_crosstab() battery N column follows the banner columns", {
+test_that("export_crosstab() battery banner columns follow the Total column, with no N column", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   d <- surveycore::set_var_label(
@@ -1440,8 +1376,9 @@ test_that("export_crosstab() battery N column follows the banner columns", {
 
   df <- openxlsx2::wb_to_df(out, sheet = "bat_1", col_names = FALSE)
   header <- as.character(unlist(df[3L, ]))
-  # Item | Response | Total | A | B | C | N
-  expect_identical(which(header == "N"), 7L)
+  # Item | Response | Total | A | B | C
+  expect_identical(header[3:6], c("Total", "A", "B", "C"))
+  expect_false("N" %in% header)
 })
 
 # 18. True-zero SATA cells --------------------------------------------------------
@@ -1468,10 +1405,9 @@ test_that("export_crosstab() prints 0 for an asked-but-never-selected SATA optio
 
   df <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
   row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
-  # Total, A, B, C cells all print 0; N prints 0
+  # Total, A, B, C cells all print 0
   expect_identical(as.numeric(df[row_b, 2L]), 0)
   expect_identical(as.numeric(df[row_b, 3L]), 0)
-  expect_identical(as.numeric(df[row_b, 6L]), 0)
 })
 
 test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA tables", {
@@ -5575,38 +5511,34 @@ test_that("export_crosstab() withholds a below-floor column from SATA and batter
   expect_identical(length(designs), 4L)
   out <- withr::local_tempfile(fileext = ".xlsx")
 
-  # The column leaves the block whether or not the N column is written.
   for (nm in names(designs)) {
-    for (show_n in c(TRUE, FALSE)) {
-      if (file.exists(out)) {
-        file.remove(out)
-      }
-      d <- add_gen_fixture(designs[[nm]])
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- add_gen_fixture(designs[[nm]])
 
-      expect_warning(
-        crosstab_quiet(
-          d,
-          vars = c(sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
-          banner = gen,
-          file_name = out,
-          min_eff_n = gen_floor,
-          show_n = show_n,
-          withheld_note = "every"
-        ),
-        class = "surveyreports_warning_subgroup_withheld"
+    expect_warning(
+      crosstab_quiet(
+        d,
+        vars = c(sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+        banner = gen,
+        file_name = out,
+        min_eff_n = gen_floor,
+        withheld_note = "every"
+      ),
+      class = "surveyreports_warning_subgroup_withheld"
+    )
+
+    for (sheet in c("sata_a", "bat_1")) {
+      lbl <- paste(nm, sheet)
+      headings <- heading_cells(out, sheet, label = "Item")
+      expect_false("Female" %in% headings, label = paste(lbl, "Female"))
+      expect_true("Male" %in% headings, label = paste(lbl, "Male"))
+      expect_false("N" %in% headings, label = paste(lbl, "N"))
+      expect_true(
+        any(grepl("Female", sheet_col_a(out, sheet), fixed = TRUE)),
+        label = paste(lbl, "the withheld line")
       )
-
-      for (sheet in c("sata_a", "bat_1")) {
-        lbl <- paste(nm, sheet, "show_n =", show_n)
-        headings <- heading_cells(out, sheet, label = "Item")
-        expect_false("Female" %in% headings, label = paste(lbl, "Female"))
-        expect_true("Male" %in% headings, label = paste(lbl, "Male"))
-        expect_identical("N" %in% headings, show_n, label = paste(lbl, "N"))
-        expect_true(
-          any(grepl("Female", sheet_col_a(out, sheet), fixed = TRUE)),
-          label = paste(lbl, "the withheld line")
-        )
-      }
     }
   }
 })
@@ -7398,5 +7330,445 @@ test_that("export_crosstab() skips a self-banner column for its own variable (XX
       "Question one" %in% spanner_cells(out, "q2"),
       label = paste0(nm, ": kept for q2")
     )
+  }
+})
+
+# 29. Label columns and sample sizes -------------------------------------------
+# A block has one label column, `Response` or `Item`, or two for a battery,
+# `Item` then `Response`. Two sample-size rows, `Unweighted sample size` and
+# `Effective sample size`, sit under the heading row by default, below the
+# estimates under sample_size_display = "bottom", and nowhere under "none".
+# They replace the per-response N column (spec 3.4, spec 3.16).
+
+ss_labels <- c("Unweighted sample size", "Effective sample size")
+
+# The rows of one block below its heading row that hold an estimate: column A
+# is not a sample-size label, and the first data column, `first_col`, holds a
+# value.
+estimate_rows <- function(rows, h, first_col) {
+  below <- rows[seq.int(h + 1L, nrow(rows)), , drop = FALSE]
+  keep <- !as.character(below[[1L]]) %in% ss_labels &
+    !is.na(below[[first_col]])
+  below[keep, , drop = FALSE]
+}
+
+# The surveycore warnings an oracle call raises on the fixture designs. They
+# are about the oracle call, not about the code under test.
+oracle_classes <- c(
+  "surveycore_warning_small_cell",
+  "surveycore_warning_nonprob_srs_fallback"
+)
+
+# The get_freqs() frame of one variable: its response values, in order, and
+# the unweighted count of each.
+oracle_freqs <- function(d, var) {
+  suppressWarnings(
+    surveycore::get_freqs(d, !!rlang::sym(var)),
+    classes = oracle_classes
+  )
+}
+
+# The number of response values of one variable, from surveycore.
+n_values <- function(d, var) {
+  nrow(oracle_freqs(d, var))
+}
+
+test_that("export_crosstab() renders a SATA block and a battery block in their own shapes (XD-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  sata <- c("sata_a", "sata_b", "sata_c")
+  bat <- c("bat_1", "bat_2", "bat_3")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    shape <- list()
+    for (vars in list(sata, bat)) {
+      fresh_path(out)
+      crosstab_quiet(
+        d,
+        vars = tidyselect::all_of(vars),
+        banner = gen,
+        file_name = out,
+        min_eff_n = 0
+      )
+      rows <- sheet_rows(out, vars[[1L]])
+      h <- heading_index(rows, "Item")
+      heading <- as.character(unlist(rows[h, ]))
+      first_col <- match("Total", heading)
+      shape[[vars[[1L]]]] <- list(
+        labels = heading[seq_len(first_col - 1L)],
+        n_rows = nrow(estimate_rows(rows, h, first_col))
+      )
+    }
+
+    expect_identical(shape$sata_a$labels, "Item", label = paste0(nm, ": SATA"))
+    expect_identical(shape$sata_a$n_rows, 3L, label = paste0(nm, ": SATA rows"))
+    expect_identical(
+      shape$bat_1$labels,
+      c("Item", "Response"),
+      label = paste0(nm, ": battery")
+    )
+    expect_identical(
+      shape$bat_1$n_rows,
+      sum(vapply(bat, function(v) n_values(d, v), integer(1L))),
+      label = paste0(nm, ": battery rows")
+    )
+    expect_gt(shape$bat_1$n_rows, shape$sata_a$n_rows)
+  }
+})
+
+test_that("export_crosstab() writes the two sample-size rows under the heading row (XS-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    crosstab_quiet(
+      guard_design(designs[[nm]]),
+      vars = q1,
+      banner = group,
+      file_name = out,
+      min_eff_n = 0
+    )
+
+    col_a <- sheet_col_a(out, "q1")
+    h <- match("Response", col_a)
+    expect_identical(col_a[h + 1:2], ss_labels, label = nm)
+  }
+})
+
+test_that("export_crosstab() rejects the removed arguments as unused (XE-07)", {
+  skip_if_not_installed("surveycore")
+  d <- guard_design(make_all_designs(seed = 42)$taylor)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      pub_type = "external"
+    ),
+    "unused argument"
+  )
+  expect_error(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      show_n = FALSE
+    ),
+    "unused argument"
+  )
+  expect_error(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      show_eff_n = TRUE
+    ),
+    "unused argument"
+  )
+  expect_false(file.exists(out))
+})
+
+# Writes the q1 crosstab of a guard-design over banner = group, with no
+# subgroup withheld, and returns the path. `...` reaches export_crosstab().
+write_group_q1 <- function(d, path, ...) {
+  fresh_path(path)
+  crosstab_quiet(
+    guard_design(d),
+    vars = q1,
+    banner = group,
+    file_name = path,
+    min_eff_n = 0,
+    ...
+  )
+  path
+}
+
+# The resolved font of one cell: whether it is italic, and its size. A cell
+# with no style of its own takes style 0, the workbook default.
+cell_font <- function(wb, sheet, dims) {
+  style <- unname(openxlsx2::wb_get_cell_style(wb, sheet, dims))
+  style_id <- if (is.na(style) || !nzchar(style)) 0L else as.integer(style)
+  xf <- wb$styles_mgr$styles$cellXfs[[style_id + 1L]]
+  font_id <- as.integer(sub('.*fontId="([0-9]+)".*', "\\1", xf))
+  font <- wb$styles_mgr$styles$fonts[[font_id + 1L]]
+  list(
+    italic = grepl("<i/>|<i val=\"1\"/>|<i val=\"true\"/>", font),
+    size = as.numeric(sub('.*<sz val="([0-9.]+)".*', "\\1", font))
+  )
+}
+
+test_that("export_crosstab() writes both sample-size rows italic and one point smaller (XS-02)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    write_group_q1(designs[[nm]], out)
+    col_a <- sheet_col_a(out, "q1")
+    h <- match("Response", col_a)
+    wb <- openxlsx2::wb_load(out)
+
+    # The estimate cell: the Total column of the first response row.
+    estimate <- cell_font(
+      wb,
+      "q1",
+      openxlsx2::wb_dims(rows = h + 3L, cols = 2L)
+    )
+    expect_false(estimate$italic, label = paste0(nm, ": estimate not italic"))
+
+    # The label cell and the four data cells (Total, A, B, C) of each row.
+    for (row in h + 1:2) {
+      for (col in 1:5) {
+        font <- cell_font(wb, "q1", openxlsx2::wb_dims(rows = row, cols = col))
+        lbl <- paste0(nm, ": row ", row, ", column ", col)
+        expect_true(font$italic, label = paste(lbl, "italic"))
+        expect_equal(font$size, estimate$size - 1, label = paste(lbl, "size"))
+      }
+    }
+  }
+})
+
+test_that("export_crosstab() matches the subgroup counts to surveycore (XS-03)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    write_group_q1(d, out)
+    rows <- sheet_rows(out, "q1")
+    h <- heading_index(rows)
+    heading <- as.character(unlist(rows[h, ]))
+    ref <- suppressWarnings(
+      surveycore::get_effective_n(d, group = group),
+      classes = oracle_classes
+    )
+
+    for (level in c("A", "B", "C")) {
+      j <- match(level, heading)
+      k <- match(level, as.character(ref$group))
+      lbl <- paste0(nm, ": ", level)
+      expect_identical(
+        as.integer(rows[[j]][[h + 1L]]),
+        as.integer(ref$n[[k]]),
+        label = paste(lbl, "n")
+      )
+      expect_equal(
+        as.numeric(rows[[j]][[h + 2L]]),
+        round(ref$n_eff[[k]], 1L),
+        tolerance = 1e-8,
+        label = paste(lbl, "n_eff")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() writes the full sample's counts in the Total column (XS-04)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    write_group_q1(d, out, show_total = TRUE)
+    rows <- sheet_rows(out, "q1")
+    h <- heading_index(rows)
+    j <- match("Total", as.character(unlist(rows[h, ])))
+    ref <- suppressWarnings(
+      surveycore::get_effective_n(d),
+      classes = oracle_classes
+    )
+
+    expect_identical(
+      as.integer(rows[[j]][[h + 1L]]),
+      as.integer(ref$n[[1L]]),
+      label = paste0(nm, ": n")
+    )
+    expect_equal(
+      as.numeric(rows[[j]][[h + 2L]]),
+      round(ref$n_eff[[1L]], 1L),
+      tolerance = 1e-8,
+      label = paste0(nm, ": n_eff")
+    )
+  }
+})
+
+test_that("export_crosstab() drops only the effective row under show_ess = FALSE (XS-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    write_group_q1(designs[[nm]], out, show_ess = FALSE)
+    col_a <- sheet_col_a(out, "q1")
+    h <- match("Response", col_a)
+
+    expect_identical(col_a[[h + 1L]], ss_labels[[1L]], label = nm)
+    expect_false(ss_labels[[2L]] %in% col_a, label = nm)
+  }
+})
+
+test_that("export_crosstab() moves both rows below the estimates under \"bottom\" (XS-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    fresh_path(out)
+    # Female is withheld, so the block ends with a withheld line, the
+    # footnote the two rows must precede.
+    suppressWarnings(
+      crosstab_quiet(
+        d,
+        vars = q1,
+        banner = gen,
+        file_name = out,
+        min_eff_n = gen_floor,
+        withheld_note = "every",
+        sample_size_display = "bottom"
+      ),
+      classes = "surveyreports_warning_subgroup_withheld"
+    )
+
+    col_a <- sheet_col_a(out, "q1")
+    h <- match("Response", col_a)
+    ss_at <- match(ss_labels, col_a)
+    value_at <- match(as.character(oracle_freqs(d, "q1")[[1L]]), col_a)
+    withheld_at <- which(grepl("withheld", col_a, fixed = TRUE))
+
+    expect_false(anyNA(value_at), label = paste0(nm, ": every value"))
+    expect_true(all(value_at > h), label = paste0(nm, ": values"))
+    expect_identical(ss_at[[2L]], ss_at[[1L]] + 1L, label = nm)
+    expect_true(ss_at[[1L]] > max(value_at), label = paste0(nm, ": below"))
+    expect_identical(length(withheld_at), 1L, label = paste0(nm, ": line"))
+    expect_true(withheld_at > ss_at[[2L]], label = paste0(nm, ": footnote"))
+    expect_false(
+      any(col_a[seq_len(max(value_at))] %in% ss_labels),
+      label = paste0(nm, ": none above")
+    )
+  }
+})
+
+test_that("export_crosstab() writes no sample-size row under \"none\" (XS-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    write_group_q1(designs[[nm]], out, sample_size_display = "none")
+    cells <- sheet_text(out, "q1")
+
+    expect_true("Response" %in% cells, label = paste0(nm, ": the block"))
+    expect_false(any(ss_labels %in% cells), label = nm)
+  }
+})
+
+test_that("export_crosstab() writes no N column on any block shape (XS-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  sheets <- c(q1 = "Response", sata_a = "Item", bat_1 = "Item")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    crosstab_quiet(
+      guard_design(designs[[nm]]),
+      vars = c(q1, sata_a, sata_b, sata_c, bat_1, bat_2, bat_3),
+      banner = group,
+      file_name = out,
+      min_eff_n = 0
+    )
+
+    for (sheet in names(sheets)) {
+      heading <- heading_cells(out, sheet, label = sheets[[sheet]])
+      heading <- heading[!is.na(heading)]
+      lbl <- paste0(nm, ": ", sheet)
+      expect_false("N" %in% heading, label = paste(lbl, "no N"))
+      expect_identical(heading[[length(heading)]], "C", label = lbl)
+    }
+  }
+})
+
+test_that("export_crosstab() counts the design's rows, not the variable's answers (XS-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    d@data$q1[1:60] <- NA_character_
+    expect_identical(sum(is.na(d@data$q1)), 60L)
+    write_group_q1(d, out)
+
+    rows <- sheet_rows(out, "q1")
+    h <- heading_index(rows)
+    heading <- as.character(unlist(rows[h, ]))
+    cell_n <- as.integer(rows[[match("Total", heading)]][[h + 1L]])
+
+    # The design's in-scope rows: the phase-2 rows on the twophase design.
+    in_scope <- if (nm == "twophase") d@data$in_phase2 else TRUE
+    expect_identical(
+      cell_n,
+      as.integer(sum(rep_len(in_scope, nrow(d@data)))),
+      label = paste0(nm, ": in-scope rows")
+    )
+    # The response rows count the answered rows only, so they total less.
+    answered <- sum(oracle_freqs(d, "q1")$n)
+    expect_lt(answered, cell_n, label = paste0(nm, ": response rows"))
+
+    # A subgroup cell ignores the variable as well.
+    ref <- suppressWarnings(
+      surveycore::get_effective_n(d, group = group),
+      classes = oracle_classes
+    )
+    expect_identical(
+      as.integer(rows[[match("A", heading)]][[h + 1L]]),
+      as.integer(ref$n[as.character(ref$group) == "A"]),
+      label = paste0(nm, ": subgroup A")
+    )
+  }
+})
+
+test_that("export_crosstab() leaves the second label column blank on battery sample-size rows (XS-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    crosstab_quiet(
+      guard_design(designs[[nm]]),
+      vars = c(bat_1, bat_2, bat_3),
+      banner = group,
+      file_name = out,
+      min_eff_n = 0
+    )
+
+    rows <- sheet_rows(out, "bat_1")
+    at <- match(ss_labels, as.character(rows[[1L]]))
+    expect_false(anyNA(at), label = paste0(nm, ": both rows"))
+    expect_true(all(is.na(rows[[2L]][at])), label = paste0(nm, ": blank"))
+    expect_false(anyNA(rows[[3L]][at]), label = paste0(nm, ": counts"))
   }
 })
