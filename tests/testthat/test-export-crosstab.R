@@ -1777,19 +1777,105 @@ test_that(".banner_levels_labelled() translates codes to value labels", {
 
     result <- surveyreports:::.banner_levels_labelled(d, "gen")
 
-    expect_true(is.character(result), label = paste0(nm, ": character"))
+    expect_true(is.factor(result), label = paste0(nm, ": factor"))
+    expect_identical(
+      levels(result),
+      c("Male", "Female"),
+      label = paste0(nm, ": levels in code order")
+    )
     expect_identical(length(result), nrow(d@data), label = paste0(nm, ": len"))
     expect_identical(
-      result[!is.na(codes) & codes == 1],
+      as.character(result[!is.na(codes) & codes == 1]),
       rep("Male", sum(codes == 1, na.rm = TRUE)),
       label = paste0(nm, ": code 1")
     )
     expect_identical(
-      result[!is.na(codes) & codes == 2],
+      as.character(result[!is.na(codes) & codes == 2]),
       rep("Female", sum(codes == 2, na.rm = TRUE)),
       label = paste0(nm, ": code 2")
     )
     expect_identical(is.na(result), is.na(codes), label = paste0(nm, ": NA"))
+  }
+})
+
+test_that(".banner_levels_labelled() orders the levels by code, not by label or row", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    # The first row holds code 3, and the labels are given out of code order,
+    # so neither the row order nor the label order is the code order.
+    d@data$pid3 <- rep(c(3, 2, 1), length.out = nrow(d@data))
+    d <- surveycore::set_val_labels(
+      d,
+      pid3 = c(Republican = 2, Independent = 3, Democrat = 1)
+    )
+
+    result <- surveyreports:::.banner_levels_labelled(d, "pid3")
+
+    expect_true(is.factor(result), label = paste0(nm, ": factor"))
+    expect_identical(
+      levels(result),
+      c("Democrat", "Republican", "Independent"),
+      label = paste0(nm, ": code order")
+    )
+    expect_identical(
+      as.character(result),
+      c("Democrat", "Republican", "Independent")[d@data$pid3],
+      label = paste0(nm, ": per-row values")
+    )
+  }
+})
+
+test_that(".banner_levels_labelled() keeps a duplicate label once, at its lowest code", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    d@data$gen <- rep(c(3, 1, 2), length.out = nrow(d@data))
+    d <- surveycore::set_val_labels(
+      d,
+      gen = c(Male = 1, Female = 2, Female = 3)
+    )
+
+    result <- surveyreports:::.banner_levels_labelled(d, "gen")
+
+    expect_identical(
+      levels(result),
+      c("Male", "Female"),
+      label = paste0(nm, ": one Female level")
+    )
+    expect_identical(
+      as.character(result),
+      c("Male", "Female", "Female")[d@data$gen],
+      label = paste0(nm, ": codes 2 and 3 read Female")
+    )
+  }
+})
+
+test_that(".banner_levels_labelled() keeps a label with no row as an unused level", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+
+  for (nm in names(designs)) {
+    d <- designs[[nm]]
+    d@data$gen <- c(rep(1, 180), rep(2, 20))
+    d <- surveycore::set_val_labels(d, gen = c(Male = 1, Female = 2, Other = 3))
+
+    result <- surveyreports:::.banner_levels_labelled(d, "gen")
+
+    expect_identical(
+      levels(result),
+      c("Male", "Female", "Other"),
+      label = paste0(nm, ": levels")
+    )
+    expect_identical(
+      sum(result == "Other", na.rm = TRUE),
+      0L,
+      label = paste0(nm, ": Other holds no row")
+    )
   }
 })
 
@@ -1826,7 +1912,7 @@ test_that(".banner_levels_labelled() maps an unlabelled code to NA, as get_freqs
   ref <- suppressWarnings(surveycore::get_effective_n(d, group = gen))
 
   expect_true(all(is.na(result[as.vector(d@data$gen) == 3])))
-  expect_setequal(unique(result), as.character(ref$gen))
+  expect_setequal(as.character(unique(result)), as.character(ref$gen))
 })
 
 test_that(".banner_heading() returns the variable label when one is set", {
@@ -5872,6 +5958,152 @@ test_that("export_crosstab() keeps the factor level order in crossed headings (X
     headings <- heading_cells(out, "q1")
     crossed <- headings[grepl("\u00d7", headings, fixed = TRUE)]
     expect_identical(crossed, expected, label = paste0(nm, ": crossed order"))
+  }
+})
+
+# The crossed levels of the gen and reg fixtures in code order, gen varying
+# fastest within each reg level, less every cell that holds no row of the
+# design. The order is built from the codes, not from the labels.
+crossed_code_order <- function(d) {
+  gen_lab <- c(Male = 1, Female = 2)
+  reg_lab <- c(North = 1, South = 2)
+  # expand.grid() varies its first argument fastest.
+  grid <- expand.grid(gen = gen_lab, reg = reg_lab)
+  observed <- unique(paste(d@data$gen, d@data$reg))
+  grid <- grid[paste(grid$gen, grid$reg) %in% observed, ]
+  paste(
+    names(gen_lab)[match(grid$gen, gen_lab)],
+    names(reg_lab)[match(grid$reg, reg_lab)],
+    sep = " \u00d7 "
+  )
+}
+
+# The percentage a written cell holds, as a number, whether the cell stores
+# a number or a string such as "41.2%".
+cell_pct <- function(x) {
+  as.numeric(sub("%", "", as.character(x), fixed = TRUE))
+}
+
+test_that("export_crosstab() keeps the code order of a labelled banner in crossed headings (XH-05a)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  # The order an alphabetical sort of the labels writes. It must not appear.
+  alphabetical <- c(
+    "Male \u00d7 North",
+    "Female \u00d7 South",
+    "Male \u00d7 South"
+  )
+
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(add_gen_fixture(designs[[nm]]))
+    expect_true(is.numeric(d@data$gen), label = paste0(nm, ": gen is codes"))
+    expected <- crossed_code_order(d)
+    expect_identical(
+      expected,
+      c("Male \u00d7 North", "Male \u00d7 South", "Female \u00d7 South"),
+      label = paste0(nm, ": expected order")
+    )
+
+    write_gen_reg_crossed(d, out)
+
+    headings <- heading_cells(out, "q1")
+    expect_identical(
+      headings[headings %in% c("Male", "Female")],
+      c("Male", "Female"),
+      label = paste0(nm, ": Gender group order")
+    )
+    crossed <- headings[grepl("\u00d7", headings, fixed = TRUE)]
+    expect_identical(crossed, expected, label = paste0(nm, ": crossed order"))
+    expect_false(
+      identical(crossed, alphabetical),
+      label = paste0(nm, ": not alphabetical")
+    )
+    expect_false(
+      "Female \u00d7 North" %in% headings,
+      label = paste0(nm, ": no empty crossed cell")
+    )
+
+    # The cells under a moved heading hold that subgroup's estimates. Male x
+    # South is second in code order and third in alphabetical order.
+    d@data$cross <- paste(
+      c("Male", "Female")[d@data$gen],
+      c("North", "South")[d@data$reg],
+      sep = " \u00d7 "
+    )
+    ref <- suppressWarnings(
+      surveycore::get_freqs(d, q1, group = cross),
+      classes = c(
+        "surveycore_warning_small_cell",
+        "surveycore_warning_nonprob_srs_fallback"
+      )
+    )
+    ref <- ref[as.character(ref$cross) == "Male \u00d7 South", ]
+    expect_gt(nrow(ref), 0L, label = paste0(nm, ": oracle rows"))
+    rows <- sheet_rows(out, "q1")
+    h <- heading_index(rows)
+    j <- match("Male \u00d7 South", as.character(unlist(rows[h, ])))
+    labels_a <- as.character(rows[[1L]])
+    for (val in as.character(ref$q1)) {
+      i <- which(labels_a == val & seq_along(labels_a) > h)
+      expect_identical(length(i), 1L, label = paste0(nm, ": row ", val))
+      expect_equal(
+        cell_pct(rows[[j]][[i]]),
+        round(100 * ref$pct[as.character(ref$q1) == val], 1L),
+        tolerance = 1e-10,
+        label = paste0(nm, ": Male x South cell for ", val)
+      )
+    }
+  }
+
+  # A value label whose code holds no row (the XX-07 fixture) adds no crossed
+  # column and no withheld line, at a floor that withholds a real cell.
+  for (nm in names(designs)) {
+    d <- add_reg_fixture(
+      surveycore::set_val_labels(
+        add_gen_fixture(designs[[nm]]),
+        gen = c(Male = 1, Female = 2, Other = 3)
+      )
+    )
+
+    fresh_path(out)
+    suppressWarnings(
+      crosstab_quiet(
+        d,
+        vars = q1,
+        banner = c(gen, reg),
+        interactions = list(c("gen", "reg")),
+        file_name = out,
+        min_eff_n = gen_floor
+      ),
+      classes = "surveyreports_warning_subgroup_withheld"
+    )
+
+    headings <- heading_cells(out, "q1")
+    crossed <- headings[grepl("\u00d7", headings, fixed = TRUE)]
+    expect_false(
+      any(grepl("Other", crossed, fixed = TRUE)),
+      label = paste0(nm, ": no Other crossed column")
+    )
+    expect_false(
+      any(grepl("Female \u00d7 North", headings, fixed = TRUE)),
+      label = paste0(nm, ": no empty crossed column")
+    )
+    about <- about_sheet(out)
+    withheld <- about$B[about$A %in% "Not shown"]
+    expect_false(
+      any(grepl("Other", withheld, fixed = TRUE)),
+      label = paste0(nm, ": no Other withheld line")
+    )
+    expect_false(
+      any(grepl("Female \u00d7 North", withheld, fixed = TRUE)),
+      label = paste0(nm, ": no empty-cell withheld line")
+    )
+    expect_true(
+      any(grepl("Female \u00d7 South", withheld, fixed = TRUE)),
+      label = paste0(nm, ": the real small cell is withheld")
+    )
   }
 })
 
