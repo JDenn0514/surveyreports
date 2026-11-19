@@ -47,6 +47,72 @@ pass_gate() { # name note
   row "| $1 | PASS | $2 |"
 }
 
+# --- Gate 1: document() + drift check -----------------------------------
+# The gate fails when document() changes a file in NAMESPACE or man/: the
+# builder edited roxygen and did not run document(). It compares each file
+# with a copy taken just before the run, not with the git index. The
+# builder runs document() but does not commit, so an up-to-date Rd file is
+# often still uncommitted when the gates run. A new or a deleted man/ file
+# is drift too. The comparison ignores CR at line ends: roxygen2 writes LF,
+# and a checkout with core.autocrlf has CRLF.
+#
+# document() also writes the roxygen2 version into DESCRIPTION
+# (Config/roxygen2/version, or RoxygenNote in older roxygen2). That line
+# follows the local roxygen2, not the change, so the gate ignores it and
+# puts DESCRIPTION back as it was. Any other change to DESCRIPTION, such as
+# a new Collate field, is drift.
+copy_docs() { # dest-dir
+  mkdir -p "$1/man"
+  [ -f NAMESPACE ] && cp -p NAMESPACE "$1/NAMESPACE"
+  [ -d man ] && cp -rp man/. "$1/man/"
+  cp -p DESCRIPTION "$1/DESCRIPTION"
+}
+
+gate_document() {
+  local name="devtools::document()"
+  local log="$LOGDIR/gate-1-document.log"
+  local snap rc
+  snap=$(mktemp -d)
+  copy_docs "$snap/before"
+
+  Rscript -e 'devtools::document()' > "$log" 2>&1
+  rc=$?
+
+  # Put DESCRIPTION back when the roxygen2 version line is its only change.
+  local ver_re='^(Config/roxygen2/version|RoxygenNote):'
+  if ! cmp -s DESCRIPTION "$snap/before/DESCRIPTION" &&
+    cmp -s <(grep -vE "$ver_re" DESCRIPTION | tr -d '\r') \
+      <(grep -vE "$ver_re" "$snap/before/DESCRIPTION" | tr -d '\r'); then
+    cp -p "$snap/before/DESCRIPTION" DESCRIPTION
+    echo "Gate 1: put back the roxygen2 version line in DESCRIPTION." >> "$log"
+  fi
+
+  copy_docs "$snap/after"
+  local changes n
+  changes=$(cd "$snap" && diff -rq --strip-trailing-cr before after 2>&1 |
+    sed -e 's#^Files before/\(.*\) and after/.* differ$#changed: \1#' \
+      -e 's#^Only in after: #new: #' -e 's#^Only in after/\(.*\): #new: \1/#' \
+      -e 's#^Only in before: #deleted: #' \
+      -e 's#^Only in before/\(.*\): #deleted: \1/#')
+
+  if [ "$rc" != "0" ]; then
+    fail_gate "$name" "$log" "document() exited with status $rc"
+  elif [ -z "$changes" ]; then
+    pass_gate "$name" "no NAMESPACE/man drift"
+  else
+    n=$(printf '%s\n' "$changes" | wc -l | tr -d ' ')
+    {
+      echo ""
+      echo "## Gate 1: files that document() changed"
+      printf '%s\n' "$changes"
+      echo ""
+      (cd "$snap" && diff -ru --strip-trailing-cr before after)
+    } >> "$log" 2>&1
+    fail_gate "$name" "$log" "NAMESPACE/man drift in ${n} file(s) (builder forgot document())"
+  fi
+  rm -rf "$snap"
+}
+
 # --- Gate 2: tests and coverage in one covr run -------------------------
 # covr-report.R runs the whole test suite once under covr. One run gives
 # the test counts, the package total and the per-file detail. A separate
@@ -139,15 +205,7 @@ gate_air() {
 if [ "$BASELINE" = "1" ]; then
   gate_test_covr
 else
-  # --- Gate 1: document() + drift check --------------------------------
-  log="$LOGDIR/gate-1-document.log"
-  Rscript -e 'devtools::document()' > "$log" 2>&1
-  if git diff --quiet -- NAMESPACE man/ 2>>"$log"; then
-    pass_gate "devtools::document()" "no NAMESPACE/man drift"
-  else
-    git diff --stat -- NAMESPACE man/ >> "$log" 2>&1
-    fail_gate "devtools::document()" "$log" "NAMESPACE/man drift (builder forgot document())"
-  fi
+  gate_document
 
   gate_test_covr
 

@@ -10,7 +10,7 @@ which is auto-loaded. Where the two overlap, the rule file wins.
 
 | # | Command | Gate | On fail |
 |---|---------|------|---------|
-| 1 | `Rscript -e "devtools::document()"` | NAMESPACE/man/ unchanged after the run | BLOCK (the builder forgot `document()`) |
+| 1 | `Rscript -e "devtools::document()"` | the run exits 0 and changes no file in NAMESPACE or man/ | BLOCK (the builder forgot `document()`) |
 | 2 | `NOT_CRAN=true Rscript .claude/scripts/covr-report.R` | all tests pass; package coverage is 95% or more (target 98%); per-file % and uncovered lines for the changed `R/` files | BLOCK if a test fails, covr did not run, or coverage is below 95%; HOLD if 95–98% and dropped vs baseline |
 | 3 | removed | R CMD check (gate 5) runs every `@examples` block | — |
 | 4 | `R CMD build .` | tarball produced | BLOCK (build failure) |
@@ -21,6 +21,15 @@ which is auto-loaded. Where the two overlap, the rule file wins.
 
 Gates 3 and 7 are gone. The other gates keep their numbers and log names,
 so `gate-5-check.log` and the rest still match older audits.
+
+Gate 1 copies NAMESPACE, `man/` and DESCRIPTION before it runs
+`document()`, then compares each file with its copy. It does not compare with
+the git index: the builder runs `document()` but does not commit, so an
+up-to-date Rd file is often uncommitted when the gates run. A changed, new or
+deleted file is drift. The log lists each one and shows the diff.
+`document()` also writes the roxygen2 version line in DESCRIPTION
+(`Config/roxygen2/version`). The gate ignores that line and puts DESCRIPTION
+back as it was. Any other change to DESCRIPTION is drift.
 
 Gate 2 is one covr run. `covr-report.R` runs the whole `tests/testthat`
 directory with `testthat::test_dir()` inside `covr::package_coverage()`, so
