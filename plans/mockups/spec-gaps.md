@@ -25,6 +25,14 @@ items. Two crossed cells fall below the floor of 100: `Female × Something else`
 Where the spec is silent, the mockup adds no styling of its own. That is the
 rule behind most choices below.
 
+**Status, 2026-11-19.** Each entry ends with a status line. Gaps 1 to 7, 10,
+11, 13 and 20 are closed by house style B1. Gaps 8, 9, 12, 14, 15, 17 to 19,
+21 and 22 are closed by the user's picks on the decision page, logged in the
+decision entry "Spec gaps settled from the decision page". That entry also
+settles one question not listed here, extra 1, on row heights: only the
+merged rows get a computed height (spec v0.29.0 section 3.21.6). Gap 16 is
+closed by the user's choice in chat: code 1 is the chosen value.
+
 ---
 
 ## Part 1: the gaps
@@ -40,6 +48,7 @@ The entries that change the look most come first.
   sit on the right. The two kinds of cell in one column do not line up.
 - **Other choice:** right-align, or center, every data cell of the block:
   the estimate cells, the variance rows and the sample-size cells.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 2. The width of column B on the About sheet
 
@@ -52,6 +61,7 @@ The entries that change the look most come first.
   column B. The reader must scroll sideways to read one entry.
 - **Other choice:** column B at about 80 to 100 characters with wrap on, so
   each entry reads as a short paragraph.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 3. The spanner row: wrap, height, bold and alignment
 
@@ -64,6 +74,7 @@ The entries that change the look most come first.
   merged cell. Real variable labels are often this long.
 - **Other choice:** bold and centered, with wrap on and the row at 30
   points, as the heading row is.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 4. Bold, borders and fill anywhere in the table
 
@@ -76,6 +87,7 @@ The entries that change the look most come first.
   rules between the headings and the data.
 - **Other choice:** bold headings and a bottom border under the heading row,
   or under the last sample-size row.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 5. The second line of a variance cell
 
@@ -84,6 +96,7 @@ The entries that change the look most come first.
 - **Choice:** 9 points (the body text is 11) and mid grey, `#808080`.
 - **Other choice:** 10 points, one step down as the sample-size rows are,
   and a darker grey such as `#595959`.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 6. The item label in a battery block
 
@@ -95,6 +108,7 @@ The entries that change the look most come first.
   column A blank. No blank row or border separates two items.
 - **Other choice:** the label on every row, or one merged cell down the
   item's rows, or a blank row between items.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 7. How the sample-size numbers are shown
 
@@ -108,6 +122,7 @@ The entries that change the look most come first.
 - **Other choice:** `#,##0` and `#,##0.0`, which the topline already uses in
   its `Eff N` header (`1,234`). Or General for both, so `963.0` shows as
   `963`.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 8. The wording of a withheld line
 
@@ -121,6 +136,7 @@ The entries that change the look most come first.
 - **Other choice:** name the banner by its variable label, as the spanner
   does, and state the floor: `"Male × Something else" (gender × pid3)
   withheld: effective sample size 68.9, below the minimum of 100.`
+- **Status:** closed 2026-11-19. Pick: the long form with the minimum, as shipped. Spec v0.29.0 section 3.14.
 
 ### 9. The layout of the About sheet blocks
 
@@ -139,6 +155,7 @@ The entries that change the look most come first.
 - **Other choice:** the raw key (`survey_name`) or a shorter label
   (`Survey`); a bold `Survey metadata` heading under the header row; each
   withheld line in column B beside a `Not shown` key.
+- **Status:** closed 2026-11-19. Picks: (9a) short labels, as shipped; (9b) no heading row, as shipped; (9c) `Not shown` in column A on every line, the line in column B, as shipped. Spec v0.29.0 section 3.14.
 
 ### 10. The base-note and legend rows
 
@@ -150,6 +167,7 @@ The entries that change the look most come first.
   no wrap. The topline already merges its base note.
 - **Other choice:** unmerged, in column A. The text then runs into the empty
   cells to the right.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 11. Which rows of column A wrap
 
@@ -162,6 +180,7 @@ The entries that change the look most come first.
   height of 15 points only its first line would show.
 - **Other choice:** wrap on every cell of column A, with a fixed height on
   the rows whose text is longer than the column.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 12. Space between blocks on the stacked sheet
 
@@ -171,6 +190,7 @@ The entries that change the look most come first.
   `current_row <- result$next_row + 1L`.
 - **Choice:** one blank row.
 - **Other choice:** two blank rows, or none with a border.
+- **Status:** closed 2026-11-19. Pick: one blank row between blocks, none before the withheld lines, as shipped. Spec v0.29.0 section 3.16.
 
 ### 13. The style of a withheld line under a table
 
@@ -180,6 +200,7 @@ The entries that change the look most come first.
   table, with no blank row before it.
 - **Other choice:** italic, as the base note is, with a blank row before
   the first line.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 14. "Listed above" when the cover sheet lists no minimum
 
@@ -193,6 +214,7 @@ The entries that change the look most come first.
   sheet lists no minimum above it, so the sentence is false there.
 - **Other choice:** write the minimum on the cover sheet whatever
   `withheld_note` is, or name the number inside the entry text.
+- **Status:** closed 2026-11-19. Pick: the entry states the number. Spec v0.29.0 section 3.15.
 
 ### 15. The order of crossed levels on a value-labelled banner
 
@@ -206,6 +228,7 @@ The entries that change the look most come first.
   `pid3` group.
 - **Other choice:** alphabetical crossed levels, as the spec's rule
   produces for this input.
+- **Status:** closed 2026-11-19. Pick: code order in both groups. Spec v0.29.0 sections 2.2 and 3.8.
 
 ### 16. Which value counts as "chosen" in a SATA item
 
@@ -217,6 +240,8 @@ The entries that change the look most come first.
   no row and every SATA cell would read `-`.
 - **Other choice:** the first value label, or the code `1` read before the
   labels are applied.
+- **Status:** closed 2026-11-19. The user chose "code 1 is chosen" in chat,
+  not on the decision page. Branch `fix/sata-chosen-code-1` builds it.
 
 ### 17. A dash or 0% for a category nobody in a column chose
 
@@ -231,6 +256,7 @@ The entries that change the look most come first.
   has no such cell, so the choice is not visible.
 - **Other choice:** per column. Any row with `n > 0` in the column makes a
   zero category read `0%`.
+- **Status:** closed 2026-11-19. Pick: the whole column decides, in every block. `0%` when the column has answers and nobody chose the category; `-` when nobody in the column answered or it was never asked. Spec v0.29.0 sections 2.2, 3.3, 3.12 and 3.15.
 
 ### 18. The glossary entry for `variance = "se"`
 
@@ -242,6 +268,7 @@ The entries that change the look most come first.
 - **Choice:** no entry. Neither mockup uses `"se"`.
 - **Other choice:** a sixth entry, `Standard error`, worded as the legend
   row is.
+- **Status:** closed 2026-11-19. Pick: no entry, as shipped. Spec v0.29.0 section 3.15.
 
 ### 19. The topline interval entry with no intervals in the cells
 
@@ -254,6 +281,7 @@ The entries that change the look most come first.
   absent and the question does not arise.
 - **Other choice:** omit the entry from every topline workbook until the
   topline pass writes intervals.
+- **Status:** closed 2026-11-19. Pick: no `Confidence intervals` entry in a topline workbook until the topline shows intervals. Spec v0.29.0 sections 2.3, 3.15, 4.1 and 4.2.
 
 ### 20. The base font
 
@@ -263,6 +291,7 @@ The entries that change the look most come first.
 - **Choice:** the openxlsx2 1.28 default, Aptos Narrow 11. The sample-size
   rows are Aptos Narrow 10, italic.
 - **Other choice:** Calibri 11, the older Excel default.
+- **Status:** closed 2026-11-19 by house style B1. Spec v0.28.0 section 3.21.8.
 
 ### 21. The glossary text: Markdown marks
 
@@ -271,6 +300,7 @@ The entries that change the look most come first.
 - **Section:** 3.15 says "written verbatim", and the text holds `` `<0.1%` ``.
 - **Choice:** the backticks are Markdown and are left out: `reads <0.1%.`
 - **Other choice:** quotation marks around each form: `reads "<0.1%".`
+- **Status:** closed 2026-11-19. Pick: bare, as shipped. Spec v0.29.0 section 3.15.
 
 ### 22. A long title on the topline sheet
 
@@ -282,6 +312,7 @@ The entries that change the look most come first.
   text is cut at the edge.
 - **Other choice:** for the topline pass: give the topline the 44 / 12
   widths of the crosstab.
+- **Status:** closed 2026-11-19. Pick: the full B1 style on the topline sheet in `feature/house-style`. Spec v0.29.0 sections 1.3, 3.21.4 and 4.1.
 
 ---
 

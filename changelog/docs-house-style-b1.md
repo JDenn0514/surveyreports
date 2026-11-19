@@ -57,6 +57,19 @@ No R code or test changes.
 - `plans/mockups/spec-gaps.md` lists the 22 gaps. The other variant files
   stay out of git.
 
+### Spec gaps settled, and tickets (second commit)
+
+- The user answered 13 open questions on a decision page. Spec v0.29.0 and
+  test-spec v0.24.0 hold the answers. The decisions log has the entry "Spec
+  gaps settled from the decision page". Gap 16 is closed by the user's chat
+  answer (code 1 is the chosen SATA value).
+- New and changed scenarios include XC-06a, XH-05a, XA-05b, TY-11 and XY-24.
+  TP-06a now asserts that no topline "Confidence intervals" entry exists.
+- Spec VIII: the `* 100` grep now expects four lines, not three.
+- Eight tickets in `plans/tickets/export-metadata/` replace plan PRs 16 to
+  20. Each ticket names its spec sections, scenario ids and blockers. The
+  plan (v4.11.0) keeps the old PR text for history and points to the tickets.
+
 ## Files Modified
 
 - `plans/spec-export-metadata.md`
@@ -67,4 +80,5 @@ No R code or test changes.
 - `plans/mockups/spec-gaps.md` — new
 - `plans/mockups/variants/B1-crosstab.xlsx`, `B1-crosstab-stacked.xlsx`,
   `B1-topline.xlsx`, `README.md` — new
+- `plans/tickets/export-metadata/` — new; README and tickets 01 to 08
 - `changelog/docs-house-style-b1.md` — new; this file

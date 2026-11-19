@@ -1,7 +1,7 @@
 # Implementation plan — export-metadata
 
 **Status:** PLAN_READY
-**Version:** 4.10.0
+**Version:** 4.11.0
 **Date:** 2026-11-19
 **Id:** `export-metadata`
 **Source spec:** `plans/spec-export-metadata.md` v0.28.0
@@ -22,7 +22,9 @@ suggestions 42 to 44 open. The user decided that the plan is ready once these
 issues are applied, with no further review pass. A later spec change, the
 house style of spec 3.21 (v0.28.0, decided 2026-11-19), adds PR 19,
 `feature/house-style`, and moves the documentation PR to PR 20. That change
-has had no review pass
+has had no review pass. In v4.11.0 (2026-11-19), PRs 16 to 20 moved to the
+tickets in `plans/tickets/export-metadata/README.md`, which follow spec
+v0.29.0 and test-spec v0.24.0
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
@@ -112,18 +114,27 @@ stands.** Only the formal arguments come forward.
 - [x] PR 15: `feature/crosstab-sheet-properties` — the `100%` row goes; fixed
       widths, wrapping, row height and a freeze pane.
 - [ ] PR 16: `feature/crosstab-percent-cells` — a percentage cell becomes a
-      string.
+      string. **Moved to tickets:** ticket 03 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 17: `feature/crosstab-variance-strings` — `variance_display`, the
       variance strings, the legend row, and the column width, wrapping and
-      row height that a variance needs.
+      row height that a variance needs. **Moved to tickets:** ticket 04 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 18: `feature/crosstab-total-and-missing` — the Total column, the
       missing-value rows, the all-NA drop under `na.rm = FALSE`, the glossary
-      and the block row order.
+      and the block row order. **Moved to tickets:** ticket 05 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 19: `feature/house-style` — house style B1 on every sheet of both
       workbooks: fonts, fills, rules, stripes, row heights, widths and frozen
-      label columns.
+      label columns. **Moved to tickets:** tickets 06 and 07 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 20: `docs/export-metadata` — the documentation prose and
-      `_pkgdown.yml`.
+      `_pkgdown.yml`. **Moved to tickets:** ticket 08 of
+      `plans/tickets/export-metadata/README.md`.
+
+Tickets 01 and 02 of `plans/tickets/export-metadata/README.md` carry the
+2026-11-19 decisions that change merged code (gaps 14, 17, 19 and 15). This
+plan has no PR for them.
 
 ---
 
@@ -2166,6 +2177,10 @@ XB-13, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-04, XX-11, XX-12.
 
 ### PR 16: A percentage cell becomes a string
 
+> Kept for history. Superseded by ticket 03,
+> `plans/tickets/export-metadata/03-crosstab-percent-cells.md`. Where this
+> section and spec v0.29.0 differ, the spec wins.
+
 **Branch:** `feature/crosstab-percent-cells`
 **Depends on:** PR 15
 **Commit type:** `feat(export)`
@@ -2266,6 +2281,10 @@ XC-06, XC-07, XC-07a, XC-08.
 ---
 
 ### PR 17: The variance strings and the legend row
+
+> Kept for history. Superseded by ticket 04,
+> `plans/tickets/export-metadata/04-crosstab-variance-strings.md`. Where
+> this section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `feature/crosstab-variance-strings`
 **Depends on:** PR 16
@@ -2429,6 +2448,10 @@ XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10, XB-14.
 ---
 
 ### PR 18: The Total column, missing data, and the block row order
+
+> Kept for history. Superseded by ticket 05,
+> `plans/tickets/export-metadata/05-crosstab-total-and-missing.md`. Where
+> this section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `feature/crosstab-total-and-missing`
 **Depends on:** PR 17
@@ -2603,6 +2626,11 @@ XH-13, XH-14, XX-13, XX-17, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08.
 ---
 
 ### PR 19: The house style
+
+> Kept for history. Superseded by tickets 06 and 07,
+> `plans/tickets/export-metadata/06-house-style-crosstab-and-about.md` and
+> `07-house-style-topline.md`. Where this section and spec v0.29.0 differ,
+> the spec wins.
 
 **Branch:** `feature/house-style`
 **Depends on:** PR 18
@@ -2854,6 +2882,10 @@ TY-07, TY-08, TY-09, TY-10.
 ---
 
 ### PR 20: The documentation prose
+
+> Kept for history. Superseded by ticket 08,
+> `plans/tickets/export-metadata/08-documentation-prose.md`. Where this
+> section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `docs/export-metadata`
 **Depends on:** PR 19

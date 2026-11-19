@@ -1,7 +1,7 @@
 # Spec — export-metadata
 
 **Status:** SPEC_READY
-**Version:** 0.28.0
+**Version:** 0.29.0
 **Date:** 2026-11-19
 **Methodology locked:** 2026-09-14, after Pass 3 of
 `plans/spec-methodology-export-metadata.md`
@@ -97,7 +97,7 @@ presentation of content. It carries no A or B number. Decision 2026-11-19.
 | B6 | `total_label`; the Total column loses its spanner; the `100%` row is removed | Breaking |
 | B7 | `na.rm` and `na_label` | New behavior |
 | B8 | `variance_display`, and a legend row | New behavior |
-| B9 | Column widths, text wrapping, and a freeze pane. Section 3.21 replaces the wrap and the row heights, and adds frozen label columns | New behavior |
+| B9 | Column widths, text wrapping, and a freeze pane. Section 3.21 replaces the wrap, adds computed heights for the merged rows, and adds frozen label columns. The two 30-point heights stay | New behavior |
 
 ### 1.3 Out
 
@@ -111,7 +111,9 @@ presentation of content. It carries no A or B number. Decision 2026-11-19.
   **Replaced in part by section 3.21.** From `feature/house-style`, the
   topline sheet takes the house style: its fonts, fills, borders, alignment,
   row heights and widths change. Its cell values, its rows and its columns do
-  not. The content stays out of scope.
+  not. The content stays out of scope. **Decision (2026-11-19, gap 22):** the
+  topline house style lands in `feature/house-style`. It does not wait for the
+  topline pass.
 - **No `crosstab_style()` options object.** Six of the arguments below are
   presentation, and collapsing them into one object buys a shorter signature and
   a reusable house default. It is deferred: the payoff is a look shared with
@@ -241,7 +243,7 @@ same PR. Leaving it would state a gap the repository no longer has.
 |---|---|
 | `R/export-utils.R` | new `.resolve_eff_n()`, `.banner_levels_labelled()`, `.banner_heading()`, `.unanimous_across()`, `.resolve_base_notes()`, `.resolve_roles()`, `.apply_role_guard()`, `.write_cover_sheet()`, `.fmt_pct()`, `.fmt_variance()`, `.write_sample_size_rows()`, `.build_withheld()`, `.format_withheld_lines()`, `.reject_design_vars()`, `.has_domain()`, `.apply_all_na_drop()`; **delete `.compute_eff_n()`**; change `.empty_suppressed()`; change `.total_col_group()`; rewrite the withholding loop; change `.build_freq_frame()`, including its collection path, which takes the question text from the first wave with rows; change `.compute_interaction_freq()`; change `.compute_total_freq()` and `.compute_subgroup_freq()` to muffle one more surveycore class; change all three frequency helpers to catch `surveycore_error_all_na` under `na.rm = FALSE`; change `.base_note_for()`; change `.build_workbook()`; delete the `show_eff_n` join block |
 | `R/export-crosstab.R` | the new signature; the design-variable check; the role guard; banner label validation; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11; the rewritten render helpers; `label_cols` added to `.write_crosstab_headers()`, which the battery route now calls; new `.render_block_preamble()`, `.render_block_footer()` and `.unique_sheet_name()` below the exported function |
-| `R/export-topline.R` | `all_of()` fix; the design-variable check; role guard; threaded base notes; **delete the dead effective-N branch in the collection `Total` header** — section 2.3; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11. Its two inline `round(pct * 100, decimals)` sites stay. **No presentation change**: the deleted branch never fires, and a dropped variable wrote no block before — section 4.1 |
+| `R/export-topline.R` | `all_of()` fix; the design-variable check; role guard; threaded base notes; **delete the dead effective-N branch in the collection `Total` header** — section 2.3; the all-NA drop, and **delete the three `nrow(frame) == 0L` early returns** it makes unreachable — section 3.11. Its two inline `round(pct * 100, decimals)` sites stay. **No presentation change**: the deleted branch never fires, and a dropped variable wrote no block before — section 4.1. Two exceptions from 2026-11-19: the call to `.build_workbook()` stops passing `variance` (gap 19, section 2.3), and the `"Topline"` sheet takes the house style in `feature/house-style` (gap 22, section 3.21.4) |
 | `plans/error-messages.md` | 7 new error classes, 5 new warning classes, 1 renamed warning class, 1 extended trigger. The edit lands **before** implementation, per `code-style.md` |
 | `tests/testthat/test-export-crosstab.R` | rewritten sections |
 | `tests/testthat/test-export-topline.R` | new and changed sections |
@@ -371,9 +373,13 @@ gate VIII name them separately.
 # Banner column translated from codes to value labels.
 .banner_levels_labelled <- function(design, col)
 # -> vector of length nrow(design@data), NA preserved.
-#    factor in -> factor out, LEVEL ORDER PRESERVED. Anything else -> character.
-#    Coercing a factor to character re-sorts the interaction spanners
-#    alphabetically. See section 3.8.
+#    factor in -> factor out, LEVEL ORDER PRESERVED.
+#    A column with value labels -> a FACTOR whose levels are the labels in
+#    ascending order of their codes (changed 2026-11-19, gap 15). A code
+#    with no label becomes NA, as before.
+#    Anything else -> character.
+#    A character return re-sorts the interaction spanners alphabetically, so
+#    neither a factor nor a labelled column may return one. See section 3.8.
 
 # The display heading for a banner column: its variable label from
 # surveycore::extract_var_label(), falling back to the column name.
@@ -516,9 +522,13 @@ gate VIII name them separately.
 #     applies the thresholds of section 3.3 to the percentage-point value
 #     after it multiplies, and `decimals` counts decimal places on a
 #     percentage.
-# has_rows: nrow(rows) > 0 && rows$n > 0, computed by the caller over the
-#     get_freqs() rows for this cell. Row presence alone is the wrong test:
-#     get_freqs() emits a placeholder row with n = 0 — section 3.3.
+# has_rows: TRUE when any get_freqs() row for this variable in this banner
+#     column has n > 0, computed by the caller over the WHOLE COLUMN of the
+#     variable, not over the cell's own row (changed 2026-11-19, gap 17).
+#     Row presence alone is the wrong test: get_freqs() emits a placeholder
+#     row with n = 0 — section 3.3. When has_rows is TRUE and the cell's own
+#     row is absent or has n = 0, the caller passes p = 0, so the cell
+#     reads 0%.
 # -> character(1)
 
 # One variance string, as it appears beside an estimate. The rule of
@@ -527,7 +537,9 @@ gate VIII name them separately.
 # rows: the get_freqs() rows for this cell. The helper reads se, or
 #     ci_low and ci_high, as surveycore returns them — proportions.
 # variance: NULL, "se" or "ci".
-# -> character(1). Empty when variance is NULL or has_rows is FALSE.
+# -> character(1). Empty when variance is NULL or has_rows is FALSE. Also
+#    empty when `rows` is empty or its n is 0: a 0% cell with no row of its
+#    own carries no variance — section 3.12 (added 2026-11-19, gap 17).
 #    The helper owns both forms, the parentheses, the one % per number and
 #    the separator. It formats every number with .fmt_pct(), so it does no
 #    arithmetic of its own and it inherits the rounding mode, the floor
@@ -600,7 +612,10 @@ gate VIII name them separately.
 #   glossary entries are true of THIS workbook — section 3.15. Both export
 #   functions call this helper, and a topline workbook withholds nothing
 #   and writes numeric cells, so an unconditional glossary would describe
-#   rules that workbook does not follow.
+#   rules that workbook does not follow. A topline workbook also shows no
+#   interval, so export_topline() passes no `variance` — section 2.3.
+# min_eff_n also sets the text of the Why a column is missing entry: the
+#   entry states the number — section 3.15 (changed 2026-11-19, gap 14).
 # decimals: the caller's own `decimals`. It sets the precision of the two
 #   example strings in the Percentages entry (`<0.1%` and `>99.9%` at
 #   decimals = 1), so the entry matches the cells — section 3.15. It is not
@@ -673,12 +688,14 @@ gate VIII name them separately.
 # functions pass their own `decimals`, so the Percentages entry matches the
 # cells (section 3.15; added 2026-11-13, feature/cover-sheet). The defaults
 # are the export_topline() case for the first two: no banner, numeric
-# cells. `variance` is NOT defaulted away by that function.
-# export_topline() PASSES ITS OWN `variance` THROUGH, because it takes the
-# argument too and section 3.15 makes the Confidence intervals entry true
-# whenever `variance` is "ci". A topline call that set "ci" and reached the
-# NULL default would get a workbook whose glossary omits an entry the cells
-# need — section 4.1.
+# cells, and for `variance` too.
+# REPLACED 2026-11-19 (gap 19): export_topline() no longer passes its own
+# `variance`. It keeps the NULL default, so a topline workbook never carries
+# the Confidence intervals entry. export_topline() writes no standard error
+# and no interval into any cell, so the entry would explain a number the
+# workbook does not show. The earlier rule, "export_topline() passes its own
+# variance through", is withdrawn. The topline pass passes `variance` again
+# when its cells show intervals — section 4.1.
 # This helper runs after withholding, at step 17 of section 3.11, so
 # `withheld` is populated by then. The caller decides what to pass: the
 # withheld frame when `withheld_note == "once"`, and NULL otherwise.
@@ -792,7 +809,9 @@ its cell from the new string formatters instead, so the helper loses its
 crosstab call site and keeps its topline one. It also keeps the
 never-asked-versus-chosen-by-nobody distinction, because `export_topline()`
 still prints it. Section 3.3 drops that distinction from the crosstab cell
-only.
+only. **Replaced by section 3.3 from 2026-11-19 (gap 17):** the crosstab cell keeps the
+distinction too, in its own forms: `-` for never asked and `0%` for chosen by
+nobody — section 3.3. The topline prints a blank and `0`.
 
 `.sata_n_cell()`, in `R/export-utils.R`, follows the same reasoning. It copies
 the same never-asked-versus-chosen-by-nobody rule and it has the same two call
@@ -911,7 +930,7 @@ near-unanimous value and an absent cell are not the same fact:
 
 | Condition, on `pp`, the estimate in percentage points — the proportion times 100, computed inside `.fmt_pct()` | Cell |
 |---|---|
-| no rows in this cell — `has_rows` is false | `-` |
+| no rows in this cell — `has_rows` is false. From 2026-11-19, `has_rows` reads the whole column — see below | `-` |
 | the estimate is exactly `0` | `0%` |
 | `0 < pp < 0.5 × 10^-decimals` — nonzero, rounds to zero at this precision | `<0.1%` at `decimals = 1`; `<1%` at `0`; `<0.01%` at `2` |
 | `100 - 0.5 × 10^-decimals < pp < 100` — below 100, rounds to 100 at this precision | `>99.9%` at `decimals = 1`; `>99%` at `0`; `>99.99%` at `2` |
@@ -932,6 +951,31 @@ wrong test. `get_freqs()` emits a placeholder row with `n = 0` for a subgroup
 with no non-missing observations, so an implementer who tests for a row finds
 one, reads `p == 0`, and writes `0%` where the rule intends `-`.
 
+**Replaced 2026-11-19 (gap 17): `has_rows` tests the whole column, in every
+block.** The test above, read over the cell's own row, gives `-` for every
+category nobody in a column chose: `get_freqs()` returns that row with
+`n = 0`. Then `0%` could never appear, and `XC-06` and `XC-08` could not pass.
+The rule is now:
+
+- `has_rows` is `TRUE` when any `get_freqs()` row for this variable in this
+  banner column has `n > 0`. "This variable" is the question of a
+  single-response block, and the item of a SATA or battery block. The rows are
+  every value of that variable in that column, chosen or not.
+- When `has_rows` is `TRUE` and the cell's own row is absent or has `n = 0`,
+  the caller passes `p = 0` to `.fmt_pct()`, and the cell reads `0%`.
+- When `has_rows` is `FALSE`, the cell reads `-`. Nobody in that column
+  answered the question, or it was never asked there.
+
+The placeholder-row warning above still holds: a column whose every row has
+`n = 0` has `has_rows` `FALSE`.
+
+| Case, in one banner column | Cell |
+|---|---|
+| people answered, and nobody chose this category | `0%` |
+| nobody answered the question, or it was never asked there | `-` |
+| a SATA item nobody in the column chose, though they were asked it | `0%` |
+| a SATA item never asked in the column | `-` |
+
 **A SATA item never asked in a subgroup renders `-`, the same as an item nobody
 chose.** The distinction is dropped, deliberately. The cell has four special
 forms and one plain percentage, and three states — never asked, asked and
@@ -941,6 +985,13 @@ a blank for never-asked and `0` for chosen-by-nobody. The crosstab SATA route
 stops calling that helper, so the distinction leaves the crosstab cell. The
 helper itself stays unchanged and keeps the distinction for
 `export_topline()` — section 2.3.
+
+**Replaced 2026-11-19 (gap 17):** the paragraph above no longer holds. The
+whole-column test maps the three states onto existing forms with no new form:
+never asked is `-`, asked and chosen by nobody is `0%`, and asked and chosen
+is a percentage. So the crosstab SATA cell keeps the distinction, as `-` and
+`0%`. The crosstab SATA route still stops calling `.sata_pct_cell()`, and that
+helper still serves `export_topline()` unchanged.
 
 **Decision (2026-11-19): code 1 is "chosen" in a SATA cell, read before value
 labels are applied.** `get_freqs()` returns the label, not the code, so the
@@ -1259,6 +1310,29 @@ Required: translate each banner column with `.banner_levels_labelled()` before
 builder takes the spanner order straight from those levels. A character return
 re-sorts every non-alphabetical factor banner: a Likert banner ordered `Low`,
 `Medium`, `High` would render `High`, `Low`, `Medium`.
+
+**Decision (2026-11-19, gap 15): a value-labelled banner keeps code order in
+the crossed group too.** The rule above covered a factor banner only. A
+labelled column, such as numeric codes with value labels, came back as
+character, so `interaction()` sorted its labels alphabetically. The banner's
+own column group follows the codes, because `get_freqs()` returns the levels
+in code order. One sheet then listed the same levels in two orders.
+
+Now `.banner_levels_labelled()` returns a factor for a labelled column. Its
+levels are the value labels in ascending order of their codes — section 2.2.
+So the crossed group follows the same order as the single group.
+
+Example, with `pid3` coded `Democrat = 1`, `Republican = 2`,
+`Independent = 3`, crossed with `gender` (`Male = 1`, `Female = 2`), the first
+variable varying fastest:
+
+| Group | Order |
+|---|---|
+| `pid3` alone | `Democrat`, `Republican`, `Independent` |
+| `gender × pid3` | `Male × Democrat`, `Female × Democrat`, `Male × Republican`, `Female × Republican`, `Male × Independent`, `Female × Independent` |
+
+A crossed cell with no rows has no column, as before. surveycore drops an
+unused level, as section 3.19 states for a factor banner.
 
 ### 3.9 The Total column, and the row that said 100%
 
@@ -1615,6 +1689,15 @@ the same rounding mode and the same floor and ceiling strings as an estimate.
 on its own. The helper returns an empty string when `variance` is `NULL` or the
 cell has no rows.
 
+**From 2026-11-19 (gap 17), a `0%` cell can have no row of its own.**
+`has_rows` now reads the whole column — section 3.3 — so a cell can read `0%`
+while its own row is absent or has `n = 0`. Such a cell carries no variance:
+`.fmt_variance()` returns an empty string, and the cell reads `0%` alone, as a
+`-` cell does. The helper reads the cell's own rows, so it has no `se` or bound
+to print there. This is the assistant's reading of the gap 17 decision, logged
+for the user's check in the decision entry "Spec gaps settled from the
+decision page".
+
 **One `%` per number.** Each bound and each standard error carries its own `%`.
 Worked examples at `decimals = 1`:
 
@@ -1665,6 +1748,13 @@ value. An estimate row takes the height formula of section 3.21.6. With the
 interval in the cell it is at least 31 points, which holds an 11-point line
 and a 9-point line. A variance row under `"row"` is 17 points.
 
+**Replaced 2026-11-19 (extra 1): the 30-point rule stays.** Section 3.21.6
+now computes heights for the merged rows only. An estimate row with the
+interval in the cell stays fixed at 30 points, which holds an 11-point line
+and a 9-point line. Every other estimate row and every variance row has no
+stored height. The 31-point and 17-point heights of the paragraph above are
+withdrawn. The wrap rule of that paragraph stays.
+
 **A legend row is written under the question title whenever `variance` is set**,
 and only then:
 
@@ -1678,7 +1768,8 @@ a fuller entry; the two are not alternatives, because a reader looking at a
 bracketed number needs the answer in the same view.
 
 A cell with no rows carries no variance under either display: `-` stands alone,
-and the variance row is blank in that column.
+and the variance row is blank in that column. A `0%` cell with no row of its
+own follows the same rule — see above.
 
 ### 3.13 Missing data
 
@@ -1755,6 +1846,52 @@ effective N and section 3.5 tests no raw N, so a raw N on the line would name a
 number the rule never read. Section 3.16's per-table block and section 3.18's
 console warning read the same vector, so the three cannot disagree.
 
+**The sentence of one line (decision 2026-11-19, gap 8).** Shipped in PR 31,
+and pinned by the `XV-03` warning snapshot:
+
+```
+"<level>" (<banner_var>) withheld: effective sample size <n_eff>, below the minimum of <min_eff_n>.
+```
+
+- `<level>` is the subgroup label in double quotation marks. A level that is
+  `NA_character_` — a code with no value label, section 3.7 — reads
+  `[no value label]`, with no quotation marks.
+- `<banner_var>` is the column name the withheld frame holds. A crossed cell
+  reads the column names joined by ` × `, as `gender × pid3`. It is the column
+  name, not the variable label.
+- `<n_eff>` is the effective N at one decimal, as
+  `formatC(n_eff, format = "f", digits = 1)` writes it.
+- `<min_eff_n>` is the floor, as `format(min_eff_n, scientific = FALSE,
+  trim = TRUE)` writes it. The cover sheet's minimum row uses the same form.
+
+Example: `"Male × Something else" (gender × pid3) withheld: effective sample
+size 68.9, below the minimum of 100.` The line states the minimum, so it reads
+true by itself under a table, on the cover sheet and in the console.
+
+**The survey block (decisions 2026-11-19, gaps 9a and 9b).** Column A shows a
+short label for each dataset key, from a fixed table. A key outside the table
+shows its own name.
+
+| Key | Column A |
+|---|---|
+| `survey_name` | `Survey` |
+| `data_name` | `Dataset` |
+| `vendor` | `Vendor` |
+| `field_start` | `Field start` |
+| `field_end` | `Field end` |
+| `field_period` | `Field period` |
+
+The survey block has no heading row of its own. The `Key` / `Value` header row
+heads it, and the first key row sits directly under the header row. On a
+collection, each wave name heads its wave's block, as stated below.
+
+**The withheld block (decision 2026-11-19, gap 9c).** The block is, in order:
+the bold heading `Subgroups not shown` in column A; `Minimum effective sample
+size` in column A with the floor in column B; then one row per withheld line,
+with `Not shown` in column A and the line in column B. `Not shown` is written
+on every line. When the frame has no rows, one row reads `Not shown` and
+`None`.
+
 **A zero-row frame and `NULL` are different facts.** A zero-row frame means the
 floor ran and withheld nothing, and the block is written with its `None` row.
 `NULL` means no withheld block is written at all.
@@ -1828,7 +1965,9 @@ four of them decide which glossary entries it writes:
   is the case that most needs it.
 - `string_cells` drives `Percentages`.
 - `variance` drives `Confidence intervals`. The entry appears when `variance`
-  is `"ci"`.
+  is `"ci"`. From 2026-11-19 (gap 19), only `export_crosstab()` passes its
+  `variance`. `export_topline()` passes none, so a topline workbook never
+  carries the entry — section 2.3.
 
 The other three arguments — `wb`, `design` and `withheld` — feed the survey
 block and the withheld block. No glossary entry reads them. The helper writes
@@ -1838,8 +1977,8 @@ only the entries that are true of the workbook in hand:
 |---|---|---|
 | `Unweighted sample size` | The number of people who answered. It does not change when weights are applied. Report text writes this as N for the full sample and n for a subgroup. | always |
 | `Effective sample size (ESS)` | The sample size left after weighting. Weights make some people count for more than others, and that costs precision, so this number is smaller than the unweighted sample size — the more the weights vary, the smaller it gets. It adjusts for the weights alone. It does not adjust for clustered sampling, so on a clustered survey the true precision is lower than this number suggests. | always |
-| `Why a column is missing` | A subgroup whose effective sample size falls below the minimum is not shown. The minimum for this workbook is listed above. The test is on the size of the subgroup itself, not on how many of its members answered any one question, so a question that many people skipped can still be shown for a subgroup that clears the minimum. | `min_eff_n > 0` and a banner was rendered |
-| `Percentages` | Each percentage is based on the people who answered that question, which can be fewer than the sample size shown above the table. A value that is not zero but rounds to zero at the shown precision reads `<0.1%`. A value below 100 that rounds to 100 reads `>99.9%`. A true zero reads `0%`. A dash means the answer was not chosen in that column, or was never offered there. | the cells are strings |
+| `Why a column is missing` | A subgroup whose effective sample size falls below the minimum is not shown. The minimum for this workbook is an effective sample size of {min_eff_n}. The test is on the size of the subgroup itself, not on how many of its members answered any one question, so a question that many people skipped can still be shown for a subgroup that clears the minimum. | `min_eff_n > 0` and a banner was rendered |
+| `Percentages` | Each percentage is based on the people who answered that question, which can be fewer than the sample size shown above the table. A value that is not zero but rounds to zero at the shown precision reads <0.1%. A value below 100 that rounds to 100 reads >99.9%. A true zero reads 0%. A dash means nobody in that column answered the question, or it was never asked there. | the cells are strings |
 | `Confidence intervals` | The interval is a normal approximation. For a very rare or a near-unanimous answer a bound can fall below 0 percent or rise above 100 percent. That is a property of the approximation, not a count of people. | `variance = "ci"` |
 
 **Each glossary term for a workbook row matches the row label the reader saw.**
@@ -1874,6 +2013,28 @@ rule.
 The `Percentages` entry is written at the precision `decimals` is set to, so its
 examples match the cells.
 
+**Three texts in the table changed on 2026-11-19.** Each replaces the earlier
+text in place:
+
+- **Gap 14.** `Why a column is missing` said "The minimum for this workbook is
+  listed above." The withheld block lists the minimum only under
+  `withheld_note = "once"`, so under `"every"` and `"none"` that sentence was
+  false. The entry now states the number. `{min_eff_n}` is the floor, written
+  as `format(min_eff_n, scientific = FALSE, trim = TRUE)`, the form of the
+  withheld line and of the cover sheet's minimum row — section 3.14. At
+  `min_eff_n = 100` the sentence reads "The minimum for this workbook is an
+  effective sample size of 100." The entry reads the same at every
+  `withheld_note` value. `.write_cover_sheet()` already receives `min_eff_n`,
+  and it still takes no `withheld_note`.
+- **Gap 17.** The dash sentence said "A dash means the answer was not chosen
+  in that column, or was never offered there." Under the whole-column test of
+  section 3.3, an answer nobody chose reads `0%`, so the sentence now names
+  the two cases that read `-`.
+- **Gap 21.** The text held Markdown backticks around the two forms. The
+  workbook writes the forms bare, with no backticks and no quotation marks:
+  `reads <0.1%.` The table now holds the text exactly as the cell does, so
+  "written verbatim" has one reading.
+
 **No glossary entry for the domain row.** The cover-sheet domain row of section
 3.14 reads `Restricted to` against a count of rows, and neither the key nor the
 value needs a definition. Every entry in the table above explains a rule the
@@ -1888,12 +2049,26 @@ When `variance` is set to `"se"`, an entry names the statistic in the brackets
 in the same words as the legend row of section 3.12. When it is set to `"ci"`,
 the `Confidence intervals` entry above does that job.
 
+**Replaced 2026-11-19 (gap 18): no glossary entry for `variance = "se"`.** The
+paragraph above promised an entry that the table does not hold, and the code
+writes none. The legend row of section 3.12, `Percentages; standard error in
+parentheses.`, names the statistic in the same view as the number. The
+glossary stays at five terms.
+
 **Two entries are false in an `export_topline()` workbook**, which is why they
 are conditional. Topline withholds nothing — section 4.2 — so
 `Why a column is missing` would tell the reader of a trend workbook that small
-waves were removed, and there would be no minimum listed above it either.
-Topline percentages are numbers, not strings, so the `Percentages` entry would
-describe forms no cell holds.
+waves were removed. Topline percentages are numbers, not strings, so the
+`Percentages` entry would describe forms no cell holds.
+
+**A third entry is absent from every `export_topline()` workbook (decision
+2026-11-19, gap 19).** `export_topline()` writes no standard error and no
+interval into any cell. `variance` reaches `get_freqs()` and nothing the
+reader sees. So `Confidence intervals` would explain a number the workbook
+does not show, and `export_topline()` does not pass its `variance` to the
+cover sheet — section 2.3. A topline workbook carries the two sample-size
+entries and no other. The topline pass adds the entry back when its cells show
+intervals.
 
 ### 3.16 Workbook contract
 
@@ -1914,6 +2089,14 @@ next free row, per `code-style.md`.
 | — | a variance row after each estimate row | `variance` set and `variance_display == "row"` |
 | k+1 | the two sample-size rows | `sample_size_display == "bottom"` |
 | k+2… | the withheld lines of `.format_withheld_lines()` — section 3.14 fixes the wording | `withheld_note == "every"` and the withheld frame of section 3.5 has rows |
+
+**Blank rows (decision 2026-11-19, gap 12).** The withheld lines start on the
+row directly under the last table row, with no blank row before them. On the
+stacked `"Crosstab"` sheet, one blank row separates two blocks: the next block
+starts two rows below the last written row of the block above, whether that
+row is a table row or a withheld line. No blank row follows the last block.
+This is the shipped behavior. Section 3.21.3 states the same rule for the
+withheld lines, and `XR-01` and `XX-11` assert it.
 
 The label column is `Response` for a single-response block, `Item` for SATA, and
 `Item` plus `Response` for a battery. A battery block is therefore one column
@@ -1962,8 +2145,8 @@ rows and the withheld lines are the only things below the data rows.
 |---|---|
 | Column widths | fixed: 44 characters for the label column, column A. The second label column of a battery block, its `Response` column, is **20 characters**. On a per-question battery sheet that column is column B. Each data column is **12 characters**, except under `variance = "ci"`, where each data column is **`15 + 2 * decimals` characters** — 17 at the default `decimals = 1L`, 15 at 0, 19 at 2. The `"ci"` rule holds under both `variance_display` values, because under `"row"` the interval sits in the same column. A width is set per column, not per block. On a stacked sheet that holds at least one battery block, column B is a label column in each battery block and a data column in each other block. So column B there takes **the larger of 20 and the data-column width in force**: 20 at a data width of 12, 15, 17 or 19, and `15 + 2 * decimals` under `variance = "ci"` from `decimals = 3` up, where that width is 21 or more. The width depends on the arguments only, never on cell content. **Not auto-fit** — openxlsx2 estimates width from character counts, so an auto-fit workbook shifts whenever a label changes and every snapshot moves with it |
 | Wrapping | on for the label column, for the `Response` label cells of a battery block, and for the heading row. On a stacked sheet the wrap of column B is set on the battery block's label cells only, so a data cell of another block in column B keeps the data-cell rule below. When `variance` is not `NULL` and `variance_display == "cell"`, wrapping is also on for every data cell of an estimate row. Without it, Excel shows the two lines of section 3.12 on one line. **Replaced by section 3.21.3 from `feature/house-style`:** wrap is on for the title, note and withheld rows, the spanner and heading rows, every label cell and every estimate cell under every `variance` value. It is off for the sample-size rows |
-| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed. **Replaced by section 3.21.6 from `feature/house-style`:** every row of a block gets a height from the package's own formula, so the height follows the text but not Excel or openxlsx2. The heading row and the spanner row are at least two lines, 34 points |
-| Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height. **Replaced by section 3.21.6 from `feature/house-style`:** every estimate row gets a height from the formula, at least 19 points, and at least 31 points with the interval in the cell |
+| Heading row height | fixed at **30 points**. The default row height is 15 points and holds one line, so 30 points holds the two lines a wrapped heading takes at a data column width of 12. A wider data column holds the same heading in two lines or fewer. **Not auto-fit** — a height that follows the text moves whenever a heading changes, for the same reason the widths are fixed. **Replaced by section 3.21.6 from `feature/house-style`:** every row of a block gets a height from the package's own formula, so the height follows the text but not Excel or openxlsx2. The heading row and the spanner row are at least two lines, 34 points. **Replaced 2026-11-19 (extra 1):** the 30-point rule stays from `feature/house-style`. Section 3.21.6 computes a height for the merged rows only — the title, notes, spanner and withheld lines — and the heading row is not one of them |
+| Estimate row height | fixed at **30 points** for every estimate row when `variance` is not `NULL` and `variance_display == "cell"`. 30 points holds the estimate line and the variance line. At the default 15 points the second line is hidden. **Not auto-fit**, for the same reason as the heading row. In every other case the estimate row keeps the default height. **Replaced by section 3.21.6 from `feature/house-style`:** every estimate row gets a height from the formula, at least 19 points, and at least 31 points with the interval in the cell. **Replaced 2026-11-19 (extra 1):** the rule of this row stays from `feature/house-style`, unchanged: 30 points with the interval in the cell, and no stored height in every other case |
 | Freeze pane | below the last heading or sample-size row, so the question, the headings and the counts stay in view. Not written when `sample_size_display == "bottom"`. **One pane per sheet, from the sheet's first block.** `.render_block_preamble()` sets the pane only when `start_row == 1L`. The first block on every question sheet starts at row 1: `R/export-crosstab.R:214`, `:236` and `:258` pass `1L` on the per-question layout, and `:275` sets `current_row <- 1L` on the stacked sheet. A variable whose frequency frame has no rows leaves the output at step 15 of section 3.11, before rendering, so it never holds row 1 and the next block takes it. So each per-question sheet gets its pane from its own block. On the stacked `"Crosstab"` sheet, the first block sets the pane and later blocks set none. The frozen rows are the first block's title and headings. The floor ignores the tabulated variable — section 3.5 — so every block withholds the same banner levels. But a battery block is one column wider, so above a battery block the frozen headings sit one column to the left of its data. The frozen title names the first question only. The rule is kept with these limits, because a pane set by a later block falls deep in the sheet, where the frozen rows can be taller than the window. A row added above the first block breaks this condition, and `XB-04`, `XB-11` and `XB-12` then fail. **Amended by section 3.21.3 from `feature/house-style`:** the rows stay as above, and the pane also freezes the label columns — column A, or columns A and B on a battery sheet and on a stacked sheet that holds a battery. The top-left cell of the pane moves from column A to column B or C |
 
 **Where `15 + 2 * decimals` comes from.** An interval string is `(`, a bound,
@@ -2077,6 +2260,7 @@ by class, never all errors, and catch nothing under `na.rm = TRUE`. Section
 | a self-banner (a variable named in both `vars` and `banner`) | unchanged: that banner column is skipped for that variable |
 | `decimals = 0` | the rounding rule's floor string becomes `<1%` and its ceiling string becomes `>99%` — section 3.3 |
 | a category held by almost every row | the cell reads `>99.9%` at `decimals = 1`, never `100.0%` — section 3.3 |
+| a category nobody in one banner column chose, where others in that column answered | the cell reads `0%`, in a single-response, SATA or battery block. A column where nobody answered, or the question was never asked, reads `-` — section 3.3, decision 2026-11-19, gap 17 |
 | a rare category under `variance = "ci"` | the lower bound can print as a negative percentage. Not clipped — section 3.12 |
 | `min_eff_n = 0` | nothing is withheld; no withheld block is written; the cover sheet still carries the glossary, without the `Why a column is missing` entry — section 3.15. surveycore's raw-N warning is muffled as well — section 3.5 |
 | `min_eff_n` is `NA`, `Inf`, negative, character, or longer than 1 | `surveyreports_error_invalid_min_eff_n`, before the role guard — section 3.11. `Inf` fails the finite test of section 3.17, so it aborts and writes no workbook. It never reaches the degenerate case of section 3.5 |
@@ -2161,7 +2345,7 @@ The colours, by name. Each one is defined once — section 3.21.7.
 | Gridlines | hidden on every sheet. The sheet is added with `wb_add_worksheet(grid_lines = FALSE)`. `wb_set_grid_lines()` is not used: the mockup script records that it drops the freeze pane |
 | One style per cell | each styled cell carries one complete style: font, fill, four borders, alignment, wrap, indent and number format |
 | Column widths, crosstab | as section 3.16: column A 44, the battery `Response` column 20, a data column 12, or `15 + 2 * decimals` under `variance = "ci"`. On a stacked sheet that holds a battery, column B is the larger of 20 and the data width |
-| Column widths, topline | column A 44, every data column 10. **Depends on gap 22** — section 3.21.4 |
+| Column widths, topline | column A 44, every data column 10 — section 3.21.4 |
 | Column widths, About | column A 44, column B 90 |
 | Blank rows | a blank row between two blocks has no style and no set height |
 
@@ -2259,12 +2443,11 @@ stays in view too.
 
 #### 3.21.4 Topline sheet
 
-**This part depends on gap 22, which is open.** The user decides whether the
-house style reaches `export_topline()` in `feature/house-style` or waits for
-the topline pass. The rules below are B1's topline rules. If the topline
-waits, this part, the topline widths of section 3.21.2 and the topline rows
-of section 3.21.6 move to that pass, and the About sheet of a topline
-workbook still takes section 3.21.5 through the shared cover-sheet writer.
+**Decision (2026-11-19, gap 22): the topline sheet takes the full B1 style in
+`feature/house-style`.** It does not wait for the topline pass. The rules
+below are B1's topline rules, and they are firm. The topline pass restyles
+the sheet again when its cells become text and its `N` column becomes
+sample-size rows. That second pass is the accepted cost.
 
 The block shapes of section 4.2 stay: the cells, the `N` column, the
 `Total` row of `100%`, and one table per battery item. Only the look changes.
@@ -2324,11 +2507,27 @@ shown`, `What these numbers mean`, and on a collection each wave name.
 
 #### 3.21.6 Row heights
 
-Every row of a table gets a set height, on all three sheet types. Excel does
-not fit a merged cell to its text, so the package computes each height from
-the text with one formula. The height follows the text, so a longer label
-gives a taller row. The formula is in the package, not in Excel and not in
-openxlsx2, so the same text always gives the same height.
+**Decision (2026-11-19, extra 1): size only the merged rows.** This replaces
+the v0.28.0 rule, "every row of a table gets a set height". Excel fits an
+unmerged row that has no stored height to its wrapped text. It never fits a
+merged cell, so a merged title with no stored height shows one line only. So
+the package stores a height on three kinds of row, and on no other:
+
+1. **The computed rows.** These are the rows whose text sits in a range merged
+   across columns: the title, base-note, legend and withheld rows, the
+   crosstab spanner row and the topline battery item heading. The package
+   computes the height from the text with the formula below. A row of this
+   kind is computed even when its block has one column and nothing is merged,
+   so one rule covers every block.
+2. **The two fixed rows of section 3.16.** The crosstab heading row is 30
+   points. A crosstab estimate row is 30 points when `variance` is set and
+   `variance_display = "cell"`.
+3. **No other row.** The sample-size rows, the response rows, the variance
+   rows, the topline heading, body and `Total` rows, and every row of the
+   About sheet store no height. Excel fits each one when it opens the file.
+
+The formula is in the package, not in Excel and not in openxlsx2, so the same
+text always gives the same height.
 
 **The line count.** `lines(text, w, s, bold)` is the number of lines a text
 takes in a cell `w` characters wide at size `s`:
@@ -2348,29 +2547,36 @@ height is the largest of its cells' heights, over the cells the table below
 names. `w` is the width set on the column, before openxlsx2 adds `0.711`. For
 a merged range, `w` is the sum of the widths of its columns.
 
-| Row | Cells that count | At least |
+| Row | Stored height | At least |
 |---|---|---|
-| Title row | the title, at the block width, 12 pt, bold | 1 line: 21 |
-| Base-note, legend and withheld rows | the text, at the block width, 10 pt | 1 line: 18 |
-| Spanner row (crosstab) | each labelled spanner, at its merged width, 11 pt, bold | 2 lines: 34 |
-| Heading row (crosstab) | every heading cell, at its column width, 11 pt, bold | 2 lines: 34 |
-| Heading row (topline) | every heading cell, at its column width, 11 pt, bold | 1 line: 19. At width 10, `w1\n(n=200)` is 2 lines, 34, and `%\n(Eff N=1,234)` is 3 lines, 49 |
-| Sample-size row | one line at 10 pt | 18 |
-| Response row (crosstab) | each label cell, at its column width, 11 pt; bold for a battery item label | 1 line: 19. With the interval in the cell, at least `ceiling(1.35 * 11 + 1.35 * 9 + 4)`: 31 |
-| Variance row | one line at 9 pt | 17 |
-| Battery item heading (topline) | the variable label, at the block width, 11 pt, bold | 1 line: 19 |
-| Body row (topline) | the label in column A, at 44, 11 pt | 1 line: 19 |
-| `Total` row (topline) | `Total`, 11 pt, bold | 19 |
-| About heading row | the column A text, at 44, 11 pt, bold | 1 line: 19 |
-| About body row | the column A text at 44, 11 pt, bold for a glossary term; the column B text at 90, 11 pt | 1 line: 19 |
+| Title row (crosstab and topline) | computed: the title, at the block width, 12 pt, bold | 1 line: 21 |
+| Base-note and legend rows (crosstab), base-note row (topline) | computed: the text, at the block width, 10 pt | 1 line: 18 |
+| Withheld line (crosstab, `withheld_note = "every"`) | computed: the line, at the block width, 10 pt | 1 line: 18 |
+| Spanner row (crosstab) | computed: each labelled spanner, at its merged width, or at its column width when the group has one column, 11 pt, bold | 2 lines: 34 |
+| Battery item heading (topline) | computed: the variable label, at the block width, 11 pt, bold | 1 line: 19 |
+| Heading row (crosstab) | fixed: 30 — section 3.16 | — |
+| Estimate row (crosstab), `variance` set and `variance_display = "cell"` | fixed: 30 — section 3.16 | — |
+| Every other row: the sample-size rows, the other estimate rows, the variance rows, the topline heading, body and `Total` rows, and every About row | none. Excel fits the row | — |
 
 The block width is the sum of the widths of the block's columns.
+
+**Withdrawn from v0.28.0.** The computed heights of the crosstab heading row
+(at least 34), the response rows (19, or 31 with the interval), the variance
+row (17) and the sample-size rows (18), and every topline heading, body and
+`Total` row and every About row. Those rows now follow the third group above.
 
 **Limit.** The formula estimates the width of a line from a count of
 characters. A text with many wide letters can still need more room than the
 formula gives, and a text with many narrow letters gets more than it needs. The
 contract is the formula. A test checks the stored height against it. It does
 not check how Excel draws the text.
+
+**Only the computed rows depend on text.** A label change moves the height of
+a title, note, spanner, withheld or item heading row, and of no other row.
+The crosstab heading row stays at 30 points, so a heading that needs three
+lines at a data width of 12 is cut, as section 3.16 accepts. A row with no
+stored height is drawn as Excel fits it, and no test reads how Excel draws
+it.
 
 #### 3.21.7 Where the style lives
 
@@ -2385,9 +2591,12 @@ fill.
 # -> named list. One entry per element of the tables in sections 3.21.3 to
 #    3.21.5, each a list of size, bold, italic, colour, fill, h, v, wrap,
 #    indent and number format; the four rules of each table; the column
-#    widths; and the row-height constants 1.35, 4 and 0.9.
+#    widths; the row-height constants 1.35, 4 and 0.9; and the fixed
+#    height 30.
 
-# The row height of section 3.21.6 for one cell.
+# The row height of section 3.21.6 for one cell of a computed row. No other
+# row calls it: the two fixed rows take 30, and every other row stores no
+# height.
 .build_row_height <- function(text, width, size, bold = FALSE,
                               min_lines = 1L)
 # -> numeric(1), in points.
@@ -2434,10 +2643,29 @@ this section closes gaps 1 to 7 and gaps 10, 11, 13 and 20:
 | 13. The style of a withheld line | 10 pt italic, note grey, merged across the block, wrap on, directly under the table — section 3.21.3 |
 | 20. The base font | Calibri 11, `#000000`, with no theme scheme — section 3.21.2 |
 
-**Gap 22 stays open, and section 3.21.4 depends on it.** The user decides
-whether the house style reaches `export_topline()` in `feature/house-style`
-or waits for the topline pass. Gaps 8, 9, 12 and 14 to 19 and 21 are not
-styling, and the user decides them separately.
+**The other gaps, settled 2026-11-19.** The user answered gaps 8, 9, 12, 14,
+15, 17 to 19, 21 and 22, and one question the mockups raised beyond the list,
+on a decision page. The decision entry "Spec gaps settled from the decision
+page" holds each pick.
+
+| Gap | Pick | Rule |
+|---|---|---|
+| 8. The wording of a withheld line | the long form with the minimum, as shipped | section 3.14 |
+| 9a. The names of the survey keys | short labels, as shipped | section 3.14 |
+| 9b. A heading for the survey block | none, as shipped | section 3.14 |
+| 9c. Where the withheld lines go | `Not shown` in column A on every line, the line in column B, as shipped | section 3.14 |
+| 12. Blank rows | one blank row between blocks, none before the withheld lines, as shipped | section 3.16 |
+| 14. "Listed above" | the entry states the number | section 3.15 |
+| 15. Crossed order on a labelled banner | code order in both groups | sections 2.2 and 3.8 |
+| 17. A dash or `0%` | the whole column decides, in every block | sections 2.2, 3.3, 3.12 and 3.15 |
+| 18. A standard-error entry | none, as shipped | section 3.15 |
+| 19. The topline interval entry | left out until the topline shows intervals | sections 2.3, 3.15, 4.1 and 4.2 |
+| 21. Marks around the cell forms | bare, as shipped | section 3.15 |
+| 22. The topline house style | the full B1 style now | sections 1.3, 3.21.4 and 4.1 |
+| Extra 1. Row heights that follow the text | the merged rows only | sections 3.12, 3.16 and 3.21.6 |
+
+Gap 16, the value that counts as "chosen" in a SATA item, was not on the
+decision page and stays open.
 
 ---
 
@@ -2453,7 +2681,7 @@ decision: section 3.11 applies it to both functions.
 | What reaches it | Why | Visible effect |
 |---|---|---|
 | `.resolve_eff_n()` | it replaces `.compute_eff_n()`, and `export_topline()` reads `frame$eff_n` for its percentage-column header — section 4.2 gives the header's form | the reported effective N becomes correct on twophase and domain-restricted designs. Its committed `show_eff_n` snapshots move |
-| The `"About"` sheet | `.build_workbook()` is shared, and its new signature makes every caller pass `design`, so the topline call site changes in any case. `export_topline()` passes its own `variance` on the same line — section 2.3 | a topline workbook gains the cover sheet, with the glossary and, for a collection, one block per wave. On a domain-restricted design it also gains the domain row, because `.write_cover_sheet()` is shared — section 3.14. No withheld block: topline withholds nothing. The glossary carries the two sample-size entries always, and `Confidence intervals` when the call sets `variance = "ci"`. `Why a column is missing` and `Percentages` are false in every topline workbook: topline withholds nothing and its cells are numbers. Section 3.15 makes each of the three conditional, so a topline workbook carries two entries or three |
+| The `"About"` sheet | `.build_workbook()` is shared, and its new signature makes every caller pass `design`, so the topline call site changes in any case. `export_topline()` passes its own `variance` on the same line — section 2.3. **Replaced 2026-11-19 (gap 19):** it passes no `variance`, and keeps the `NULL` default | a topline workbook gains the cover sheet, with the glossary and, for a collection, one block per wave. On a domain-restricted design it also gains the domain row, because `.write_cover_sheet()` is shared — section 3.14. No withheld block: topline withholds nothing. The glossary carries the two sample-size entries always, and `Confidence intervals` when the call sets `variance = "ci"`. `Why a column is missing` and `Percentages` are false in every topline workbook: topline withholds nothing and its cells are numbers. Section 3.15 makes each of the three conditional, so a topline workbook carries two entries or three. **Replaced 2026-11-19 (gap 19):** a topline workbook carries the two sample-size entries and no other, at every `variance` value. No topline cell shows an interval, so `Confidence intervals` would be false too — section 3.15 |
 | `.reject_design_vars()` | `export_topline()` takes `vars`, and a column the design names is an error in both functions — sections 3.11 and 3.17 | a call naming a weight, a cluster id, a stratum, an FPC or a replicate-weight column in `vars` now aborts. Measured on a 200-row taylor design, `vars = c(q1, wt)` returns the path today and writes a second sheet named `wt` with 204 rows — one response row per distinct weight value — raising only `surveyreports_warning_missing_variable_label`. That sheet is gone |
 | A2, A3, A5 | `.base_note_for()`, `.apply_role_guard()` and the classification call are shared | universe base notes, the role guard on `vars`, and the loss of 80 deprecation warnings |
 | The all-NA drop, and the muffle of section 3.18 | the drop is step 9 of the topline order in section 3.11, a call to the shared `.apply_all_na_drop()`. The three frequency helpers are shared — section 2.3 | **a change to the console and to two calls, not to a written cell.** A variable with no non-missing value wrote no block before, because the route returned early. It now leaves `vars` before rendering, and `surveyreports_warning_all_na_dropped` names it. `surveycore_warning_all_na_freqs` no longer reaches the caller. Two calls change. Measured 2026-11-05 on the taylor fixture: `vars = all_na_var` alone writes a `"Topline"` sheet with no data, and it now aborts with `surveyreports_error_vars_all_na` — section V. On a two-wave collection, a variable with no non-missing value in wave 1 aborted with "subscript out of bounds" at `R/export-utils.R:344`, and the call now returns the path — section 2.3. The missing-label warning reads the frame, as today, so it names the same columns as today |
@@ -2483,6 +2711,13 @@ moves: a dropped variable wrote no block before. Section 2.1's file table
 carries all six items, and section 3.11 carries the steps for the fourth and
 the sixth.
 
+**One more change at the `.build_workbook()` call, from 2026-11-19 (gap 19).**
+The call drops its `variance = variance` argument, so the `NULL` default
+reaches the cover sheet. It changes one glossary entry on the `"About"`
+sheet, and no cell of the `"Topline"` sheet. `export_topline()` still passes
+`variance` to `get_freqs()`. The `@param variance` text says that the value
+changes nothing in the workbook yet — section 7.2.
+
 **The presentation in `R/export-topline.R` does not change.** The two
 inline `round(pct * 100, decimals)` sites at `:379` and `:394` stay as they are.
 `.sata_pct_cell()` and `.sata_n_cell()` also stay unchanged, and
@@ -2498,7 +2733,8 @@ stripe, the rules, the row heights and the widths of section 3.21.4. The
 values above stay. A percentage cell is still a number, the `N` column and the
 `Total` row of `100%` stay, and the three inline conversions stay. The topline
 render routes gain one call each, to `.write_block_style()`, and the battery
-route marks its item titles as item headings.
+route marks its item titles as item headings. **Decision (2026-11-19, gap
+22):** this lands in `feature/house-style`. It is firm, not conditional.
 
 `export_topline()` has no `banner` argument, so every banner-only condition in
 section III is `export_crosstab()`-only: the two label aborts, the banner role
@@ -2527,13 +2763,13 @@ Stated here so it is a known cost and not a discovery:
 | Sample size | two italic rows, spelled-out labels | an `N` column, and the effective N inside a header cell. The single-design route writes `%\n(Eff N=1,234)` into the percentage header. The collection wave route writes no effective N at all, and the note below this table gives the reason |
 | The term | `effective sample size` | `Eff N` |
 | The effective N's precision | one decimal, in the second sample-size row — section 3.4 | a whole number with a thousands separator, inside a header cell. The value is rounded to 0 decimals before it is written. `.render_topline_single()` writes it. The collection wave route writes none: this spec deletes the branch that would have written one — section 2.3 and the note below this table |
-| The glossary | up to five entries. `Why a column is missing` and `Percentages` can both be true | three entries at most. Both of those are always false — topline withholds nothing and its cells are numbers — so the workbook carries the two sample-size entries, plus `Confidence intervals` under `variance = "ci"` — sections 3.15 and 4.1 |
+| The glossary | up to five entries. `Why a column is missing` and `Percentages` can both be true | two entries, the two sample-size entries. `Why a column is missing` and `Percentages` are always false — topline withholds nothing and its cells are numbers. From 2026-11-19 (gap 19), `Confidence intervals` is absent at every `variance` value, because no topline cell shows an interval — sections 3.15 and 4.1 |
 | The `100%` row | removed under B6. The single route's `Total` row of `100%` cells goes — section 3.16 | still written. `.render_topline_single()` writes the literal string `100%` at two sites, and both stay. The first row of this table does not cover it: `100%` is a string in both workbooks, and it is the row itself that differs |
 | Banner headings | variable labels | no banner |
 | Small subgroups | withheld below `min_eff_n` | never withheld — a trend workbook can still publish a wave with an effective N of 60 |
 | The proportion-to-percentage conversion | inside `.fmt_pct()`, one implementation | three inline `round(pct * 100, decimals)` sites — two in `R/export-topline.R`, one in `.sata_pct_cell()`, which only this function still calls — section 2.3 |
 | The withheld-note writer | `.format_withheld_lines()`, naming the effective N | `.write_suppression_footnote()`, printing a raw N, a threshold and the word "suppressed" |
-| A SATA item never asked | `-`, the same as an item nobody chose — section 3.3 | a blank for never asked, `0` for chosen by nobody. `.sata_pct_cell()` keeps the distinction for this function alone — section 2.3 |
+| A SATA item never asked | `-`. From 2026-11-19 (gap 17), an item asked and chosen by nobody reads `0%`, so the crosstab keeps the distinction too — section 3.3 | a blank for never asked, `0` for chosen by nobody. `.sata_pct_cell()` keeps the distinction for this function — section 2.3. Both functions now make the distinction, in different forms |
 
 Withholding is genuinely absent rather than deferred by accident: the loop runs
 only when a banner is resolved, and `export_topline()` never resolves one.
@@ -2617,7 +2853,11 @@ designs should move. **A moved topline snapshot outside that set is a defect in
 Part A's scope line**, not a snapshot to accept.
 
 The house style of section 3.21 moves no snapshot. The committed snapshots
-hold error and warning messages, and the house style changes no message.
+hold error and warning messages, and the house style changes no message. This
+holds for the `"Topline"` sheet too, which takes the house style in
+`feature/house-style` (decision 2026-11-19, gap 22). The 2026-11-19 changes
+to the glossary text and to the topline glossary move no snapshot either: no
+snapshot holds a cover-sheet cell.
 
 ---
 
@@ -2689,7 +2929,7 @@ and writing them whole is a deliverable.
 |---|---|---|
 | both | `@description` | **Keep the closing sentence and correct it where it is wrong.** Tier 4 requires the block to end by naming what the function routes to and what selects the route. Both blocks do — section 7.1 measured it. State plainly what drives the routing: `surveycore::classify_question_type()` reads the resolved `vars` and returns the value that selects the render route. **No argument selects the render route.** For `export_crosstab()` keep the reference to `layout`, and say what `layout` actually chooses — the sheet arrangement, one sheet per question group or one `"Crosstab"` sheet — not the render route. For `export_topline()` drop nothing: its sentence already names the classifier and the one sheet |
 | `export_crosstab()` | `@param` | Every new and changed argument of section 3.2 gets a full entry. `layout`, `min_eff_n`, `variance`, `variance_display`, `sample_size_display` and `withheld_note` each list their accepted values with a brief characterization, per the Tier 4 rule for an argument that selects a route. `layout` is the closest thing this function has to a dispatch argument: it selects between two sheet arrangements, and it must list both values. The render route is not an argument's to choose |
-| `export_topline()` | `@param` | `vars` is the argument the routing reads, and it enumerates no values, because a tidy-select expression has none. So the Tier 4 list-every-value rule has no dispatch argument to apply to in this function. `@param variance` still lists its three values, as it does today. Say in `@param vars` that the question structure of the selected columns decides the block shape, and point at `@details` for the three routes |
+| `export_topline()` | `@param` | `vars` is the argument the routing reads, and it enumerates no values, because a tidy-select expression has none. So the Tier 4 list-every-value rule has no dispatch argument to apply to in this function. `@param variance` still lists its three values, as it does today. From 2026-11-19 (gap 19) it also says that the value has no visible effect yet: no cell shows a standard error or an interval, and the glossary carries no `Confidence intervals` entry. It must not say that `variance` controls what is included in the output. Say in `@param vars` that the question structure of the selected columns decides the block shape, and point at `@details` for the three routes |
 | `export_crosstab()` | `@details` | **Write it.** Name each render route — single, SATA, battery — and what selects it. Name the role guard and the withholding step as stages that run before dispatch. Do not restate the render algorithms |
 | `export_crosstab()` | `@section Workbook Layout` | **Write it.** The cover sheet, the Total column, the banner column groups, the two layouts, the sample-size rows, and the row order of section 3.16 |
 | `export_crosstab()` | `@param banner` | The role rule with its own error; the two label aborts of section 3.7; that an `interactions` element naming a dropped column aborts |
@@ -2758,10 +2998,11 @@ without running the suite. The suite gates live with the scenarios.
 - [ ] The PR description states why `.fmt_variance()`,
       `.write_sample_size_rows()` and `.build_withheld()` sit in
       `R/export-utils.R` with one call-site file today — section 2.1
-- [ ] `grep -rn "\* 100" R/` returns three lines, across two files: two in
-      `R/export-topline.R` and one in `R/export-utils.R`, inside
-      `.sata_pct_cell()`. `R/export-crosstab.R` holds no inline `* 100` —
-      section 2.3
+- [ ] `grep -rn "\* 100" R/` returns four lines, across two files: two in
+      `R/export-topline.R`, and two in `R/export-utils.R`, one inside
+      `.sata_pct_cell()` and one inside `.fmt_pct()` (`pp <- p * 100`).
+      `R/export-crosstab.R` holds no inline `* 100` — section 2.3.
+      Corrected 2026-11-19: the earlier count of three left out `.fmt_pct()`
 - [ ] `grep -rn "design_variable_selected" R/` returns lines in
       `R/export-utils.R` only — the abort lives in `.reject_design_vars()` and
       nowhere else — and `plans/error-messages.md` holds the class
@@ -2817,8 +3058,10 @@ without reading the spec twice:
 - The separator between two interval bounds is an en-dash, U+2013, with one
   space on each side. The minus sign on a negative bound is a hyphen-minus,
   U+002D — section 3.12.
-- From `feature/house-style`: every sheet hides its gridlines; every row of a
-  table has the height of section 3.21.6; every title row carries the navy
+- From `feature/house-style`: every sheet hides its gridlines; every computed
+  row of section 3.21.6 has the height of its formula, the crosstab heading
+  row and an estimate row with the interval in the cell are 30 points, and no
+  other row stores a height; every title row carries the navy
   fill across its merged range; and a crosstab sheet's freeze pane freezes
   its label columns — section 3.21.
 
@@ -2916,5 +3159,12 @@ the styles alone. It closes gaps 1 to 7, 10, 11, 13 and 20 of
 
 The other gaps of that file are open questions for the user. Gap 22 decides
 whether section 3.21.4, the topline house style, lands in
-`feature/house-style`. Every other question this spec raises is answered
-inside it.
+`feature/house-style`. **Replaced 2026-11-19.** The entry "Spec gaps settled from the decision page" logs the
+user's answers to gaps 8, 9a, 9b, 9c, 12, 14, 15, 17, 18, 19, 21 and 22, and
+to one question beyond the list, extra 1, on row heights. Section 3.21.8
+lists each pick and the section that states it. Three picks change shipped
+code: gap 14 (the glossary text), gap 15 (`.banner_levels_labelled()`) and
+gap 19 (the topline call to `.build_workbook()`). Gap 17 changes the
+Percentages glossary text in shipped code and the cell rule of a PR not yet
+merged. Gap 22 and extra 1 change `feature/house-style`, which is not merged.
+The other picks record shipped behavior. Gap 16 stays open.
