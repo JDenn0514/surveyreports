@@ -2469,3 +2469,36 @@ test_that("export_topline() drops a variable all-NA in every wave of a collectio
   expect_true(all(c("Question one", "Question two") %in% text))
   expect_false("all_na_var" %in% text)
 })
+
+# 18. The Total row -------------------------------------------------------------
+# export_crosstab() no longer writes a `Total` row of `100%` cells. The topline
+# keeps its row until the topline pass (spec 4.2).
+
+test_that("export_topline() still writes its Total row of 100% cells", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    fresh_path(out)
+    d <- cover_design(designs[[nm]])
+    topline_quiet(d, vars = q1, file_name = out)
+    block <- topline_block(out)
+
+    total <- block[block$A %in% "Total", ]
+    expect_identical(nrow(total), 1L, label = paste0(nm, ": one Total row"))
+    expect_identical(total$B, "100%", label = paste0(nm, ": 100%"))
+    # The Total row closes the block: it sits below every response row.
+    values <- as.character(
+      suppressWarnings(
+        surveycore::get_freqs(d, q1),
+        classes = "surveycore_warning_nonprob_srs_fallback"
+      )[[1L]]
+    )
+    expect_true(
+      all(total$row > block$row[block$A %in% values]),
+      label = paste0(nm, ": below the responses")
+    )
+  }
+})

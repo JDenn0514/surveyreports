@@ -316,6 +316,15 @@ export_crosstab <- function(
   current_row <- 1L
   groups_done <- character(0)
 
+  # The width of every data column, in characters (spec 3.16). Each sheet
+  # takes its widths once, after its blocks are written: `sheet_cols` is the
+  # widest block on the sheet, `sheet_battery` says whether a battery block
+  # is on it, and `last_row` is the last row written.
+  data_width <- 12
+  sheet_cols <- 0L
+  sheet_battery <- FALSE
+  last_row <- 1L
+
   for (var in vars_resolved) {
     row_info <- classify_out[classify_out$variable == var, ]
     vtype <- row_info$type
@@ -338,6 +347,8 @@ export_crosstab <- function(
       sheet_name <- .unique_sheet_name(wb, block_vars[[1L]])
       wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
       current_row <- 1L
+      sheet_cols <- 0L
+      sheet_battery <- FALSE
     }
 
     # The column groups of this block, and the counts frame of its
@@ -351,6 +362,14 @@ export_crosstab <- function(
       show_total
     )
     counts <- .block_counts(col_groups, freq_result$group_counts, full_counts)
+
+    # A battery block has two label columns, Item and Response.
+    is_battery <- vtype == "battery"
+    sheet_battery <- sheet_battery || is_battery
+    sheet_cols <- max(
+      sheet_cols,
+      .count_render_cols(col_groups, if (is_battery) 2L else 1L)
+    )
 
     render <- switch(
       vtype,
@@ -373,7 +392,32 @@ export_crosstab <- function(
     )
 
     wb <- result$wb
+    last_row <- result$next_row - 1L
     current_row <- result$next_row + 1L
+
+    if (layout == "per_question") {
+      wb <- .write_sheet_columns(
+        wb,
+        sheet_name,
+        sheet_cols,
+        last_row,
+        sheet_battery,
+        layout,
+        data_width
+      )
+    }
+  }
+
+  if (layout == "stacked") {
+    wb <- .write_sheet_columns(
+      wb,
+      sheet_name,
+      sheet_cols,
+      last_row,
+      sheet_battery,
+      layout,
+      data_width
+    )
   }
 
   openxlsx2::wb_save(wb, file_name)
@@ -817,6 +861,50 @@ export_crosstab <- function(
   )
 }
 
+# -- Sheet columns -----------------------------------------------------------------
+
+# The fixed column widths of one question sheet (spec 3.16). export_crosstab()
+# calls it once per sheet, after the sheet's blocks are written. `n_cols` is
+# the widest block on the sheet and `last_row` the last row written.
+# - Column A, the label column, is 44 characters.
+# - Each data column is `data_width` characters.
+# - On a sheet that holds a battery block, column B is its Response label
+#   column. On the per-question layout it is a label column only, so it is
+#   20. On the stacked layout it is also a data column of every other block,
+#   so it takes the larger of 20 and `data_width`.
+# The widths are never auto-fit, so a label change moves no width.
+#' @keywords internal
+#' @noRd
+.write_sheet_columns <- function(
+  wb,
+  sheet,
+  n_cols,
+  last_row,
+  has_battery,
+  layout,
+  data_width
+) {
+  widths <- rep(data_width, n_cols)
+  widths[[1L]] <- 44
+  if (has_battery) {
+    widths[[2L]] <- if (layout == "stacked") max(20, data_width) else 20
+  }
+  wb <- openxlsx2::wb_set_col_widths(
+    wb,
+    sheet = sheet,
+    cols = seq_len(n_cols),
+    widths = widths
+  )
+  # The label column wraps on every row written. The style is added to each
+  # cell, so a cell keeps its own font.
+  openxlsx2::wb_add_cell_style(
+    wb,
+    sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = seq_len(last_row), cols = 1L),
+    wrap_text = TRUE
+  )
+}
+
 # -- Block preamble and footer -----------------------------------------------------
 
 # The opening sequence of one block, rows 1 to 7 of spec 3.16: the title, the
@@ -825,8 +913,9 @@ export_crosstab <- function(
 # vector of label-column headings; its length is the number of label columns.
 # The title and the base note are merged across the label and data columns.
 # Returns list(wb = , next_row = ), where next_row is the first data row.
-# The variance legend row and the freeze pane of spec 3.16 come in later
-# changes, with the arguments that turn them on.
+# It also sets the heading row's wrap and height, and the sheet's freeze
+# pane. The variance legend row of spec 3.16 comes in a later change, with
+# the argument that turns it on.
 #' @keywords internal
 #' @noRd
 .render_block_preamble <- function(
@@ -850,13 +939,28 @@ export_crosstab <- function(
     row <- row + 1L
   }
 
+  heading_row <- row + 1L
   wb <- .write_crosstab_headers(
     wb,
     sheet,
     row,
-    row + 1L,
+    heading_row,
     col_groups,
     label_cols
+  )
+  # The heading row wraps, and its fixed height of 30 points holds two lines
+  # (spec 3.16). The height is not auto-fit.
+  wb <- openxlsx2::wb_add_cell_style(
+    wb,
+    sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = heading_row, cols = seq_len(n_cols)),
+    wrap_text = TRUE
+  )
+  wb <- openxlsx2::wb_set_row_heights(
+    wb,
+    sheet = sheet,
+    rows = heading_row,
+    heights = 30
   )
   row <- row + 2L
 
@@ -871,6 +975,15 @@ export_crosstab <- function(
     )
     wb <- res$wb
     row <- res$next_row
+  }
+
+  # The freeze pane splits at the first data row, so the title, the headings
+  # and the counts stay in view (spec 3.16). Under "bottom" the counts are
+  # below the data, and no pane is written. A sheet takes one pane, from its
+  # first block: that block starts at row 1 on every sheet, so a later block
+  # on the stacked sheet sets none.
+  if (start_row == 1L && sample_size_display != "bottom") {
+    wb <- openxlsx2::wb_freeze_pane(wb, sheet = sheet, first_active_row = row)
   }
 
   list(wb = wb, next_row = row)
@@ -995,33 +1108,10 @@ export_crosstab <- function(
     }
   }
 
-  # Total row
-  total_row_num <- data_start + length(values)
-  wb <- openxlsx2::wb_add_data(
-    wb,
-    sheet = sheet,
-    x = "Total",
-    start_row = total_row_num,
-    start_col = 1L
-  )
-  current_col <- 2L
-  for (cg in col_groups) {
-    for (level in cg$levels) {
-      wb <- openxlsx2::wb_add_data(
-        wb,
-        sheet = sheet,
-        x = "100%",
-        start_row = total_row_num,
-        start_col = current_col
-      )
-      current_col <- current_col + 1L
-    }
-  }
-
   .render_block_footer(
     wb,
     sheet,
-    total_row_num + 1L,
+    data_start + length(values),
     label_cols,
     counts,
     withheld_lines = withheld_lines,
@@ -1183,6 +1273,19 @@ export_crosstab <- function(
       current_row <- current_row + 1L
     }
   }
+
+  # The Response label cells wrap. The wrap is set on these cells and not on
+  # column B, because on the stacked sheet column B is a data column of every
+  # other block (spec 3.16).
+  wb <- openxlsx2::wb_add_cell_style(
+    wb,
+    sheet = sheet,
+    dims = openxlsx2::wb_dims(
+      rows = seq.int(pre$next_row, current_row - 1L),
+      cols = 2L
+    ),
+    wrap_text = TRUE
+  )
 
   .render_block_footer(
     wb,
