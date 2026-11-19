@@ -1,11 +1,11 @@
 # Implementation plan — export-metadata
 
 **Status:** PLAN_READY
-**Version:** 4.9.0
-**Date:** 2026-11-05
+**Version:** 4.11.0
+**Date:** 2026-11-19
 **Id:** `export-metadata`
-**Source spec:** `plans/spec-export-metadata.md` v0.27.0
-**Source test-spec:** `plans/test-spec-export-metadata.md` v0.22.0
+**Source spec:** `plans/spec-export-metadata.md` v0.28.0
+**Source test-spec:** `plans/test-spec-export-metadata.md` v0.23.0
 **Review applied:** `plans/plan-review-export-metadata.md` Pass 1 — 21 issues, all
 resolved; Pass 2 — issues 22 and 23 resolved, suggestions 24 and 25 open;
 Pass 3 — PASS, suggestions 26 and 27 applied. A post-review spec change, the
@@ -19,16 +19,22 @@ decision the same day (spec 3.11, v0.26.0) replaces the empty-block rule of
 issue 33: an all-NA variable is dropped, with a warning. It changes PRs 1, 12,
 14 and 15. Pass 6, a delta review of that change — issues 37 to 41 applied;
 suggestions 42 to 44 open. The user decided that the plan is ready once these
-issues are applied, with no further review pass
+issues are applied, with no further review pass. A later spec change, the
+house style of spec 3.21 (v0.28.0, decided 2026-11-19), adds PR 19,
+`feature/house-style`, and moves the documentation PR to PR 20. That change
+has had no review pass. In v4.11.0 (2026-11-19), PRs 16 to 20 moved to the
+tickets in `plans/tickets/export-metadata/README.md`, which follow spec
+v0.29.0 and test-spec v0.24.0
 **Standards read:** `.claude/standards/function-documentation.md`
 
 ---
 
 ## Overview
 
-This plan turns the spec into nineteen pull requests. The first five build
+This plan turns the spec into twenty pull requests. The first five build
 shared helpers. The next four land Part A — the metadata integration. The
-following nine rebuild `export_crosstab()` output. The last one writes the
+following nine rebuild `export_crosstab()` output. The next one applies the
+house style of spec 3.21 to both functions. The last one writes the
 documentation prose.
 
 **Every PR depends on the one before it.** The chain is strict, so no two PRs
@@ -40,7 +46,7 @@ Each PR leaves the package green: `devtools::check()` passes, the suite passes,
 and the coverage floor holds.
 
 **Cross-references name a branch, not a number.** The PR numbering has changed
-three times. A reference below names the branch, so the next renumber cannot
+four times. A reference below names the branch, so the next renumber cannot
 break it.
 
 ### Why four helper PRs exist
@@ -108,15 +114,27 @@ stands.** Only the formal arguments come forward.
 - [x] PR 15: `feature/crosstab-sheet-properties` — the `100%` row goes; fixed
       widths, wrapping, row height and a freeze pane.
 - [ ] PR 16: `feature/crosstab-percent-cells` — a percentage cell becomes a
-      string.
+      string. **Moved to tickets:** ticket 03 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 17: `feature/crosstab-variance-strings` — `variance_display`, the
       variance strings, the legend row, and the column width, wrapping and
-      row height that a variance needs.
+      row height that a variance needs. **Moved to tickets:** ticket 04 of
+      `plans/tickets/export-metadata/README.md`.
 - [ ] PR 18: `feature/crosstab-total-and-missing` — the Total column, the
       missing-value rows, the all-NA drop under `na.rm = FALSE`, the glossary
-      and the block row order.
-- [ ] PR 19: `docs/export-metadata` — the documentation prose and
-      `_pkgdown.yml`.
+      and the block row order. **Moved to tickets:** ticket 05 of
+      `plans/tickets/export-metadata/README.md`.
+- [ ] PR 19: `feature/house-style` — house style B1 on every sheet of both
+      workbooks: fonts, fills, rules, stripes, row heights, widths and frozen
+      label columns. **Moved to tickets:** tickets 06 and 07 of
+      `plans/tickets/export-metadata/README.md`.
+- [ ] PR 20: `docs/export-metadata` — the documentation prose and
+      `_pkgdown.yml`. **Moved to tickets:** ticket 08 of
+      `plans/tickets/export-metadata/README.md`.
+
+Tickets 01 and 02 of `plans/tickets/export-metadata/README.md` carry the
+2026-11-19 decisions that change merged code (gaps 14, 17, 19 and 15). This
+plan has no PR for them.
 
 ---
 
@@ -2159,6 +2177,10 @@ XB-13, XN-01, XN-02, XN-03, XN-04, XN-05, XX-01, XX-04, XX-11, XX-12.
 
 ### PR 16: A percentage cell becomes a string
 
+> Kept for history. Superseded by ticket 03,
+> `plans/tickets/export-metadata/03-crosstab-percent-cells.md`. Where this
+> section and spec v0.29.0 differ, the spec wins.
+
 **Branch:** `feature/crosstab-percent-cells`
 **Depends on:** PR 15
 **Commit type:** `feat(export)`
@@ -2259,6 +2281,10 @@ XC-06, XC-07, XC-07a, XC-08.
 ---
 
 ### PR 17: The variance strings and the legend row
+
+> Kept for history. Superseded by ticket 04,
+> `plans/tickets/export-metadata/04-crosstab-variance-strings.md`. Where
+> this section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `feature/crosstab-variance-strings`
 **Depends on:** PR 16
@@ -2422,6 +2448,10 @@ XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10, XB-14.
 ---
 
 ### PR 18: The Total column, missing data, and the block row order
+
+> Kept for history. Superseded by ticket 05,
+> `plans/tickets/export-metadata/05-crosstab-total-and-missing.md`. Where
+> this section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `feature/crosstab-total-and-missing`
 **Depends on:** PR 17
@@ -2595,10 +2625,270 @@ XH-13, XH-14, XX-13, XX-17, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08.
 
 ---
 
-### PR 19: The documentation prose
+### PR 19: The house style
+
+> Kept for history. Superseded by tickets 06 and 07,
+> `plans/tickets/export-metadata/06-house-style-crosstab-and-about.md` and
+> `07-house-style-topline.md`. Where this section and spec v0.29.0 differ,
+> the spec wins.
+
+**Branch:** `feature/house-style`
+**Depends on:** PR 18
+**Commit type:** `feat(export)`
+
+This PR applies house style B1, spec 3.21, to every sheet that either export
+function writes: the crosstab question sheets under both layouts, the
+`"Topline"` sheet and the `"About"` sheet. It changes how a cell looks. It
+changes no cell value, no row, no column, no sheet name and no formal
+argument, so no `man/` file and no snapshot moves.
+
+**It comes after `feature/crosstab-total-and-missing`.** That PR is the last
+one to change the block shape. The house style reads the final shape, so it
+styles each row once. The PRs before it keep the older rules of spec 3.4,
+3.12, 3.14 and 3.16, and their tests. This PR rewrites the tests those rules
+leave wrong (task 55).
+
+**The topline half depends on gap 22, which is open.** B1 settles gaps 10,
+11, 13 and 20 of `plans/mockups/spec-gaps.md`. Gap 22 decides whether the
+house style reaches `export_topline()` in this PR or waits for the topline
+pass. Spec 3.21.4, tasks 46 to 54, and `TY-01` to `TY-10` depend on it. Task 2
+reads the decision before those tasks start. If the topline waits, this PR
+drops them and the topline criteria, and the About sheet of a topline
+workbook still takes the house style through `.write_cover_sheet()`.
+
+**One style definition.** `.build_house_style()`, in `R/export-utils.R`, holds
+every colour, font size, border, fill, alignment, number format and width of
+spec 3.21. `.build_row_height()` holds the height formula.
+`.write_block_style()` applies the style to one block. The crosstab routes,
+the topline routes and `.write_cover_sheet()` each build a layout record for
+a block and call it once. No other file holds a style literal, and spec VIII
+greps for it.
+
+**How `.write_block_style()` works.** It builds one record per cell: font,
+fill, four borders, alignment, wrap, indent and number format. It applies the
+element styles, then the stripe, then the rules in the order of spec 3.21.
+It registers one cell style per distinct record and sets it on its cells with
+`openxlsx2::wb_set_cell_style()`, then sets the row heights. Layered
+`wb_add_font()`, `wb_add_fill()` and `wb_add_border()` calls are not used:
+each sets one group of attributes, and the result depends on their order over
+overlapping ranges. Section 5 of `plans/mockups/build-mockups.R` —
+`style_table()`, `finish_sheet()` and `xf_id()` — is a working example on
+openxlsx2 1.28. Read it for the mechanism, and take no literal from it: every
+value comes from `.build_house_style()`. Its `new_workbook()` shows how to drop
+the theme scheme from the base font.
+
+**Where the calls go.**
+- `.render_block_preamble()` and `.render_block_footer()` record the rows they
+  write in the block's layout record and return it beside `wb` and
+  `next_row`. Each crosstab route adds its response rows, its columns, its
+  column groups and the stripe number of each row, and calls
+  `.write_block_style()` after the footer.
+- `.render_block_preamble()` gains `freeze_cols` (spec 2.2, spec 3.21.3).
+  `export_crosstab()` passes it: on the per-question layout from the block
+  shape, and on the stacked sheet from whether any block on the sheet is a
+  battery. `classify_out` holds both facts.
+- Each topline route builds a layout record and calls `.write_block_style()`.
+  `.render_topline_battery()` tells `.render_topline_single()` that its title
+  is an item heading, and styles the preface as a title block with no table.
+  `export_topline()` sets the topline widths once, after its render loop.
+- `.write_cover_sheet()` builds one layout record per block and sets the
+  widths A 44 and B 90.
+
+**Test helpers.** `tests/testthat/helper-house-style.R` holds the readers that
+the test-spec's house-style section names, and `expected_height()`, written
+from spec 3.21.6 and not from `R/`.
+
+**Tasks** (2–5 minutes each):
+
+1. Cut `feature/house-style` from `develop`.
+2. Read the user's decision on gap 22 before writing any `TY-` test. If the
+   topline takes the house style in this PR, run tasks 46 to 54 as written.
+   If it waits, skip them, drop `TY-01` to `TY-10` and the topline criteria,
+   and record the move in the PR description.
+3. Write `tests/testthat/helper-house-style.R`: a reader that resolves a
+   cell's stored style to a named list, a reader for a row's stored height, a
+   reader for a sheet's pane string, a reader for the rich-text runs of a
+   cell, and `expected_height()`.
+4. Write a test of `expected_height()` against hand counts: 19, 34, 21, 18 and
+   17, and 31 for a cell with an interval line.
+5. Run it. Confirm it passes.
+6. Write the failing tests `XY-01` and, if the topline takes the house style
+   here (task 2), `TY-01`.
+7. Run them. Confirm they fail.
+8. Add `.build_house_style()` to `R/export-utils.R`, with every value of spec
+   3.21. Document it with `@keywords internal` and `@noRd`.
+9. In `.build_workbook()`, set the base font from the style: Calibri 11,
+   black, with no theme scheme. Add `"About"` with `grid_lines = FALSE`.
+10. Pass `grid_lines = FALSE` at every `wb_add_worksheet()` call in
+    `R/export-crosstab.R` and `R/export-topline.R`.
+11. Run the tests from task 6. Confirm `XY-01` and the font and gridline
+    halves of `TY-01` pass.
+12. Add `.build_row_height()` to `R/export-utils.R`, per spec 3.21.6.
+13. Add `.write_block_style()` to `R/export-utils.R`, per spec 3.21.7 and the
+    mechanism above.
+14. Write the failing tests `XY-02` to `XY-07`.
+15. Run them. Confirm they fail.
+16. In `.render_block_preamble()` and `.render_block_footer()`, record the rows
+    each one writes in the block's layout record, and return it.
+17. In `.render_crosstab_single()`, `.render_crosstab_sata()` and
+    `.render_crosstab_battery()`, complete the layout record and call
+    `.write_block_style()` once per block, after the footer.
+18. Remove the style calls from `.write_question_title()`,
+    `.write_base_note()` and `.write_sample_size_rows()`, the wrap from
+    `.write_sheet_columns()`, the wrap and the 30-point height from
+    `.render_block_preamble()`, and the wrap from
+    `.render_crosstab_battery()`. Keep every value and every merge.
+19. Merge the legend row and each withheld line across the block, as the
+    title and the base note already are (spec 3.21.3).
+20. Run the tests from task 14. Confirm they pass.
+21. Write the failing tests `XY-08` and `XY-09`.
+22. Run them. Confirm they fail.
+23. Give each response row its stripe number: by row on the single and SATA
+    routes, by item on the battery route. A variance row takes the number of
+    the estimate row above it.
+24. Run the tests from task 21. Confirm they pass.
+25. Write the failing tests `XY-10` and `XY-11`.
+26. Run them. Confirm they fail.
+27. Build each two-line estimate cell with two `openxlsx2::fmt_txt()` runs,
+    reading the font, sizes and colours from `.build_house_style()`.
+28. Run the tests from task 25. Confirm they pass.
+29. Write the failing tests `XY-12`, `XY-13` and `XY-14`.
+30. Run them. Confirm they fail.
+31. Apply the four rules of spec 3.21.3 in `.write_block_style()`, in order.
+32. Run the tests from task 29. Confirm they pass.
+33. Write the failing tests `XY-15`, `XY-16` and `XY-17`.
+34. Run them. Confirm they fail.
+35. Set every row height of a block in `.write_block_style()` through
+    `.build_row_height()`, over the cells spec 3.21.6 names.
+36. Run the tests from task 33. Confirm they pass.
+37. Write the failing tests `XY-18`, `XY-19` and `XY-20`.
+38. Run them. Confirm they fail.
+39. Add `freeze_cols` to `.render_block_preamble()` and pass it to
+    `openxlsx2::wb_freeze_pane()` as `first_active_col = freeze_cols + 1L`.
+    Pass it from `export_crosstab()`, per sheet.
+40. Run the tests from task 37. Confirm they pass.
+41. Write the test `XY-21`. Run it. Confirm it passes; if it fails, fix the
+    block width the stacked route passes to the layout record.
+42. Write the failing tests `XY-22` and `XY-23`.
+43. Run them. Confirm they fail.
+44. In `.write_cover_sheet()`, build one layout record per block, call
+    `.write_block_style()`, set the widths A 44 and B 90, and remove its
+    `wb_add_font()` calls.
+45. Run the tests from task 42. Confirm they pass.
+46. Write the failing tests `TY-02` to `TY-06`.
+47. Run them. Confirm they fail.
+48. In `.render_topline_single()`, `.render_topline_sata()` and
+    `.render_topline_battery()`, build a layout record and call
+    `.write_block_style()`. Mark each battery item title as an item heading.
+    Remove the topline `wb_add_font()` calls. Change no cell value.
+49. Run the tests from task 46. Confirm they pass.
+50. Write the failing tests `TY-07` to `TY-10`.
+51. Run them. Confirm they fail.
+52. Set the topline widths in `export_topline()`, once, after the render
+    loop: column A 44, every data column 10. Style the collection's wave
+    heading cells and its About wave blocks.
+53. Run the tests from task 50. Confirm they pass.
+54. Run the scope-boundary rows `TP-09` to `TP-12` and `TN-04`. Confirm they
+    still pass: no topline value moved.
+55. Rewrite the blocks of `XB-03`, `XB-09`, `XB-11`, `XB-12` and `XB-13` to the
+    house-style clause of each test-spec row. Delete the block of `XB-10`.
+56. Run them. Confirm they pass.
+57. Run the three greps of spec VIII for the house style. Confirm each
+    returns what it states.
+58. Run `devtools::document()`. Confirm `NAMESPACE` and `man/` are
+    unchanged.
+59. Run `devtools::test()`. Confirm no snapshot moved. A moved snapshot is a
+    defect: the house style changes no message.
+60. Run `covr::package_coverage()` and `covr::zero_coverage()`.
+61. Run `air format .`, in its own commit.
+62. Run `devtools::check()`.
+63. Write `changelog/feature-house-style.md`.
+
+**Acceptance criteria** — observable outcomes before merge:
+
+- [ ] The user's decision on gap 22 was read before any `TY-` test was
+      written, and this PR follows it (spec 3.21.4, spec 3.21.8). The
+      topline criteria below depend on that decision.
+- [ ] The base font is Calibri 11 black with no theme scheme, and every sheet
+      hides its gridlines, in both functions (test-spec XY-01, TY-01;
+      spec 3.21.2).
+- [ ] Each crosstab element — title, notes, spanner, heading, sample-size,
+      label, estimate, interval line, variance row and withheld line — carries
+      the font, fill, alignment, wrap, merge and number format of spec 3.21.3
+      (test-spec XY-02 to XY-07, XY-10, XY-11, XY-14).
+- [ ] The zebra stripe falls on alternate rows, by item in a battery, and the
+      battery item label sits on the item's first row only (test-spec XY-08,
+      XY-09; spec 3.21.3).
+- [ ] The heading rule, the sample-size rule, the block box and the
+      column-group edges sit where spec 3.21.3 puts them, and no other border
+      is written (test-spec XY-06, XY-12, XY-13).
+- [ ] Every row of a block has the height of spec 3.21.6, and no estimate row
+      is 30 points (test-spec XY-15, XY-16, XY-17).
+- [ ] The freeze pane freezes column A, or columns A and B on a battery sheet
+      and on a stacked sheet that holds a battery, and none is written under
+      `"bottom"` (test-spec XY-18, XY-19, XY-20; spec 3.21.3).
+- [ ] Each block on the stacked sheet is styled on its own columns, and the
+      blank row between blocks has no style (test-spec XY-21).
+- [ ] The About sheet's blocks carry the heading style, the stripe and the
+      box, with widths A 44 and B 90 and no merged cell, in both functions and
+      on a collection (test-spec XY-22, XY-23, TY-10; spec 3.21.5).
+- [ ] The topline blocks carry the style of spec 3.21.4: the title band, the
+      heading row, the stripe, the `Total` row rule, the box, the column B
+      edge, the battery item headings, widths A 44 and data 10, and the row
+      heights (test-spec TY-02 to TY-09).
+- [ ] No topline value moved: `TP-09` to `TP-12` and `TN-04` still pass
+      (spec 4.1).
+- [ ] The rewritten `XB-03`, `XB-09`, `XB-11`, `XB-12` and `XB-13` blocks
+      pass, and the `XB-10` block is gone (test-spec XB rows).
+- [ ] Every assertion runs on all four designs from
+      `make_all_designs(seed = 42)`, labelled with the design name, except
+      `TY-09` and `TY-10`, which run on the collection (`testing.md`,
+      cross-design testing).
+- [ ] `grep -rn "1F3864\|C8D4E6\|DDE5F0\|EDF1F8\|7F7F7F\|404040\|595959" R/`
+      returns lines inside `.build_house_style()` only (spec VIII).
+- [ ] `grep -rn "wb_add_font\|wb_add_fill\|wb_add_border\|wb_add_cell_style\|wb_set_row_heights" R/export-topline.R R/export-crosstab.R`
+      returns nothing (spec VIII).
+- [ ] `grep -rn "wb_set_grid_lines" R/` returns nothing, and every
+      `wb_add_worksheet()` call passes `grid_lines = FALSE` (spec VIII).
+- [ ] `.build_house_style()`, `.build_row_height()` and `.write_block_style()`
+      are in `R/export-utils.R`, and `ls("package:surveyreports",
+      all.names = TRUE)` exposes none of them (spec 3.21.7).
+- [ ] `devtools::document()` leaves `NAMESPACE` and `man/` unchanged, and no
+      snapshot moved (spec 5.2).
+- [ ] `devtools::check()`: 0 errors, 0 warnings, at most 2 pre-approved notes
+      (test-spec profile gates).
+- [ ] Coverage: 95 percent floor, 98 percent target; `covr::zero_coverage()`
+      lists no line in a file this PR touched (test-spec profile gates).
+- [ ] `air format --check .` passes (test-spec profile gates).
+- [ ] `changelog/feature-house-style.md` exists (`github-strategy.md`, PR
+      checklist).
+
+**Scenarios owned (33):** the ten `TY-` ids depend on gap 22; if the topline
+waits, this PR owns the 23 `XY-` ids alone. XY-01, XY-02, XY-03, XY-04, XY-05, XY-06, XY-07,
+XY-08, XY-09, XY-10, XY-11, XY-12, XY-13, XY-14, XY-15, XY-16, XY-17, XY-18,
+XY-19, XY-20, XY-21, XY-22, XY-23, TY-01, TY-02, TY-03, TY-04, TY-05, TY-06,
+TY-07, TY-08, TY-09, TY-10.
+
+**Files touched** — the exact write surface:
+
+- `R/export-utils.R` — modified
+- `R/export-crosstab.R` — modified
+- `R/export-topline.R` — modified
+- `tests/testthat/helper-house-style.R` — created
+- `tests/testthat/test-export-crosstab.R` — modified
+- `tests/testthat/test-export-topline.R` — modified
+- `changelog/feature-house-style.md` — created
+
+---
+
+### PR 20: The documentation prose
+
+> Kept for history. Superseded by ticket 08,
+> `plans/tickets/export-metadata/08-documentation-prose.md`. Where this
+> section and spec v0.29.0 differ, the spec wins.
 
 **Branch:** `docs/export-metadata`
-**Depends on:** PR 18
+**Depends on:** PR 19
 **Commit type:** `docs(export)`
 
 Five earlier PRs each edited the `@param` entries of the formal arguments they
@@ -2735,18 +3025,19 @@ across the chain.
 | `tests/testthat/helper-test-data.R` | 1 |
 | `data-raw/` — five scripts, `air` reformat only | 1 |
 | `tests/testthat/test-pool-pvals.R` — `air` reformat only | 1 |
-| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 18 |
-| `R/export-topline.R` | 6, 7, 8, 9, 12, 19 |
-| `R/export-crosstab.R` | 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 |
-| `tests/testthat/test-export-topline.R` | 1, 6, 7, 8, 9, 12, 15 |
-| `tests/testthat/test-export-crosstab.R` | 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18 |
+| `R/export-utils.R` | 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 18, 19 |
+| `R/export-topline.R` | 6, 7, 8, 9, 12, 19, 20 |
+| `R/export-crosstab.R` | 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 |
+| `tests/testthat/helper-house-style.R` | 19 |
+| `tests/testthat/test-export-topline.R` | 1, 6, 7, 8, 9, 12, 15, 19 |
+| `tests/testthat/test-export-crosstab.R` | 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 |
 | `tests/testthat/_snaps/export-topline.md` | 7, 9 |
 | `tests/testthat/_snaps/export-crosstab.md` | 10, 11, 12, 13, 14, 15, 16, 17, 18 |
-| `man/export_crosstab.Rd` | 11, 13, 14, 17, 18, 19 |
-| `man/export_topline.Rd` | 19 |
-| `NAMESPACE` | 11, 13, 14, 17, 18, 19 |
-| `_pkgdown.yml` | 19 |
-| `changelog/{branch-name}.md` | 1 to 19, one file each |
+| `man/export_crosstab.Rd` | 11, 13, 14, 17, 18, 20 |
+| `man/export_topline.Rd` | 20 |
+| `NAMESPACE` | 11, 13, 14, 17, 18, 20 |
+| `_pkgdown.yml` | 20 |
+| `changelog/{branch-name}.md` | 1 to 20, one file each |
 
 `man/export_crosstab.Rd` and `NAMESPACE` appear against the five PRs that
 change a formal argument of `export_crosstab()`, plus `docs/export-metadata`.
@@ -2758,7 +3049,7 @@ unchanged each time, because this work adds no export.
 
 ## Scenario coverage
 
-Each of the 200 scenario ids in `plans/test-spec-export-metadata.md` v0.22.0 is
+Each of the 233 scenario ids in `plans/test-spec-export-metadata.md` v0.23.0 is
 assigned to exactly one PR.
 
 | PR | Branch | Count | Scenario ids |
@@ -2781,16 +3072,19 @@ assigned to exactly one PR.
 | 16 | `feature/crosstab-percent-cells` | 11 | XC-01, XC-02, XC-03, XC-04, XC-05, XC-05a, XC-05b, XC-06, XC-07, XC-07a, XC-08 |
 | 17 | `feature/crosstab-variance-strings` | 16 | XH-15, XH-16, XH-16a, XH-17, XH-18, XH-19, XH-20, XN-09, XN-10, XB-05, XB-06, XB-07, XB-08, XB-09, XB-10, XB-14 |
 | 18 | `feature/crosstab-total-and-missing` | 18 | XH-08, XH-08a, XH-08b, XH-09, XH-09a, XH-11, XH-12, XH-13, XH-14, XX-13, XX-17, XA-05, XA-05a, XR-01, XR-02, XN-06, XN-07, XN-08 |
-| 19 | `docs/export-metadata` | 0 | — |
-| | **Total** | **200** | |
+| 19 | `feature/house-style` | 33 | XY-01 to XY-23, TY-01 to TY-10. The `TY-` ids depend on gap 22 |
+| 20 | `docs/export-metadata` | 0 | — |
+| | **Total** | **233** | |
 
 **Check by family.** XC 11, XS 10, XW 13, XH 24, XD 1, XR 2, XB 14, XA 14,
-XM 17, XE 16, XV 15, XX 16, XN 10 — 163 for `export_crosstab()`. TP 14,
-TC 10, TE 5, TW 4, TN 4 — 37 for `export_topline()`. 163 plus 37 is 200. The id
-`XX-05` is retired in the test-spec and is not counted.
+XM 17, XE 16, XV 15, XX 16, XN 10, XY 23 — 186 for `export_crosstab()`. TP 14,
+TC 10, TE 5, TW 4, TN 4, TY 10 — 47 for `export_topline()`. 186 plus 47 is
+233. The id `XX-05` is retired in the test-spec and is not counted. `XB-10`
+stays with `feature/crosstab-variance-strings`, although
+`feature/house-style` deletes its block.
 
-**Six PRs own no scenario.** PRs 1 to 5 and PR 19. PR 1 changes a fixture and a
-manifest, PRs 2 to 5 add helpers that no exported function calls yet, and PR 19
+**Six PRs own no scenario.** PRs 1 to 5 and PR 20. PR 1 changes a fixture and a
+manifest, PRs 2 to 5 add helpers that no exported function calls yet, and PR 20
 changes documentation prose alone. Each is verified by the profile gates, by
 the direct helper tests the coverage floor forces, and by the source-tree
 checks of spec VIII.
@@ -2826,12 +3120,20 @@ section instead, because the test-spec has no row for it.
 | The banner label checks run on the surviving columns, after the role guard | `feature/crosstab-guards` precedes `feature/crosstab-banner-headings` |
 | Each formal-argument change carries its own `devtools::document()` run | `feature/crosstab-min-eff-n`, `feature/crosstab-withheld-notices`, `feature/crosstab-label-cols-and-sizes`, `feature/crosstab-variance-strings`, `feature/crosstab-total-and-missing` |
 | The final argument order is pinned once, by the last PR to touch the signature | `feature/crosstab-total-and-missing`, task 49 |
+| The house style lands after the last change to the block shape, so it styles the final rows once | `feature/crosstab-total-and-missing` precedes `feature/house-style` |
+| The decision on gap 22 is read before any topline house-style test is written | `feature/house-style`, task 2 |
 
 ---
 
 ## Notes for the builder and the tester
 
-**Four test edits cross a PR boundary.**
+**Five test edits cross a PR boundary.**
+
+- `feature/house-style` rewrites the blocks of `XB-03`, `XB-09`, `XB-11`,
+  `XB-12` and `XB-13`, and deletes the block of `XB-10`, at its task 55.
+  `feature/crosstab-sheet-properties` and `feature/crosstab-variance-strings`
+  wrote them under the older rules of spec 3.12 and 3.16, which hold until the
+  house style lands. Each test-spec row states what holds after it.
 
 - `feature/crosstab-min-eff-n` introduces `min_eff_n` with a default of 100. On
   a 200-row design that floor withholds most subgroups, so two blocks written

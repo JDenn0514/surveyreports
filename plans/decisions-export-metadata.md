@@ -1700,3 +1700,176 @@ REQUIRED issues of this pass are fixed, with no further review pass.
 
 The spec and the test-spec stay at `SPEC_READY`. The plan is v4.9.0 at
 `PLAN_READY`, with no further review pass, by the user's decision.
+
+## [2026-11-19] — House style B1
+
+### Context
+
+The spec fixed what each workbook row holds, and said little about how it
+looks. Bold on the title, italic on the notes and the sample-size rows, fixed
+widths, two 30-point heights and a freeze pane were the whole of it. A mockup
+pass, `plans/mockups/build-mockups.R`, built the workbooks from `ns_wave1`
+and found 22 gaps, listed in `plans/mockups/spec-gaps.md`. Gaps 1 to 7 are
+styling.
+
+The script then wrote the same content in several looks, in
+`plans/mockups/variants/`:
+
+- A, clean rules: no fills, horizontal rules only.
+- B, banded header: a navy band over the spanner and heading rows, zebra
+  stripes, a grey box around each block.
+- C, full grid: a border on every cell, grey fills, a tinted Total column.
+- D, report accent: a navy title bar, tints per banner group, a rule at the
+  start of each column group.
+
+The user's notes on the first round asked for:
+
+- shading for the rows, to follow a row across the table
+- a rule between column groups
+- the navy band on the question text only, not on the headings
+- the interval on its own line in the estimate cell
+- frozen label columns and frozen heading rows
+
+B1, B2 and B3 revise B with those notes. They share the navy title band, the
+stripes, the two-line interval cell and the frozen label columns. They differ
+in how the column groups are set apart: B1 draws a medium navy rule at the
+left edge of each group, B2 adds tinted spanners, and B3 boxes each group and
+the Total column. The user opened the B1 files in desktop Excel and confirmed
+that the freeze panes and the two-line interval cells show.
+
+### Questions & Decisions
+
+**Q: Which look do both workbooks take?**
+- Options considered: A, B, C, D, B1, B2, B3.
+- **Decision:** B1, chosen by the user.
+- **What it is:** a navy title bar with white bold text, merged across the
+  block. Spanner and heading rows in navy bold text on light blue-grey fills,
+  with a medium navy rule under the heading row. Zebra stripes on the response
+  rows. A medium navy rule at the left edge of each column group. The interval
+  on a second line of the estimate cell, smaller and grey. Right-aligned data
+  cells and centered data headings. Frozen panes down to the first data row,
+  plus column A on single-response and SATA sheets and columns A and B on
+  battery sheets. A wide, wrapped column B on the About sheet.
+- **Reach:** `export_crosstab()` under both layouts, `export_topline()`, and
+  the About sheet of both. No argument controls it.
+- **Effect:** spec 3.21 holds the style tables, taken from the B1 table of
+  `plans/mockups/variants/README.md` and from section 6 of the script. One
+  definition, `.build_house_style()`, in `R/export-utils.R`, serves both
+  functions.
+
+**Q: What does it settle?**
+- **Decision:** gaps 1 to 7 of `spec-gaps.md`: right-aligned data cells and
+  centered data headings; About column B at 90 with wrap on; a bold, centered,
+  wrapped spanner at least two lines high; the fills and rules of the tables;
+  a 9-point `#595959` interval line; the battery item label on the item's
+  first row only; and the sample-size formats `#,##0` and `#,##0.0`.
+- The user chose B1 as a whole, so B1's values also settle gaps 10, 11, 13
+  and 20: the note rows merged and wrapped, the title and note rows wrapped,
+  the withheld-line style, and the base font, Calibri 11.
+- Gap 22 stays open: whether the house style reaches `export_topline()` in
+  `feature/house-style` or waits for the topline pass. Spec 3.21.4 and the
+  `TY-` rows depend on it. The other gaps are not styling, and the user
+  decides them separately.
+
+**Q: Where does it land?**
+- **Decision:** a new PR, `feature/house-style`, after
+  `feature/crosstab-total-and-missing` and before `docs/export-metadata`. It
+  styles the final block shape, so it comes after the last PR that changes the
+  shape. The PRs before it keep building and testing the older rules.
+
+### What it replaces
+
+- Spec 3.4: "no fill, no border, no second colour" on the sample-size rows.
+  The rows keep italic at one point smaller, and gain the note grey, the
+  number formats and, under `"top"`, a rule under the last row.
+- Spec 3.12: the 30-point estimate row and the wrap only under `"cell"`. The
+  interval line is now 9 points and `#595959`.
+- Spec 3.14: the About styling row. Column B is 90, not 12.
+- Spec 3.16: the wrapping row, both 30-point height rows, and the freeze pane
+  on rows only. Every row height now comes from one formula, spec 3.21.6, and
+  the pane freezes the label columns too.
+- Spec 1.3, 2.1 and 4.1: "no presentation change" to `export_topline()`, for
+  the styles alone. Its cell values, rows and columns do not change.
+
+### Changes
+
+- Spec v0.28.0: new section 3.21. Sections 1.2, 1.3, 2.1, 2.2, 3.4, 3.12,
+  3.14, 3.16, 4.1, 4.2, 5.2, VIII, 8.1 and XI name the replacement.
+- Test-spec v0.23.0: new `XY-` and `TY-` rows. `XB-03`, `XB-04`, `XB-09`,
+  `XB-10`, `XB-11`, `XB-12` and `XB-13` state what holds from
+  `feature/house-style`.
+- Plan v4.10.0: new PR 19, `feature/house-style`. The documentation PR becomes
+  PR 20.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. The plan is v4.10.0. The new
+PR has had no review pass.
+
+## [2026-11-19] — Spec gaps settled from the decision page
+
+### Context
+
+`plans/mockups/spec-gaps.md` lists 22 gaps. House style B1 closed gaps 1 to
+7, 10, 11, 13 and 20, in the entry above. The rest went to the user as 13
+questions on a decision page: gaps 8, 9 (in three parts, 9a to 9c), 12, 14,
+15, 17, 18, 19, 21 and 22, and one question beyond the list, extra 1, on row
+heights. Each question gave two or three options with an example and the
+effects. The user picked one option per question and left no notes. Gap 16
+was not on the page and stays open.
+
+### Questions & Decisions
+
+| Id | Question | Pick | What changed |
+|---|---|---|---|
+| gap-17 | A dash or `0%` for a category nobody in a column chose | a, test the whole column, in every block | `has_rows` reads every row of the variable in the banner column. `0%` when the column has answers and nobody chose the category, `-` when nobody answered or it was never asked. A SATA item nobody chose now reads `0%`. Spec 2.2, 3.3, 3.12, 3.15, 3.19, 4.2; `XC-06`, new `XC-06a`, `XC-07a`, `XA-05` |
+| gap-15 | The order of crossed columns on a value-labelled banner | a, code order in both groups | `.banner_levels_labelled()` returns a factor in code order for a labelled column. Spec 2.2, 3.8; new `XH-05a` |
+| gap-8 | The wording of a withheld line | a, the long form with the minimum, as shipped | Spec 3.14 states the sentence. `XW-08` pins it |
+| gap-14 | "Listed above" when no minimum is listed | a, put the number in the entry | `Why a column is missing` reads "The minimum for this workbook is an effective sample size of {min_eff_n}." Spec 2.2, 3.15; `XA-05`, new `XA-05b`, `XW-10`, `XW-11` |
+| gap-9a | The names of the survey keys | a, short labels, as shipped | Spec 3.14 holds the label table. `XA-03` names the labels |
+| gap-9b | A heading for the survey block | a, no heading, as shipped | Spec 3.14 states the rule. `XA-04` asserts it |
+| gap-9c | Where the withheld lines go on the About sheet | a, `Not shown` on every line, as shipped | Spec 3.14 states the block layout. `XW-07`, `XA-06` assert it |
+| gap-18 | A glossary entry for standard errors | a, no entry, as shipped | Spec 3.15 drops the paragraph that promised an entry. No test change |
+| gap-21 | Marks around the cell forms in the Percentages entry | a, bare, as shipped | Spec 3.15 drops the backticks from the text. `XA-05` asserts the bare forms |
+| gap-19 | The topline `Confidence intervals` entry with no interval shown | a, leave it out until the topline shows intervals | `export_topline()` stops passing `variance` to `.build_workbook()`. A topline glossary carries two entries. Spec 2.1, 2.2, 2.3, 3.15, 4.1, 4.2, 7.2; `TP-06a` flips |
+| gap-22 | Whether the B1 style reaches the topline sheet now | b, the full B1 style now | The topline house style lands in `feature/house-style`. Every "depends on gap 22" condition is removed. Spec 1.3, 3.21.2, 3.21.4, 3.21.8, 4.1, 5.2, XI; the `TY-` rows are firm, new `TY-11` |
+| extra-1 | Row heights that follow the text | b, size only the merged rows | Computed heights for the title, note, legend, spanner, withheld and topline item heading rows. The crosstab heading row and an estimate row with the interval in the cell stay at 30. No other row stores a height. Spec 1.2, 3.12, 3.16, 3.21.6, 3.21.7, 8.1; `XB-03`, `XB-09`, `XB-10`, `XY-15` to `XY-17`, `XY-23`, new `XY-24`, `TY-08`, `TY-09` |
+| gap-12 | Blank rows between blocks and before withheld lines | a, one blank row, none before the lines, as shipped | Spec 3.16 states the rule. No test change: `XR-01` and `XX-11` already assert it |
+
+**One reading is the assistant's, pending the user's check.** Under gap 17 a
+cell can read `0%` while its own `get_freqs()` row is absent or has `n = 0`.
+No option said what variance such a cell carries. Spec 3.12 now says it
+carries none: `.fmt_variance()` returns an empty string, and the cell reads
+`0%` alone, as a `-` cell does.
+
+### What it replaces
+
+- Spec 3.3: `has_rows` over the cell's own rows, and "a SATA item never asked
+  renders `-`, the same as an item nobody chose".
+- Spec 3.15: "The minimum for this workbook is listed above", the dash
+  sentence "the answer was not chosen in that column, or was never offered
+  there", the backticks around the cell forms, and the promised `"se"` entry.
+- Spec 2.3 and 4.1: "`export_topline()` passes its own `variance` through".
+- Spec 3.21.6 of v0.28.0: "every row of a table gets a set height". The
+  crosstab heights 34, 31, 19, 18 and 17 on unmerged rows, and every topline
+  body and About row height, are withdrawn.
+
+### Changes
+
+- Spec v0.29.0: sections 1.2, 1.3, 2.1, 2.2, 2.3, 3.3, 3.8, 3.12, 3.14, 3.15,
+  3.16, 3.19, 3.21.2, 3.21.4, 3.21.6, 3.21.7, 3.21.8, 4.1, 4.2, 5.2, 7.2, 8.1
+  and XI.
+- Test-spec v0.24.0: new `XC-06a`, `XH-05a`, `XA-05b`, `XY-24` and `TY-11`.
+  Changed `XC-06`, `XC-07a`, `XW-07`, `XW-08`, `XW-10`, `XW-11`, `XB-03`,
+  `XB-09`, `XB-10`, `XY-15`, `XY-16`, `XY-17`, `XY-23`, `XA-03`, `XA-04`,
+  `XA-05`, `XA-06`, `TP-06a`, `TY-08` and `TY-09`.
+- `plans/mockups/spec-gaps.md`: a status line on every gap.
+- The implementation plan is not edited here. The remaining work moves to
+  tickets.
+
+### Outcome
+
+The spec and the test-spec stay at `SPEC_READY`. Three picks change merged
+code: gap 14, gap 15 and gap 19. Gap 17 changes the merged glossary text and
+the cell rule of the string-cell PR, which is not merged. Gap 22 and extra 1
+change `feature/house-style`, which is not merged.
