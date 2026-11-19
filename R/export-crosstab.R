@@ -36,10 +36,19 @@
 #'   standard errors or confidence intervals are shown. Default `NULL`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
 #'   intervals when `variance = "ci"`. Default `0.95`.
-#' @param show_n Logical. Whether to include an unweighted count row.
-#'   Default `TRUE`.
-#' @param show_eff_n Logical. Whether to display the effective N in column
-#'   headers. Default `FALSE`.
+#' @param sample_size_display One of `"top"` (default), `"bottom"`, or
+#'   `"none"`. Where each table writes its two sample-size rows,
+#'   `Unweighted sample size` and `Effective sample size`. `"top"` writes
+#'   them directly under the heading row. `"bottom"` writes them under the
+#'   last estimate row. `"none"` writes neither row. Each row has one cell
+#'   per column: the unweighted count, or the effective sample size at one
+#'   decimal, of the subgroup or of the full sample. The counts do not depend
+#'   on the tabulated variable, so a variable with missing answers shows
+#'   response rows that total less than the count above them.
+#' @param show_ess Logical, `TRUE` (default) or `FALSE`. Whether the
+#'   `Effective sample size` row is written. `FALSE` keeps the
+#'   `Unweighted sample size` row. It has no effect when
+#'   `sample_size_display = "none"`.
 #' @param decimals Positive integer. Number of decimal places for displayed
 #'   percentages. Default `1L`.
 #' @param show_total Logical. Whether to render a `Total` column (the
@@ -84,8 +93,8 @@ export_crosstab <- function(
   min_eff_n = 100,
   variance = NULL,
   conf_level = 0.95,
-  show_n = TRUE,
-  show_eff_n = FALSE,
+  sample_size_display = c("top", "bottom", "none"),
+  show_ess = TRUE,
   decimals = 1L,
   show_total = TRUE,
   withheld_note = c("once", "every", "none"),
@@ -207,6 +216,7 @@ export_crosstab <- function(
 
   layout <- match.arg(layout)
   withheld_note <- match.arg(withheld_note)
+  sample_size_display <- match.arg(sample_size_display)
 
   # The heading of each surviving banner column: its variable label, or its
   # name when no label is set (spec 3.8). A column that falls back is named
@@ -241,7 +251,6 @@ export_crosstab <- function(
     interactions = interactions,
     variance = variance,
     conf_level = conf_level,
-    show_eff_n = show_eff_n,
     min_eff_n = min_eff_n,
     emit_label_warning = FALSE
   )
@@ -263,7 +272,8 @@ export_crosstab <- function(
   # The full-sample test reuses .build_withheld(), the one owner of the floor
   # comparison, on the full sample's own counts. It does not read the
   # subgroup frame, and it removes nothing (spec 3.5).
-  full_sample <- .build_withheld(.resolve_eff_n(design), min_eff_n, "")
+  full_counts <- .resolve_eff_n(design)
+  full_sample <- .build_withheld(full_counts, min_eff_n, "")
   .emit_withholding_warnings(
     freq_result$withheld,
     freq_result$emptied_groups,
@@ -293,168 +303,77 @@ export_crosstab <- function(
     character(0)
   }
 
-  if (layout == "per_question") {
-    groups_done <- character(0)
-    for (var in vars_resolved) {
-      row_info <- classify_out[classify_out$variable == var, ]
-      vtype <- row_info$type
-      group_id <- row_info$group
+  # Every block takes the same arguments, so one call serves the three
+  # routes. On the per-question layout each block gets its own sheet. Its
+  # name goes through .unique_sheet_name() and is assigned back before the
+  # sheet is added, so a variable named "About" cannot overwrite the cover
+  # sheet (spec 3.14). On the stacked layout every block goes on one
+  # "Crosstab" sheet, and the row cursor runs through them.
+  sheet_name <- "Crosstab"
+  if (layout == "stacked") {
+    wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
+  }
+  current_row <- 1L
+  groups_done <- character(0)
 
-      if (vtype != "single" && as.character(group_id) %in% groups_done) {
-        next
-      }
+  for (var in vars_resolved) {
+    row_info <- classify_out[classify_out$variable == var, ]
+    vtype <- row_info$type
+    group_id <- row_info$group
 
-      # Each per-question sheet name goes through .unique_sheet_name() and is
-      # assigned back before the sheet is added and rendered into, so a
-      # variable named "About" cannot overwrite the cover sheet (spec 3.14).
-      if (vtype == "single") {
-        sheet_name <- .unique_sheet_name(wb, var)
-        var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
-        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
-        result <- .render_crosstab_single(
-          wb,
-          sheet_name,
-          var_frame,
-          1L,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      } else if (vtype == "sata") {
-        group_vars <- classify_out$variable[classify_out$group == group_id]
-        sheet_name <- .unique_sheet_name(wb, group_vars[[1L]])
-        var_frame <- freq_result$frame[
-          freq_result$frame$variable %in% group_vars,
-        ]
-        groups_done <- c(groups_done, as.character(group_id))
-        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
-        result <- .render_crosstab_sata(
-          wb,
-          sheet_name,
-          var_frame,
-          1L,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      } else {
-        group_vars <- classify_out$variable[classify_out$group == group_id]
-        sheet_name <- .unique_sheet_name(wb, group_vars[[1L]])
-        var_frame <- freq_result$frame[
-          freq_result$frame$variable %in% group_vars,
-        ]
-        groups_done <- c(groups_done, as.character(group_id))
-        wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
-        result <- .render_crosstab_battery(
-          wb,
-          sheet_name,
-          var_frame,
-          1L,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      }
-
-      wb <- result$wb
+    if (vtype != "single" && as.character(group_id) %in% groups_done) {
+      next
     }
-  } else {
-    # stacked
-    wb <- openxlsx2::wb_add_worksheet(wb, "Crosstab")
-    current_row <- 1L
-    groups_done <- character(0)
 
-    for (var in vars_resolved) {
-      row_info <- classify_out[classify_out$variable == var, ]
-      vtype <- row_info$type
-      group_id <- row_info$group
-
-      if (vtype != "single" && as.character(group_id) %in% groups_done) {
-        next
-      }
-
-      if (vtype == "single") {
-        var_frame <- freq_result$frame[freq_result$frame$variable == var, ]
-        result <- .render_crosstab_single(
-          wb,
-          "Crosstab",
-          var_frame,
-          current_row,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      } else if (vtype == "sata") {
-        group_vars <- classify_out$variable[classify_out$group == group_id]
-        var_frame <- freq_result$frame[
-          freq_result$frame$variable %in% group_vars,
-        ]
-        groups_done <- c(groups_done, as.character(group_id))
-        result <- .render_crosstab_sata(
-          wb,
-          "Crosstab",
-          var_frame,
-          current_row,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      } else {
-        group_vars <- classify_out$variable[classify_out$group == group_id]
-        var_frame <- freq_result$frame[
-          freq_result$frame$variable %in% group_vars,
-        ]
-        groups_done <- c(groups_done, as.character(group_id))
-        result <- .render_crosstab_battery(
-          wb,
-          "Crosstab",
-          var_frame,
-          current_row,
-          show_n,
-          show_eff_n,
-          decimals,
-          withheld_lines,
-          banner_resolved,
-          interactions,
-          banner_headings,
-          show_total,
-          resolved_notes
-        )
-      }
-
-      wb <- result$wb
-      current_row <- result$next_row + 1L
+    block_vars <- var
+    if (vtype != "single") {
+      block_vars <- classify_out$variable[classify_out$group == group_id]
+      groups_done <- c(groups_done, as.character(group_id))
     }
+    var_frame <- freq_result$frame[
+      freq_result$frame$variable %in% block_vars,
+    ]
+
+    if (layout == "per_question") {
+      sheet_name <- .unique_sheet_name(wb, block_vars[[1L]])
+      wb <- openxlsx2::wb_add_worksheet(wb, sheet_name)
+      current_row <- 1L
+    }
+
+    # The column groups of this block, and the counts frame of its
+    # sample-size rows: one row per rendered data column, in write order
+    # (spec 3.4).
+    col_groups <- .build_col_groups(
+      var_frame,
+      banner_resolved,
+      interactions,
+      banner_headings,
+      show_total
+    )
+    counts <- .block_counts(col_groups, freq_result$group_counts, full_counts)
+
+    render <- switch(
+      vtype,
+      single = .render_crosstab_single,
+      sata = .render_crosstab_sata,
+      .render_crosstab_battery
+    )
+    result <- render(
+      wb,
+      sheet_name,
+      var_frame,
+      current_row,
+      col_groups,
+      counts,
+      decimals,
+      withheld_lines,
+      resolved_notes,
+      sample_size_display = sample_size_display,
+      show_ess = show_ess
+    )
+
+    wb <- result$wb
+    current_row <- result$next_row + 1L
   }
 
   openxlsx2::wb_save(wb, file_name)
@@ -713,14 +632,16 @@ export_crosstab <- function(
 # The column groups of one block. A group's `subgroup_var` is the key into
 # the frame, built from column names. Its `spanner` is the display text, built
 # from banner_headings, a character vector of headings named by banner column
-# (spec 3.8): `Gender`, and `Gender x Region` for an interaction.
+# (spec 3.8): `Gender`, and `Gender x Region` for an interaction. When
+# `show_total` is TRUE, the Total group comes first.
 #' @keywords internal
 #' @noRd
 .build_col_groups <- function(
   frame,
   banner_resolved,
   interactions,
-  banner_headings
+  banner_headings,
+  show_total = TRUE
 ) {
   col_groups <- list()
 
@@ -763,13 +684,18 @@ export_crosstab <- function(
     }
   }
 
+  if (show_total) {
+    col_groups <- c(list(.total_col_group()), col_groups)
+  }
   col_groups
 }
 
+# The width of one block: its label columns plus one column per level.
 #' @keywords internal
 #' @noRd
-.count_render_cols <- function(col_groups) {
-  1L + sum(vapply(col_groups, function(cg) length(cg$levels), integer(1L)))
+.count_render_cols <- function(col_groups, n_labels = 1L) {
+  n_labels +
+    sum(vapply(col_groups, function(cg) length(cg$levels), integer(1L)))
 }
 
 #' @keywords internal
@@ -798,6 +724,11 @@ export_crosstab <- function(
   wb
 }
 
+# The spanner row and the heading row of one block. `label_cols` is the
+# character vector of label-column headings: "Response", "Item", or "Item"
+# then "Response" for a battery. The headings go in columns 1 to
+# length(label_cols), and the banner spanners start in the next column
+# (spec 2.3).
 #' @keywords internal
 #' @noRd
 .write_crosstab_headers <- function(
@@ -806,17 +737,19 @@ export_crosstab <- function(
   spanner_row,
   header_row,
   col_groups,
-  label_col1
+  label_cols
 ) {
-  wb <- openxlsx2::wb_add_data(
-    wb,
-    sheet = sheet,
-    x = label_col1,
-    start_row = header_row,
-    start_col = 1L
-  )
+  for (k in seq_along(label_cols)) {
+    wb <- openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = label_cols[[k]],
+      start_row = header_row,
+      start_col = k
+    )
+  }
 
-  current_col <- 2L
+  current_col <- length(label_cols) + 1L
   for (cg in col_groups) {
     span_start <- current_col
     span_end <- span_start + length(cg$levels) - 1L
@@ -854,8 +787,146 @@ export_crosstab <- function(
   wb
 }
 
+# -- Sample-size counts ------------------------------------------------------------
+
+# The counts frame of one block (spec 3.4): level, n and n_eff, one row per
+# rendered data column, in the order of `col_groups`. The Total column is a
+# row whose level is its heading, with the full sample's counts. Every other
+# level takes its row from the .resolve_eff_n() frame of its column group,
+# keyed by the group's subgroup_var. Withheld levels are absent from
+# `col_groups`, so they are absent here. A block with no column group gives a
+# zero-row frame.
+#' @keywords internal
+#' @noRd
+.block_counts <- function(col_groups, group_counts, full_counts) {
+  rows <- lapply(col_groups, function(cg) {
+    if (identical(cg$type, "total_col")) {
+      return(tibble::tibble(
+        level = cg$levels,
+        n = full_counts$n[[1L]],
+        n_eff = full_counts$n_eff[[1L]]
+      ))
+    }
+    tbl <- group_counts[[cg$subgroup_var]]
+    idx <- match(cg$levels, tbl$level)
+    tibble::tibble(level = cg$levels, n = tbl$n[idx], n_eff = tbl$n_eff[idx])
+  })
+  dplyr::bind_rows(
+    tibble::tibble(level = character(0), n = integer(0), n_eff = double(0)),
+    rows
+  )
+}
+
+# -- Block preamble and footer -----------------------------------------------------
+
+# The opening sequence of one block, rows 1 to 7 of spec 3.16: the title, the
+# base note when one resolves, the spanner row, the heading row, and the two
+# sample-size rows when sample_size_display is "top". `label_cols` is the
+# vector of label-column headings; its length is the number of label columns.
+# The title and the base note are merged across the label and data columns.
+# Returns list(wb = , next_row = ), where next_row is the first data row.
+# The variance legend row and the freeze pane of spec 3.16 come in later
+# changes, with the arguments that turn them on.
+#' @keywords internal
+#' @noRd
+.render_block_preamble <- function(
+  wb,
+  sheet,
+  start_row,
+  question_text,
+  base_note,
+  col_groups,
+  label_cols,
+  counts,
+  sample_size_display,
+  show_ess
+) {
+  n_cols <- .count_render_cols(col_groups, length(label_cols))
+  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
+  row <- start_row + 1L
+
+  if (!is.null(base_note)) {
+    wb <- .write_base_note(wb, sheet, base_note, row, n_cols)
+    row <- row + 1L
+  }
+
+  wb <- .write_crosstab_headers(
+    wb,
+    sheet,
+    row,
+    row + 1L,
+    col_groups,
+    label_cols
+  )
+  row <- row + 2L
+
+  if (sample_size_display == "top") {
+    res <- .write_sample_size_rows(
+      wb,
+      sheet,
+      row,
+      length(label_cols),
+      counts,
+      show_ess
+    )
+    wb <- res$wb
+    row <- res$next_row
+  }
+
+  list(wb = wb, next_row = row)
+}
+
+# The closing sequence of one block (spec 3.16): the two sample-size rows when
+# sample_size_display is "bottom", then the withheld lines, one per row in
+# column A. The caller passes character(0) as `withheld_lines` unless
+# withheld_note is "every", and then no line is written. Returns
+# list(wb = , next_row = ).
+#' @keywords internal
+#' @noRd
+.render_block_footer <- function(
+  wb,
+  sheet,
+  start_row,
+  label_cols,
+  counts,
+  sample_size_display,
+  show_ess,
+  withheld_lines
+) {
+  row <- start_row
+  if (sample_size_display == "bottom") {
+    res <- .write_sample_size_rows(
+      wb,
+      sheet,
+      row,
+      length(label_cols),
+      counts,
+      show_ess
+    )
+    wb <- res$wb
+    row <- res$next_row
+  }
+
+  for (line in withheld_lines) {
+    wb <- openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = line,
+      start_row = row,
+      start_col = 1L
+    )
+    row <- row + 1L
+  }
+
+  list(wb = wb, next_row = row)
+}
+
 # -- Render helpers ---------------------------------------------------------------
 
+# The three routes share one signature. Each writes its preamble, its data
+# rows, then its footer. `...` carries the two sample-size arguments from
+# export_crosstab() to .render_block_preamble() and .render_block_footer()
+# unread, so the branch on them lives in those two helpers alone (spec 3.16).
 #' @keywords internal
 #' @noRd
 .render_crosstab_single <- function(
@@ -863,73 +934,33 @@ export_crosstab <- function(
   sheet,
   frame,
   start_row,
-  show_n,
-  show_eff_n,
+  col_groups,
+  counts,
   decimals,
   withheld_lines,
-  banner_resolved,
-  interactions,
-  banner_headings,
-  show_total = TRUE,
-  base_notes = NULL
+  base_notes = NULL,
+  ...
 ) {
-  question_text <- frame$question_text[[1L]]
+  label_cols <- "Response"
+  pre <- .render_block_preamble(
+    wb,
+    sheet,
+    start_row,
+    frame$question_text[[1L]],
+    .base_note_for(frame, base_notes),
+    col_groups,
+    label_cols,
+    counts,
+    ...
+  )
+  wb <- pre$wb
 
-  # Get value order from total rows
+  # Value order from the total rows
   total_rows <- frame[frame$subgroup_type == "total", ]
   values <- unique(total_rows$value)
 
-  col_groups <- .build_col_groups(
-    frame,
-    banner_resolved,
-    interactions,
-    banner_headings
-  )
-  if (show_total) {
-    col_groups <- c(list(.total_col_group()), col_groups)
-  }
-
-  # n_cols includes an extra column when show_n = TRUE
-  n_pct_cols <- .count_render_cols(col_groups)
-  n_cols <- n_pct_cols + if (show_n) 1L else 0L
-
-  # Row 1: question text merged across all columns (bold)
-  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
-
-  # Optional italic base-note row directly under the title
-  base_note <- .base_note_for(frame, base_notes)
-  note_shift <- if (is.null(base_note)) 0L else 1L
-  if (note_shift == 1L) {
-    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
-  }
-
-  spanner_row <- start_row + note_shift + 1L
-  header_row <- start_row + note_shift + 2L
-
-  # Spanner row + column headers
-  wb <- .write_crosstab_headers(
-    wb,
-    sheet,
-    spanner_row,
-    header_row,
-    col_groups,
-    "Response"
-  )
-
-  # Write "N" column header when show_n = TRUE
-  n_col <- n_pct_cols + 1L
-  if (show_n) {
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      sheet = sheet,
-      x = "N",
-      start_row = header_row,
-      start_col = n_col
-    )
-  }
-
   # Data rows: one per response value
-  data_start <- header_row + 1L
+  data_start <- pre$next_row
   for (j in seq_along(values)) {
     val <- values[[j]]
     row_num <- data_start + j - 1L
@@ -962,22 +993,6 @@ export_crosstab <- function(
         current_col <- current_col + 1L
       }
     }
-
-    # Write total n for this row when show_n = TRUE
-    if (show_n) {
-      n_val <- if (nrow(total_rows[total_rows$value == val, ]) > 0L) {
-        total_rows$n[total_rows$value == val][[1L]]
-      } else {
-        NA_integer_
-      }
-      wb <- openxlsx2::wb_add_data(
-        wb,
-        sheet = sheet,
-        x = n_val,
-        start_row = row_num,
-        start_col = n_col
-      )
-    }
   }
 
   # Total row
@@ -1003,7 +1018,15 @@ export_crosstab <- function(
     }
   }
 
-  .write_withheld_lines(wb, sheet, withheld_lines, total_row_num + 1L)
+  .render_block_footer(
+    wb,
+    sheet,
+    total_row_num + 1L,
+    label_cols,
+    counts,
+    withheld_lines = withheld_lines,
+    ...
+  )
 }
 
 #' @keywords internal
@@ -1013,70 +1036,31 @@ export_crosstab <- function(
   sheet,
   frame,
   start_row,
-  show_n,
-  show_eff_n,
+  col_groups,
+  counts,
   decimals,
   withheld_lines,
-  banner_resolved,
-  interactions,
-  banner_headings,
-  show_total = TRUE,
-  base_notes = NULL
+  base_notes = NULL,
+  ...
 ) {
-  question_text <- .group_header_text(frame)
+  label_cols <- "Item"
   sata_vars <- unique(frame$variable)
-
-  col_groups <- .build_col_groups(
-    frame,
-    banner_resolved,
-    interactions,
-    banner_headings
-  )
-  if (show_total) {
-    col_groups <- c(list(.total_col_group()), col_groups)
-  }
-
-  n_pct_cols <- .count_render_cols(col_groups)
-  n_cols <- n_pct_cols + if (show_n) 1L else 0L
-
-  # Row 1: question preface (merged, bold)
-  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
-
-  # Optional italic base-note row directly under the title
-  base_note <- .base_note_for(frame, base_notes)
-  note_shift <- if (is.null(base_note)) 0L else 1L
-  if (note_shift == 1L) {
-    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
-  }
-
-  spanner_row <- start_row + note_shift + 1L
-  header_row <- start_row + note_shift + 2L
-
-  # Spanner row + column headers — "Item" in col 1
-  wb <- .write_crosstab_headers(
+  pre <- .render_block_preamble(
     wb,
     sheet,
-    spanner_row,
-    header_row,
+    start_row,
+    .group_header_text(frame),
+    .base_note_for(frame, base_notes),
     col_groups,
-    "Item"
+    label_cols,
+    counts,
+    ...
   )
-
-  # Write "N" column header when show_n = TRUE
-  n_col <- n_pct_cols + 1L
-  if (show_n) {
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      sheet = sheet,
-      x = "N",
-      start_row = header_row,
-      start_col = n_col
-    )
-  }
+  wb <- pre$wb
 
   # Data rows: one row per SATA item; pct where value == "1", with
   # true-zero handling (see .sata_pct_cell())
-  data_start <- header_row + 1L
+  data_start <- pre$next_row
   for (j in seq_along(sata_vars)) {
     var <- sata_vars[[j]]
     row_num <- data_start + j - 1L
@@ -1105,25 +1089,16 @@ export_crosstab <- function(
         current_col <- current_col + 1L
       }
     }
-
-    # Write total n for this item when show_n = TRUE
-    if (show_n) {
-      n_val <- .sata_n_cell(frame, var)
-      wb <- openxlsx2::wb_add_data(
-        wb,
-        sheet = sheet,
-        x = n_val,
-        start_row = row_num,
-        start_col = n_col
-      )
-    }
   }
 
-  .write_withheld_lines(
+  .render_block_footer(
     wb,
     sheet,
-    withheld_lines,
-    data_start + length(sata_vars)
+    data_start + length(sata_vars),
+    label_cols,
+    counts,
+    withheld_lines = withheld_lines,
+    ...
   )
 }
 
@@ -1134,110 +1109,31 @@ export_crosstab <- function(
   sheet,
   frame,
   start_row,
-  show_n,
-  show_eff_n,
+  col_groups,
+  counts,
   decimals,
   withheld_lines,
-  banner_resolved,
-  interactions,
-  banner_headings,
-  show_total = TRUE,
-  base_notes = NULL
+  base_notes = NULL,
+  ...
 ) {
-  question_text <- .group_header_text(frame)
+  # Item and Response label columns, so the data columns start at column 3.
+  label_cols <- c("Item", "Response")
   bat_vars <- unique(frame$variable)
-
-  col_groups <- .build_col_groups(
-    frame,
-    banner_resolved,
-    interactions,
-    banner_headings
-  )
-  if (show_total) {
-    col_groups <- c(list(.total_col_group()), col_groups)
-  }
-
-  n_pct_cols <- .count_render_cols(col_groups)
-  # Item + Response label columns replace the flattened "item (value)"
-  # single label column, so the battery table is one column wider than
-  # .count_render_cols() (which assumes one label column) accounts for.
-  n_cols <- n_pct_cols + 1L + if (show_n) 1L else 0L
-
-  # Row 1: battery preface (merged, bold)
-  wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
-
-  # Optional italic base-note row directly under the title
-  base_note <- .base_note_for(frame, base_notes)
-  note_shift <- if (is.null(base_note)) 0L else 1L
-  if (note_shift == 1L) {
-    wb <- .write_base_note(wb, sheet, base_note, start_row + 1L, n_cols)
-  }
-
-  spanner_row <- start_row + note_shift + 1L
-  header_row <- start_row + note_shift + 2L
-
-  # Two label columns; banner spanners start at column 3
-  wb <- openxlsx2::wb_add_data(
+  pre <- .render_block_preamble(
     wb,
-    sheet = sheet,
-    x = "Item",
-    start_row = header_row,
-    start_col = 1L
+    sheet,
+    start_row,
+    .group_header_text(frame),
+    .base_note_for(frame, base_notes),
+    col_groups,
+    label_cols,
+    counts,
+    ...
   )
-  wb <- openxlsx2::wb_add_data(
-    wb,
-    sheet = sheet,
-    x = "Response",
-    start_row = header_row,
-    start_col = 2L
-  )
+  wb <- pre$wb
 
-  current_col <- 3L
-  for (cg in col_groups) {
-    span_start <- current_col
-    span_end <- span_start + length(cg$levels) - 1L
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      sheet = sheet,
-      x = cg$spanner,
-      start_row = spanner_row,
-      start_col = span_start
-    )
-    if (span_end > span_start) {
-      wb <- openxlsx2::wb_merge_cells(
-        wb,
-        sheet = sheet,
-        dims = openxlsx2::wb_dims(
-          rows = spanner_row,
-          cols = span_start:span_end
-        )
-      )
-    }
-    for (k in seq_along(cg$levels)) {
-      wb <- openxlsx2::wb_add_data(
-        wb,
-        sheet = sheet,
-        x = cg$levels[[k]],
-        start_row = header_row,
-        start_col = current_col
-      )
-      current_col <- current_col + 1L
-    }
-  }
-
-  n_col <- current_col
-  if (show_n) {
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      sheet = sheet,
-      x = "N",
-      start_row = header_row,
-      start_col = n_col
-    )
-  }
-
-  # Data rows: one row per battery sub-item × scale value
-  current_row <- header_row + 1L
+  # Data rows: one row per battery sub-item x scale value
+  current_row <- pre$next_row
   for (var in bat_vars) {
     var_frame <- frame[frame$variable == var, ]
     item_label <- var_frame$var_label[[1L]]
@@ -1284,41 +1180,17 @@ export_crosstab <- function(
         }
       }
 
-      # Write total n for this row when show_n = TRUE
-      if (show_n) {
-        n_rows <- total_sub[total_sub$value == val, ]
-        n_val <- if (nrow(n_rows) > 0L) n_rows$n[[1L]] else NA_integer_
-        wb <- openxlsx2::wb_add_data(
-          wb,
-          sheet = sheet,
-          x = n_val,
-          start_row = current_row,
-          start_col = n_col
-        )
-      }
-
       current_row <- current_row + 1L
     }
   }
 
-  .write_withheld_lines(wb, sheet, withheld_lines, current_row)
-}
-
-# The withheld lines at the end of one block, one per row in column A, from
-# `start_row` (spec 3.16). The caller passes character(0) unless
-# withheld_note is "every", and then nothing is written. Returns
-# list(wb = , next_row = ).
-#' @keywords internal
-#' @noRd
-.write_withheld_lines <- function(wb, sheet, lines, start_row) {
-  for (i in seq_along(lines)) {
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      sheet = sheet,
-      x = lines[[i]],
-      start_row = start_row + i - 1L,
-      start_col = 1L
-    )
-  }
-  list(wb = wb, next_row = start_row + length(lines))
+  .render_block_footer(
+    wb,
+    sheet,
+    current_row,
+    label_cols,
+    counts,
+    withheld_lines = withheld_lines,
+    ...
+  )
 }

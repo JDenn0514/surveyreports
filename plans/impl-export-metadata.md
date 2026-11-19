@@ -103,7 +103,7 @@ stands.** Only the formal arguments come forward.
       warning, in both functions, and surveycore's all-NA warning is muffled.
 - [x] PR 13: `feature/crosstab-withheld-notices` — the withholding warnings,
       the withheld lines and `withheld_note`.
-- [ ] PR 14: `feature/crosstab-label-cols-and-sizes` — `label_cols`, the two
+- [x] PR 14: `feature/crosstab-label-cols-and-sizes` — `label_cols`, the two
       sample-size rows, and the shared block preamble and footer.
 - [ ] PR 15: `feature/crosstab-sheet-properties` — the `100%` row goes; fixed
       widths, wrapping, row height and a freeze pane.

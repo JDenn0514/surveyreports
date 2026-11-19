@@ -14,8 +14,8 @@ export_crosstab(
   min_eff_n = 100,
   variance = NULL,
   conf_level = 0.95,
-  show_n = TRUE,
-  show_eff_n = FALSE,
+  sample_size_display = c("top", "bottom", "none"),
+  show_ess = TRUE,
   decimals = 1L,
   show_total = TRUE,
   withheld_note = c("once", "every", "none"),
@@ -61,11 +61,20 @@ standard errors or confidence intervals are shown. Default \code{NULL}.}
 \item{conf_level}{Numeric scalar in \verb{(0, 1)}. Confidence level for
 intervals when \code{variance = "ci"}. Default \code{0.95}.}
 
-\item{show_n}{Logical. Whether to include an unweighted count row.
-Default \code{TRUE}.}
+\item{sample_size_display}{One of \code{"top"} (default), \code{"bottom"}, or
+\code{"none"}. Where each table writes its two sample-size rows,
+\verb{Unweighted sample size} and \verb{Effective sample size}. \code{"top"} writes
+them directly under the heading row. \code{"bottom"} writes them under the
+last estimate row. \code{"none"} writes neither row. Each row has one cell
+per column: the unweighted count, or the effective sample size at one
+decimal, of the subgroup or of the full sample. The counts do not depend
+on the tabulated variable, so a variable with missing answers shows
+response rows that total less than the count above them.}
 
-\item{show_eff_n}{Logical. Whether to display the effective N in column
-headers. Default \code{FALSE}.}
+\item{show_ess}{Logical, \code{TRUE} (default) or \code{FALSE}. Whether the
+\verb{Effective sample size} row is written. \code{FALSE} keeps the
+\verb{Unweighted sample size} row. It has no effect when
+\code{sample_size_display = "none"}.}
 
 \item{decimals}{Positive integer. Number of decimal places for displayed
 percentages. Default \code{1L}.}
