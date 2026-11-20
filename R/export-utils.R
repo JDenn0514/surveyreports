@@ -1747,12 +1747,16 @@
 # arithmetic and inherits the rounding mode and both threshold strings. The
 # interval separator is an en-dash (U+2013) with one space on each side. A
 # negative lower bound prints with the hyphen-minus that .fmt_pct() writes.
-# Returns "" when `variance` is NULL or the cell has no rows. The exported
-# function validates `variance`, so any value other than "se" is "ci" here.
+# Returns "" when `variance` is NULL or the cell has no rows. Also returns ""
+# when `rows` is empty or its n is 0: a 0% cell with no row of its own has no
+# se or bound to print, so it reads 0% alone (spec 3.12, gap 17). Any value of
+# `variance` other than NULL and "se" is "ci" here: get_freqs() rejects any
+# other value before the workbook is built.
 #' @keywords internal
 #' @noRd
 .fmt_variance <- function(rows, variance, decimals, has_rows) {
-  if (is.null(variance) || !has_rows) {
+  no_own_row <- nrow(rows) == 0L || !isTRUE(rows$n[[1L]] > 0L)
+  if (is.null(variance) || !has_rows || no_own_row) {
     return("")
   }
   if (identical(variance, "se")) {
