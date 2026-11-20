@@ -2974,6 +2974,34 @@ test_that(".fmt_variance() returns an empty string when the cell has no rows", {
   expect_identical(surveyreports:::.fmt_variance(rows, "ci", 1L, FALSE), "")
 })
 
+# Gap 17: a 0% cell can have a column with rows and no row of its own. Its own
+# rows are then absent or have n = 0, and it carries no variance (spec 3.12).
+test_that(".fmt_variance() returns an empty string when the cell's own row is absent", {
+  rows <- tibble::tibble(
+    pct = double(0),
+    se = double(0),
+    ci_low = double(0),
+    ci_high = double(0),
+    n = integer(0)
+  )
+
+  expect_identical(surveyreports:::.fmt_variance(rows, "se", 1L, TRUE), "")
+  expect_identical(surveyreports:::.fmt_variance(rows, "ci", 1L, TRUE), "")
+})
+
+test_that(".fmt_variance() returns an empty string when the cell's own row has n = 0", {
+  rows <- tibble::tibble(
+    pct = 0,
+    se = 0,
+    ci_low = 0,
+    ci_high = 0,
+    n = 0L
+  )
+
+  expect_identical(surveyreports:::.fmt_variance(rows, "se", 1L, TRUE), "")
+  expect_identical(surveyreports:::.fmt_variance(rows, "ci", 1L, TRUE), "")
+})
+
 # .format_withheld_lines() ----------------------------------------------------
 
 test_that(".format_withheld_lines() writes one line per withheld subgroup in frame order", {
@@ -9578,4 +9606,822 @@ test_that("export_crosstab() writes every special form apart in one block (XC-08
 
   cells <- as.character(unlist(blk$est[blk$data_cols]))
   expect_true(all(c("<0.1%", ">99.9%", "0%", "-", "50%") %in% cells))
+})
+
+# 34. Variance strings, the legend row and the sheet room ----------------------
+# Under variance = "se" or "ci", each estimate cell shows the standard error
+# or the interval in parentheses, one % per number. variance_display = "cell"
+# puts it on a second line of the cell; "row" puts it on its own row under the
+# estimate row. A legend row under the title says what the parentheses hold.
+# The sheet makes room: wider data columns under "ci", and wrapped 30-point
+# estimate rows when the value shares the cell. A `-` cell, and a `0%` cell
+# with no row of its own, carry no variance (spec 3.12, spec 3.16). The
+# expected strings are built here from surveycore::get_freqs(), round() and
+# paste0(), never with .fmt_variance() or .fmt_pct().
+
+var_en_dash <- intToUtf8(0x2013L)
+
+# The get_freqs() rows of one variable with its variance columns, over the
+# whole sample when `banner` is NULL, else by `banner`.
+var_oracle <- function(
+  d,
+  var,
+  banner = NULL,
+  variance = "se",
+  conf_level = 0.95
+) {
+  ref <- if (is.null(banner)) {
+    suppressWarnings(
+      surveycore::get_freqs(
+        d,
+        !!rlang::sym(var),
+        variance = variance,
+        conf_level = conf_level
+      ),
+      classes = oracle_classes
+    )
+  } else {
+    suppressWarnings(
+      surveycore::get_freqs(
+        d,
+        !!rlang::sym(var),
+        group = !!rlang::sym(banner),
+        variance = variance,
+        conf_level = conf_level
+      ),
+      classes = oracle_classes
+    )
+  }
+  out <- data.frame(
+    level = if (is.null(banner)) "Total" else as.character(ref[[banner]]),
+    value = as.character(ref[[var]]),
+    pct = ref$pct,
+    n = ref$n,
+    stringsAsFactors = FALSE
+  )
+  if (variance == "se") {
+    out$se <- ref$se
+  } else {
+    out$ci_low <- ref$ci_low
+    out$ci_high <- ref$ci_high
+  }
+  out
+}
+
+# The expected variance string of one cell. "" when nobody in the column
+# answered, or when the cell's own row is absent or has n = 0.
+expected_variance <- function(col_rows, own, variance, decimals = 1L) {
+  if (
+    !any(col_rows$n > 0L, na.rm = TRUE) ||
+      nrow(own) == 0L ||
+      own$n[[1L]] == 0L
+  ) {
+    return("")
+  }
+  if (variance == "se") {
+    return(paste0("(", round(own$se[[1L]] * 100, decimals), "%)"))
+  }
+  paste0(
+    "(",
+    round(own$ci_low[[1L]] * 100, decimals),
+    "% ",
+    var_en_dash,
+    " ",
+    round(own$ci_high[[1L]] * 100, decimals),
+    "%)"
+  )
+}
+
+# Writes one block of `vars` over banner = group with a variance.
+write_var_block <- function(d, path, vars, variance, display = "cell", ...) {
+  fresh_path(path)
+  crosstab_quiet(
+    d,
+    vars = tidyselect::all_of(vars),
+    banner = group,
+    file_name = path,
+    min_eff_n = 0,
+    variance = variance,
+    variance_display = display,
+    ...
+  )
+}
+
+# The oracle rows of one cell: `col_rows`, the rows of the cell's column, and
+# `own`, the row of the cell's category.
+var_cell_oracle <- function(ref_total, ref_group, level, value) {
+  col_rows <- if (level == "Total") {
+    ref_total
+  } else {
+    ref_group[ref_group$level == level, ]
+  }
+  list(col_rows = col_rows, own = col_rows[col_rows$value == value, ])
+}
+
+# The response value an estimate row of a block stands for.
+var_row_value <- function(kind, var, blk, r) {
+  switch(
+    kind,
+    single = blk$col_a[[r]],
+    sata = pct_sata_chosen[[var]],
+    battery = as.character(blk$est[[2L]][[r]])
+  )
+}
+
+# Checks every estimate cell of one block written under
+# variance_display = "cell": the estimate, then a line break and the variance
+# string when the cell has one. Returns the number of cells that carry a
+# variance string.
+expect_variance_cells <- function(
+  d,
+  path,
+  vars,
+  kind,
+  variance,
+  lbl,
+  conf_level = 0.95
+) {
+  label <- if (kind == "single") "Response" else "Item"
+  blk <- pct_block(path, vars[[1L]], label)
+  n_checked <- 0L
+  n_variance <- 0L
+  for (var in vars) {
+    ref_total <- var_oracle(d, var, NULL, variance, conf_level)
+    ref_group <- var_oracle(d, var, "group", variance, conf_level)
+    for (r in seq_len(nrow(blk$est))) {
+      if (kind != "single" && blk$col_a[[r]] != pct_items[[var]]) {
+        next
+      }
+      value <- var_row_value(kind, var, blk, r)
+      for (j in blk$data_cols) {
+        level <- blk$heading[[j]]
+        cell <- var_cell_oracle(ref_total, ref_group, level, value)
+        expected <- expected_pct(cell$col_rows, cell$own, 1L)
+        v <- expected_variance(cell$col_rows, cell$own, variance)
+        if (nzchar(v)) {
+          expected <- paste0(expected, "\n", v)
+          n_variance <- n_variance + 1L
+        }
+        expect_identical(
+          as.character(blk$est[[j]][[r]]),
+          expected,
+          label = paste0(lbl, ": ", var, " = ", value, " in ", level)
+        )
+        n_checked <- n_checked + 1L
+      }
+    }
+  }
+  expect_identical(
+    n_checked,
+    nrow(blk$est) * length(blk$data_cols),
+    label = paste0(lbl, ": cells checked")
+  )
+  n_variance
+}
+
+# The rows of the first block of one sheet from its first data row to the
+# sheet's last row, the heading row, and the data columns from Total on. The
+# sample-size rows sit under the heading row (sample_size_display = "top").
+block_body <- function(path, sheet, label) {
+  rows <- sheet_rows(path, sheet)
+  h <- heading_index(rows, label)
+  heading <- as.character(unlist(rows[h, ]))
+  first_col <- match("Total", heading)
+  first <- h + 1L + length(ss_labels)
+  list(
+    rows = rows[seq.int(first, nrow(rows)), , drop = FALSE],
+    row_nums = seq.int(first, nrow(rows)),
+    ss_rows = seq.int(h + 1L, first - 1L),
+    heading = heading,
+    label_cols = seq_len(first_col - 1L),
+    data_cols = seq.int(first_col, max(which(!is.na(heading))))
+  )
+}
+
+test_that("export_crosstab() writes the standard error on a second line of the cell (XH-15, XN-09) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (kind in names(pct_blocks)) {
+      vars <- pct_blocks[[kind]]
+      lbl <- paste0(nm, ", ", kind)
+      write_var_block(d, out, vars, "se")
+      n <- expect_variance_cells(d, out, vars, kind, "se", lbl)
+      expect_gt(n, 0L, label = lbl)
+    }
+  }
+})
+
+test_that("export_crosstab() writes the interval bounds with an en-dash (XH-16, XN-10) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (kind in names(pct_blocks)) {
+      vars <- pct_blocks[[kind]]
+      lbl <- paste0(nm, ", ", kind)
+      write_var_block(d, out, vars, "ci")
+      n <- expect_variance_cells(d, out, vars, kind, "ci", lbl)
+      expect_gt(n, 0L, label = lbl)
+
+      # One % per bound, and no hyphen-minus between the two bounds.
+      blk <- pct_block(
+        out,
+        vars[[1L]],
+        if (kind == "single") "Response" else "Item"
+      )
+      cells <- as.character(unlist(blk$est[blk$data_cols]))
+      second <- sub("^[^\n]*\n", "", cells[grepl("\n", cells, fixed = TRUE)])
+      expect_true(
+        all(lengths(regmatches(second, gregexpr("%", second))) == 2L),
+        label = paste0(lbl, ": two % per interval")
+      )
+      expect_true(
+        all(grepl(paste0("% ", var_en_dash, " "), second, fixed = TRUE)),
+        label = paste0(lbl, ": the en-dash separator")
+      )
+    }
+  }
+})
+
+# 300 rows with unit weights. `Rare` is held by rows 1 and 2, so the full
+# sample holds 2 of 300. The banner `g` alternates A and B, so each column
+# holds one `Rare` row of 150.
+neg_bound_design <- function() {
+  df <- data.frame(
+    rq = c(rep("Rare", 2L), rep("Agree", 298L)),
+    g = rep(c("A", "B"), 150L),
+    wt = 1
+  )
+  d <- surveycore::as_survey(df, weights = wt)
+  surveycore::set_var_label(d, rq = "Rare question", g = "Group")
+}
+
+test_that("export_crosstab() prints a negative lower bound as surveycore returns it (XH-16a) [numerical]", {
+  skip_if_not_installed("surveycore")
+  d <- neg_bound_design()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(
+    d,
+    vars = rq,
+    banner = g,
+    file_name = out,
+    min_eff_n = 0,
+    variance = "ci"
+  )
+
+  ref <- var_oracle(d, "rq", NULL, "ci")
+  own <- ref[ref$value == "Rare", ]
+  expect_lt(own$ci_low, 0)
+  expect_lt(round(own$ci_low * 100, 1), 0)
+
+  blk <- pct_block(out, "rq", "Response")
+  cell <- as.character(blk$est[[match("Total", blk$heading)]][[
+    which(blk$col_a == "Rare")
+  ]])
+  expect_identical(
+    cell,
+    paste0(
+      paste0(round(own$pct * 100, 1), "%"),
+      "\n(",
+      round(own$ci_low * 100, 1),
+      "% ",
+      var_en_dash,
+      " ",
+      round(own$ci_high * 100, 1),
+      "%)"
+    )
+  )
+  # The printed lower bound is negative: a hyphen-minus right after the
+  # opening parenthesis.
+  expect_match(cell, "\n(-", fixed = TRUE)
+})
+
+test_that("export_crosstab() writes the variance on its own row under variance_display = \"row\" (XH-17) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (kind in names(pct_blocks)) {
+      vars <- pct_blocks[[kind]]
+      label <- if (kind == "single") "Response" else "Item"
+      lbl <- paste0(nm, ", ", kind)
+
+      write_var_block(d, out, vars, "se", "cell")
+      n_cell <- nrow(block_body(out, vars[[1L]], label)$rows)
+
+      write_var_block(d, out, vars, "se", "row")
+      body <- block_body(out, vars[[1L]], label)
+      expect_identical(
+        nrow(body$rows),
+        2L * n_cell,
+        label = paste0(lbl, ": twice as many rows")
+      )
+
+      est_idx <- seq.int(1L, nrow(body$rows), by = 2L)
+      var_idx <- est_idx + 1L
+      est <- body$rows[est_idx, , drop = FALSE]
+      vrows <- body$rows[var_idx, , drop = FALSE]
+
+      # The estimate cells hold no parenthesis and no second line.
+      est_cells <- as.character(unlist(est[body$data_cols]))
+      expect_false(any(grepl("(", est_cells, fixed = TRUE)), label = lbl)
+      expect_false(any(grepl("\n", est_cells, fixed = TRUE)), label = lbl)
+      # The label columns of a variance row are blank.
+      expect_true(
+        all(is.na(unlist(vrows[body$label_cols]))),
+        label = paste0(lbl, ": variance-row labels blank")
+      )
+
+      # Each variance cell matches the oracle; a cell with no variance
+      # string is blank.
+      blk <- list(
+        est = est,
+        col_a = as.character(est[[1L]]),
+        heading = body$heading,
+        data_cols = body$data_cols
+      )
+      for (i in seq_along(blk$col_a)[-1L]) {
+        if (is.na(blk$col_a[[i]])) {
+          blk$col_a[[i]] <- blk$col_a[[i - 1L]]
+        }
+      }
+      n_checked <- 0L
+      for (var in vars) {
+        ref_total <- var_oracle(d, var, NULL, "se")
+        ref_group <- var_oracle(d, var, "group", "se")
+        for (r in seq_len(nrow(est))) {
+          if (kind != "single" && blk$col_a[[r]] != pct_items[[var]]) {
+            next
+          }
+          value <- var_row_value(kind, var, blk, r)
+          for (j in body$data_cols) {
+            cell <- var_cell_oracle(
+              ref_total,
+              ref_group,
+              blk$heading[[j]],
+              value
+            )
+            expect_identical(
+              as.character(est[[j]][[r]]),
+              expected_pct(cell$col_rows, cell$own, 1L),
+              label = paste0(lbl, ": estimate ", var, " = ", value)
+            )
+            v <- expected_variance(cell$col_rows, cell$own, "se")
+            expect_identical(
+              as.character(vrows[[j]][[r]]),
+              if (nzchar(v)) v else NA_character_,
+              label = paste0(lbl, ": variance ", var, " = ", value)
+            )
+            n_checked <- n_checked + 1L
+          }
+        }
+      }
+      expect_identical(
+        n_checked,
+        nrow(est) * length(body$data_cols),
+        label = paste0(lbl, ": cells checked")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() writes the legend row only under `variance` (XH-18)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  note <- c(q1 = "Base: all adults")
+  legends <- c(
+    se = "Percentages; standard error in parentheses.",
+    ci = "Percentages; 95% confidence interval in parentheses."
+  )
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+
+    write_var_block(d, out, "q1", NULL, base_notes = note)
+    expect_identical(
+      sheet_col_a(out, "q1")[1:4],
+      c("Question one", "Base: all adults", NA, "Response"),
+      label = paste0(nm, ": no legend")
+    )
+    expect_false(
+      any(startsWith(sheet_text(out, "q1"), "Percentages")),
+      label = paste0(nm, ": no legend anywhere")
+    )
+
+    for (v in names(legends)) {
+      write_var_block(d, out, "q1", v, base_notes = note)
+      expect_identical(
+        sheet_col_a(out, "q1")[1:5],
+        c("Question one", "Base: all adults", legends[[v]], NA, "Response"),
+        label = paste0(nm, ": ", v)
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() names a non-default conf_level in the legend (XH-19) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    write_var_block(d, out, "q1", "ci", conf_level = 0.9)
+
+    col_a <- sheet_col_a(out, "q1")
+    expect_identical(
+      col_a[[2L]],
+      "Percentages; 90% confidence interval in parentheses.",
+      label = nm
+    )
+    expect_false(any(grepl("95%", col_a, fixed = TRUE)), label = nm)
+
+    # The intervals are the 90 percent ones.
+    n <- expect_variance_cells(d, out, "q1", "single", "ci", nm, 0.9)
+    expect_gt(n, 0L, label = nm)
+  }
+})
+
+test_that("export_crosstab() writes - alone, with no variance, under both displays (XH-20)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    d@data$q1[d@data$group == "C"] <- NA_character_
+
+    # The oracle: column C has no row with n > 0.
+    ref <- var_oracle(d, "q1", "group", "se")
+    expect_false(any(ref$n[ref$level == "C"] > 0L), label = nm)
+
+    write_var_block(d, out, "q1", "se", "cell")
+    blk <- pct_block(out, "q1", "Response")
+    col_c <- as.character(blk$est[[match("C", blk$heading)]])
+    col_a <- as.character(blk$est[[match("A", blk$heading)]])
+    expect_identical(col_c, rep("-", 3L), label = paste0(nm, ": cell"))
+    expect_true(
+      all(grepl("\n(", col_a, fixed = TRUE)),
+      label = paste0(nm, ": A carries a variance")
+    )
+
+    write_var_block(d, out, "q1", "se", "row")
+    body <- block_body(out, "q1", "Response")
+    j <- match("C", body$heading)
+    cells_c <- as.character(body$rows[[j]])
+    expect_identical(
+      cells_c,
+      rep(c("-", NA_character_), 3L),
+      label = paste0(nm, ": row")
+    )
+  }
+})
+
+test_that("export_crosstab() writes 0% alone for a cell with no row of its own, under both displays", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+    # `Rare` is held only by rows of group A, so B and C answered and nobody
+    # there chose it.
+    rare_rows <- d@data$group == "A" & seq_len(nrow(d@data)) %% 7L == 0L
+    d@data$qz <- ifelse(rare_rows, "Rare", d@data$q1)
+    d <- surveycore::set_var_label(d, qz = "Question zero")
+
+    # The oracle: B and C have answers, and no `Rare` row with n > 0.
+    ref <- var_oracle(d, "qz", "group", "se")
+    for (lvl in c("B", "C")) {
+      col_rows <- ref[ref$level == lvl, ]
+      expect_true(any(col_rows$n > 0L), label = paste(nm, lvl))
+      expect_false(
+        any(col_rows$n[col_rows$value == "Rare"] > 0L),
+        label = paste(nm, lvl)
+      )
+    }
+
+    write_var_block(d, out, "qz", "se", "cell")
+    blk <- pct_block(out, "qz", "Response")
+    r <- which(blk$col_a == "Rare")
+    cell <- function(lvl) as.character(blk$est[[match(lvl, blk$heading)]][[r]])
+    expect_identical(cell("B"), "0%", label = paste0(nm, ": cell, B"))
+    expect_identical(cell("C"), "0%", label = paste0(nm, ": cell, C"))
+    expect_match(cell("A"), "\n(", fixed = TRUE, label = paste0(nm, ": A"))
+
+    write_var_block(d, out, "qz", "se", "row")
+    body <- block_body(out, "qz", "Response")
+    r <- which(as.character(body$rows[[1L]]) == "Rare")
+    for (lvl in c("B", "C")) {
+      j <- match(lvl, body$heading)
+      expect_identical(
+        as.character(body$rows[[j]][c(r, r + 1L)]),
+        c("0%", NA_character_),
+        label = paste0(nm, ": row, ", lvl)
+      )
+    }
+    j <- match("A", body$heading)
+    expect_match(
+      as.character(body$rows[[j]][[r + 1L]]),
+      "^\\(",
+      label = paste0(nm, ": row, A")
+    )
+  }
+})
+
+# The data columns of the first block of a gen-fixture sheet, from its
+# heading row: every column right of the label columns.
+gen_data_cols <- function(path, sheet, label = "Response") {
+  heading <- heading_cells(path, sheet, label)
+  seq.int(match("Total", heading), max(which(!is.na(heading))))
+}
+
+test_that("export_crosstab() widens every data column under an interval (XB-05)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (display in c("cell", "row")) {
+      write_gen_vars(d, out, "q1", variance = "ci", variance_display = display)
+      n_cols <- block_width(out, "q1")
+      expect_identical(n_cols, 4L, label = paste0(nm, ", ", display))
+      expect_identical(
+        col_widths(out, "q1")[seq_len(n_cols)],
+        c(44L, rep(17L, n_cols - 1L)),
+        label = paste0(nm, ", ", display)
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() sets the interval width from `decimals` (XB-06)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  widths <- c(`0` = 15L, `2` = 19L)
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (dec in names(widths)) {
+      write_gen_vars(
+        d,
+        out,
+        "q1",
+        variance = "ci",
+        variance_display = "cell",
+        decimals = as.integer(dec)
+      )
+      n_cols <- block_width(out, "q1")
+      expect_identical(
+        col_widths(out, "q1")[seq_len(n_cols)],
+        c(44L, rep(widths[[dec]], n_cols - 1L)),
+        label = paste0(nm, ", decimals = ", dec)
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() keeps the width of 12 under a standard error (XB-07)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (display in c("cell", "row")) {
+      write_gen_vars(d, out, "q1", variance = "se", variance_display = display)
+      n_cols <- block_width(out, "q1")
+      expect_identical(
+        col_widths(out, "q1")[seq_len(n_cols)],
+        c(44L, rep(12L, n_cols - 1L)),
+        label = paste0(nm, ", ", display)
+      )
+    }
+  }
+})
+
+# The three blocks of the sheet-property rows over the gen fixture: the
+# variables, the sheet name and the heading label of each.
+var_gen_blocks <- list(
+  single = list(vars = "q1", label = "Response"),
+  sata = list(vars = c("sata_a", "sata_b", "sata_c"), label = "Item"),
+  battery = list(vars = c("bat_1", "bat_2", "bat_3"), label = "Item")
+)
+
+test_that("export_crosstab() wraps every estimate cell when the variance shares it (XB-08)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (kind in names(var_gen_blocks)) {
+      blk <- var_gen_blocks[[kind]]
+      sheet <- blk$vars[[1L]]
+      for (v in c("ci", "se")) {
+        lbl <- paste0(nm, ", ", kind, ", ", v)
+        write_gen_vars(
+          d,
+          out,
+          blk$vars,
+          variance = v,
+          variance_display = "cell"
+        )
+        body <- block_body(out, sheet, blk$label)
+        expect_gt(length(body$row_nums), 0L, label = lbl)
+        wb <- openxlsx2::wb_load(out)
+        for (row in body$row_nums) {
+          for (col in body$data_cols) {
+            dims <- openxlsx2::wb_dims(rows = row, cols = col)
+            expect_true(
+              cell_wraps(wb, sheet, dims),
+              label = paste0(lbl, ": ", dims, " wraps")
+            )
+          }
+        }
+        dims <- openxlsx2::wb_dims(
+          rows = body$ss_rows[[1L]],
+          cols = body$data_cols[[1L]]
+        )
+        expect_false(
+          cell_wraps(wb, sheet, dims),
+          label = paste0(lbl, ": sample-size ", dims, " does not wrap")
+        )
+      }
+    }
+  }
+})
+
+test_that("export_crosstab() sets each estimate row to 30 points when the variance shares the cell (XB-09)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (kind in names(var_gen_blocks)) {
+      blk <- var_gen_blocks[[kind]]
+      sheet <- blk$vars[[1L]]
+      for (v in c("ci", "se")) {
+        lbl <- paste0(nm, ", ", kind, ", ", v)
+        write_gen_vars(
+          d,
+          out,
+          blk$vars,
+          variance = v,
+          variance_display = "cell"
+        )
+        body <- block_body(out, sheet, blk$label)
+        expect_gt(length(body$row_nums), 0L, label = lbl)
+        wb <- openxlsx2::wb_load(out)
+        for (row in body$row_nums) {
+          expect_identical(
+            row_height(wb, sheet, row),
+            30,
+            label = paste0(lbl, ": row ", row)
+          )
+        }
+        for (row in body$ss_rows) {
+          expect_identical(
+            row_height(wb, sheet, row),
+            NA_real_,
+            label = paste0(lbl, ": sample-size row ", row)
+          )
+        }
+      }
+    }
+  }
+})
+
+test_that("export_crosstab() sets no wrap and no estimate-row height without a second line (XB-10)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  calls <- list(
+    list(variance = NULL, variance_display = "cell"),
+    list(variance = "ci", variance_display = "row")
+  )
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+    for (kind in names(var_gen_blocks)) {
+      blk <- var_gen_blocks[[kind]]
+      sheet <- blk$vars[[1L]]
+      for (call in calls) {
+        lbl <- paste0(
+          nm,
+          ", ",
+          kind,
+          ", ",
+          if (is.null(call$variance)) "NULL" else call$variance
+        )
+        fresh_path(out)
+        crosstab_quiet(
+          d,
+          vars = tidyselect::all_of(blk$vars),
+          banner = gen,
+          file_name = out,
+          min_eff_n = 0,
+          variance = call$variance,
+          variance_display = call$variance_display
+        )
+        body <- block_body(out, sheet, blk$label)
+        expect_gt(length(body$row_nums), 0L, label = lbl)
+        wb <- openxlsx2::wb_load(out)
+        # Every row of the body: the estimate rows, and under "row" the
+        # variance rows too.
+        for (row in body$row_nums) {
+          expect_identical(
+            row_height(wb, sheet, row),
+            NA_real_,
+            label = paste0(lbl, ": row ", row)
+          )
+          for (col in body$data_cols) {
+            dims <- openxlsx2::wb_dims(rows = row, cols = col)
+            expect_false(
+              cell_wraps(wb, sheet, dims),
+              label = paste0(lbl, ": ", dims)
+            )
+          }
+        }
+      }
+    }
+  }
+})
+
+test_that("export_crosstab() gives column B the interval width when that is larger (XB-14)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+  bat <- c("bat_1", "bat_2", "bat_3")
+
+  for (nm in names(designs)) {
+    d <- add_gen_fixture(designs[[nm]])
+
+    # The stacked sheet: the battery block is Item, Response, Total, Male,
+    # Female, so it spans five columns.
+    for (dec in c(1L, 3L)) {
+      write_gen_vars(
+        d,
+        out,
+        c("q1", bat),
+        layout = "stacked",
+        variance = "ci",
+        variance_display = "cell",
+        decimals = dec
+      )
+      data_w <- 15L + 2L * dec
+      expect_identical(
+        col_widths(out, "Crosstab")[1:5],
+        c(44L, max(20L, data_w), rep(data_w, 3L)),
+        label = paste0(nm, ", stacked, decimals = ", dec)
+      )
+    }
+
+    # The per-question battery sheet: column B is a label column only.
+    write_gen_vars(d, out, bat, variance = "ci", decimals = 3L)
+    expect_identical(
+      col_widths(out, "bat_1")[1:5],
+      c(44L, 20L, rep(21L, 3L)),
+      label = paste0(nm, ", per question")
+    )
+  }
+})
+
+test_that("export_crosstab() takes variance_display after variance and before conf_level", {
+  args <- names(formals(export_crosstab))
+  expect_identical(
+    args[match("variance", args) + 0:2],
+    c("variance", "variance_display", "conf_level")
+  )
+  expect_identical(
+    eval(formals(export_crosstab)$variance_display),
+    c("cell", "row")
+  )
 })

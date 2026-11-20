@@ -32,8 +32,18 @@
 #'   level or a crossed cell of `interactions`. A subgroup whose effective
 #'   sample size equals `min_eff_n` is shown. The test reads the effective
 #'   sample size, not the unweighted count. `0` shows every subgroup.
-#' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
-#'   standard errors or confidence intervals are shown. Default `NULL`.
+#' @param variance One of `NULL`, `"se"`, or `"ci"`. What each estimate
+#'   cell shows beside its percentage. `NULL` (default) shows nothing. `"se"`
+#'   shows the standard error in parentheses, as in `(2.9%)`. `"ci"` shows
+#'   the two bounds of the confidence interval in parentheses, with an
+#'   en-dash between them. Each number is in percentage points
+#'   at `decimals` places, with its own `%`. When `variance` is set, a legend
+#'   row under each table title says what the parentheses hold.
+#' @param variance_display One of `"cell"` (default) or `"row"`. Where the
+#'   value of `variance` is written. `"cell"` writes it on a second line of
+#'   the estimate cell, in a smaller grey font. `"row"` writes it on its own
+#'   row directly under each estimate row, with the label columns blank. It
+#'   has no effect when `variance` is `NULL`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
 #'   intervals when `variance = "ci"`. Default `0.95`.
 #' @param sample_size_display One of `"top"` (default), `"bottom"`, or
@@ -92,6 +102,7 @@ export_crosstab <- function(
   interactions = NULL,
   min_eff_n = 100,
   variance = NULL,
+  variance_display = c("cell", "row"),
   conf_level = 0.95,
   sample_size_display = c("top", "bottom", "none"),
   show_ess = TRUE,
@@ -217,6 +228,7 @@ export_crosstab <- function(
   layout <- match.arg(layout)
   withheld_note <- match.arg(withheld_note)
   sample_size_display <- match.arg(sample_size_display)
+  variance_display <- match.arg(variance_display)
 
   # The heading of each surviving banner column: its variable label, or its
   # name when no label is set (spec 3.8). A column that falls back is named
@@ -316,11 +328,17 @@ export_crosstab <- function(
   current_row <- 1L
   groups_done <- character(0)
 
-  # The width of every data column, in characters (spec 3.16). Each sheet
-  # takes its widths once, after its blocks are written: `sheet_cols` is the
-  # widest block on the sheet, `sheet_battery` says whether a battery block
-  # is on it, and `last_row` is the last row written.
-  data_width <- 12
+  # The width of every data column, in characters (spec 3.16). It comes from
+  # the arguments alone, never from cell content: 12, or 15 + 2 * decimals
+  # under variance = "ci", which holds the widest interval string at that
+  # precision under both displays. Each sheet takes its widths once, after
+  # its blocks are written: `sheet_cols` is the widest block on the sheet,
+  # `sheet_battery` says whether a battery block is on it, and `last_row` is
+  # the last row written.
+  data_width <- if (identical(variance, "ci")) 15 + 2 * decimals else 12
+
+  # The legend row of every block, or NULL under variance = NULL (spec 3.12).
+  legend <- .build_variance_legend(variance, conf_level)
   sheet_cols <- 0L
   sheet_battery <- FALSE
   last_row <- 1L
@@ -387,6 +405,9 @@ export_crosstab <- function(
       decimals,
       withheld_lines,
       resolved_notes,
+      variance = variance,
+      variance_display = variance_display,
+      legend = legend,
       sample_size_display = sample_size_display,
       show_ess = show_ess
     )
@@ -908,14 +929,14 @@ export_crosstab <- function(
 # -- Block preamble and footer -----------------------------------------------------
 
 # The opening sequence of one block, rows 1 to 7 of spec 3.16: the title, the
-# base note when one resolves, the spanner row, the heading row, and the two
-# sample-size rows when sample_size_display is "top". `label_cols` is the
-# vector of label-column headings; its length is the number of label columns.
-# The title and the base note are merged across the label and data columns.
-# Returns list(wb = , next_row = ), where next_row is the first data row.
-# It also sets the heading row's wrap and height, and the sheet's freeze
-# pane. The variance legend row of spec 3.16 comes in a later change, with
-# the argument that turns it on.
+# base note when one resolves, the variance legend when `variance` is set,
+# the spanner row, the heading row, and the two sample-size rows when
+# sample_size_display is "top". `base_note` and `legend` are character(1) or
+# NULL, and NULL writes no row. `label_cols` is the vector of label-column
+# headings; its length is the number of label columns. The title, the base
+# note and the legend are merged across the label and data columns. Returns
+# list(wb = , next_row = ), where next_row is the first data row. It also
+# sets the heading row's wrap and height, and the sheet's freeze pane.
 #' @keywords internal
 #' @noRd
 .render_block_preamble <- function(
@@ -924,6 +945,7 @@ export_crosstab <- function(
   start_row,
   question_text,
   base_note,
+  legend,
   col_groups,
   label_cols,
   counts,
@@ -934,9 +956,13 @@ export_crosstab <- function(
   wb <- .write_question_title(wb, sheet, question_text, start_row, n_cols)
   row <- start_row + 1L
 
-  if (!is.null(base_note)) {
-    wb <- .write_base_note(wb, sheet, base_note, row, n_cols)
-    row <- row + 1L
+  # The base note and the legend share one row style: italic, merged across
+  # the block (spec 3.16, rows 2 and 3).
+  for (note in list(base_note, legend)) {
+    if (!is.null(note)) {
+      wb <- .write_base_note(wb, sheet, note, row, n_cols)
+      row <- row + 1L
+    }
   }
 
   heading_row <- row + 1L
@@ -1037,9 +1063,12 @@ export_crosstab <- function(
 # -- Render helpers ---------------------------------------------------------------
 
 # The three routes share one signature. Each writes its preamble, its data
-# rows, then its footer. `...` carries the two sample-size arguments from
-# export_crosstab() to .render_block_preamble() and .render_block_footer()
-# unread, so the branch on them lives in those two helpers alone (spec 3.16).
+# rows, then its footer. `variance`, `variance_display` and `legend` come from
+# export_crosstab(): the legend goes to the preamble, and the other two decide
+# the variance string of each cell and where it is written (spec 3.12). `...`
+# carries the two sample-size arguments from export_crosstab() to
+# .render_block_preamble() and .render_block_footer() unread, so the branch on
+# them lives in those two helpers alone (spec 3.16).
 #' @keywords internal
 #' @noRd
 .render_crosstab_single <- function(
@@ -1052,6 +1081,9 @@ export_crosstab <- function(
   decimals,
   withheld_lines,
   base_notes = NULL,
+  variance = NULL,
+  variance_display = "cell",
+  legend = NULL,
   ...
 ) {
   label_cols <- "Response"
@@ -1061,6 +1093,7 @@ export_crosstab <- function(
     start_row,
     frame$question_text[[1L]],
     .base_note_for(frame, base_notes),
+    legend,
     col_groups,
     label_cols,
     counts,
@@ -1072,11 +1105,14 @@ export_crosstab <- function(
   total_rows <- frame[frame$subgroup_type == "total", ]
   values <- unique(total_rows$value)
 
-  # Data rows: one per response value
+  # Data rows: one per response value, each followed by its variance row
+  # under variance_display = "row".
+  step <- .rows_per_estimate(variance, variance_display)
   data_start <- pre$next_row
+  est_rows <- data_start + (seq_along(values) - 1L) * step
   for (j in seq_along(values)) {
     val <- values[[j]]
-    row_num <- data_start + j - 1L
+    row_num <- est_rows[[j]]
 
     # Row label
     wb <- openxlsx2::wb_add_data(
@@ -1090,27 +1126,34 @@ export_crosstab <- function(
     current_col <- 2L
     for (cg in col_groups) {
       for (level in cg$levels) {
-        pct_val <- .fmt_pct_cell(
-          .cell_rows(frame, cg, level),
-          .cell_rows(frame, cg, level, val = val),
-          decimals
-        )
-        wb <- openxlsx2::wb_add_data(
+        col_rows <- .cell_rows(frame, cg, level)
+        own <- .cell_rows(frame, cg, level, val = val)
+        wb <- .write_estimate_cell(
           wb,
-          sheet = sheet,
-          x = pct_val,
-          start_row = row_num,
-          start_col = current_col
+          sheet,
+          row_num,
+          current_col,
+          .fmt_pct_cell(col_rows, own, decimals),
+          .fmt_variance(own, variance, decimals, .col_has_rows(col_rows)),
+          variance_display
         )
         current_col <- current_col + 1L
       }
     }
   }
+  wb <- .style_estimate_rows(
+    wb,
+    sheet,
+    est_rows,
+    1L + seq_len(.count_render_cols(col_groups, 0L)),
+    variance,
+    variance_display
+  )
 
   .render_block_footer(
     wb,
     sheet,
-    data_start + length(values),
+    data_start + length(values) * step,
     label_cols,
     counts,
     withheld_lines = withheld_lines,
@@ -1130,6 +1173,9 @@ export_crosstab <- function(
   decimals,
   withheld_lines,
   base_notes = NULL,
+  variance = NULL,
+  variance_display = "cell",
+  legend = NULL,
   ...
 ) {
   label_cols <- "Item"
@@ -1140,6 +1186,7 @@ export_crosstab <- function(
     start_row,
     .group_header_text(frame),
     .base_note_for(frame, base_notes),
+    legend,
     col_groups,
     label_cols,
     counts,
@@ -1147,14 +1194,17 @@ export_crosstab <- function(
   )
   wb <- pre$wb
 
-  # Data rows: one row per SATA item. The cell is the share of the item's
-  # chosen value, the row the frame marks in sata_chosen (code 1; see
+  # Data rows: one row per SATA item, each followed by its variance row under
+  # variance_display = "row". The cell is the share of the item's chosen
+  # value, the row the frame marks in sata_chosen (code 1; see
   # .extract_sata_chosen()). The item's whole column decides 0% against `-`
   # (spec 3.3).
+  step <- .rows_per_estimate(variance, variance_display)
   data_start <- pre$next_row
+  est_rows <- data_start + (seq_along(sata_vars) - 1L) * step
   for (j in seq_along(sata_vars)) {
     var <- sata_vars[[j]]
-    row_num <- data_start + j - 1L
+    row_num <- est_rows[[j]]
 
     item_label <- frame$var_label[frame$variable == var][[1L]]
 
@@ -1170,27 +1220,33 @@ export_crosstab <- function(
     for (cg in col_groups) {
       for (level in cg$levels) {
         col_rows <- .cell_rows(frame, cg, level, var = var)
-        pct_val <- .fmt_pct_cell(
-          col_rows,
-          col_rows[which(col_rows$sata_chosen), , drop = FALSE],
-          decimals
-        )
-        wb <- openxlsx2::wb_add_data(
+        own <- col_rows[which(col_rows$sata_chosen), , drop = FALSE]
+        wb <- .write_estimate_cell(
           wb,
-          sheet = sheet,
-          x = pct_val,
-          start_row = row_num,
-          start_col = current_col
+          sheet,
+          row_num,
+          current_col,
+          .fmt_pct_cell(col_rows, own, decimals),
+          .fmt_variance(own, variance, decimals, .col_has_rows(col_rows)),
+          variance_display
         )
         current_col <- current_col + 1L
       }
     }
   }
+  wb <- .style_estimate_rows(
+    wb,
+    sheet,
+    est_rows,
+    1L + seq_len(.count_render_cols(col_groups, 0L)),
+    variance,
+    variance_display
+  )
 
   .render_block_footer(
     wb,
     sheet,
-    data_start + length(sata_vars),
+    data_start + length(sata_vars) * step,
     label_cols,
     counts,
     withheld_lines = withheld_lines,
@@ -1210,6 +1266,9 @@ export_crosstab <- function(
   decimals,
   withheld_lines,
   base_notes = NULL,
+  variance = NULL,
+  variance_display = "cell",
+  legend = NULL,
   ...
 ) {
   # Item and Response label columns, so the data columns start at column 3.
@@ -1221,6 +1280,7 @@ export_crosstab <- function(
     start_row,
     .group_header_text(frame),
     .base_note_for(frame, base_notes),
+    legend,
     col_groups,
     label_cols,
     counts,
@@ -1228,7 +1288,10 @@ export_crosstab <- function(
   )
   wb <- pre$wb
 
-  # Data rows: one row per battery sub-item x scale value
+  # Data rows: one row per battery sub-item x scale value, each followed by
+  # its variance row under variance_display = "row".
+  step <- .rows_per_estimate(variance, variance_display)
+  est_rows <- integer(0)
   current_row <- pre$next_row
   for (var in bat_vars) {
     var_frame <- frame[frame$variable == var, ]
@@ -1259,25 +1322,33 @@ export_crosstab <- function(
       current_col <- 3L
       for (cg in col_groups) {
         for (level in cg$levels) {
-          pct_val <- .fmt_pct_cell(
-            .cell_rows(frame, cg, level, var = var),
-            .cell_rows(frame, cg, level, val = val, var = var),
-            decimals
-          )
-          wb <- openxlsx2::wb_add_data(
+          col_rows <- .cell_rows(frame, cg, level, var = var)
+          own <- .cell_rows(frame, cg, level, val = val, var = var)
+          wb <- .write_estimate_cell(
             wb,
-            sheet = sheet,
-            x = pct_val,
-            start_row = current_row,
-            start_col = current_col
+            sheet,
+            current_row,
+            current_col,
+            .fmt_pct_cell(col_rows, own, decimals),
+            .fmt_variance(own, variance, decimals, .col_has_rows(col_rows)),
+            variance_display
           )
           current_col <- current_col + 1L
         }
       }
 
-      current_row <- current_row + 1L
+      est_rows <- c(est_rows, current_row)
+      current_row <- current_row + step
     }
   }
+  wb <- .style_estimate_rows(
+    wb,
+    sheet,
+    est_rows,
+    2L + seq_len(.count_render_cols(col_groups, 0L)),
+    variance,
+    variance_display
+  )
 
   # The Response label cells wrap. The wrap is set on these cells and not on
   # column B, because on the stacked sheet column B is a data column of every
@@ -1317,8 +1388,139 @@ export_crosstab <- function(
 #' @keywords internal
 #' @noRd
 .fmt_pct_cell <- function(col_rows, own, decimals) {
-  has_rows <- any(col_rows$n > 0L, na.rm = TRUE)
   own_n <- if (nrow(own) > 0L) own$n[[1L]] else 0L
   p <- if (isTRUE(own_n > 0L)) own$pct[[1L]] else 0
-  .fmt_pct(p, decimals, has_rows)
+  .fmt_pct(p, decimals, .col_has_rows(col_rows))
+}
+
+# TRUE when any frame row of the cell's banner column has n > 0 (spec 3.3,
+# gap 17). .fmt_pct_cell() reads it for the estimate, and each render route
+# passes it to the variance formatter, so a `-` cell carries no variance.
+#' @keywords internal
+#' @noRd
+.col_has_rows <- function(col_rows) {
+  any(col_rows$n > 0L, na.rm = TRUE)
+}
+
+# The number of sheet rows one estimate takes: 2 when the variance has its
+# own row under the estimate row, else 1 (spec 3.12, spec 3.16).
+# variance_display is inert when variance is NULL.
+#' @keywords internal
+#' @noRd
+.rows_per_estimate <- function(variance, variance_display) {
+  if (!is.null(variance) && variance_display == "row") 2L else 1L
+}
+
+# Writes one estimate cell and its variance string (spec 3.12).
+# - An empty `variance_text` writes the estimate alone, as plain text. That
+#   is every cell under variance = NULL, a `-` cell, and a 0% cell with no row
+#   of its own. Under "row" its variance-row cell stays blank.
+# - Under "cell" the cell holds rich text in two runs: the estimate, then a
+#   line break and the variance string at 9 points in #595959. The estimate
+#   run takes the cell's own font. The house style of spec 3.21.7 later
+#   moves the colour into .build_house_style().
+# - Under "row" the estimate goes in `row` and the variance string in the
+#   same column of the row below.
+#' @keywords internal
+#' @noRd
+.write_estimate_cell <- function(
+  wb,
+  sheet,
+  row,
+  col,
+  estimate,
+  variance_text,
+  variance_display
+) {
+  if (!nzchar(variance_text)) {
+    return(openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = estimate,
+      start_row = row,
+      start_col = col
+    ))
+  }
+  if (variance_display == "row") {
+    wb <- openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = estimate,
+      start_row = row,
+      start_col = col
+    )
+    return(openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = variance_text,
+      start_row = row + 1L,
+      start_col = col
+    ))
+  }
+  rich <- openxlsx2::fmt_txt(estimate) +
+    openxlsx2::fmt_txt(
+      paste0("\n", variance_text),
+      size = 9,
+      color = openxlsx2::wb_color(hex = "FF595959")
+    )
+  openxlsx2::wb_add_data(
+    wb,
+    sheet = sheet,
+    x = rich,
+    start_row = row,
+    start_col = col
+  )
+}
+
+# The room a second line needs (spec 3.16). When `variance` is set and
+# variance_display is "cell", every data cell of an estimate row wraps, so
+# Excel shows the two lines, and every estimate row is fixed at 30 points,
+# which holds an 11-point line and a 9-point line. The height is not
+# auto-fit. In every other case nothing is set. `rows` are the estimate rows
+# of the block and `cols` its data columns.
+#' @keywords internal
+#' @noRd
+.style_estimate_rows <- function(
+  wb,
+  sheet,
+  rows,
+  cols,
+  variance,
+  variance_display
+) {
+  if (
+    is.null(variance) ||
+      variance_display != "cell" ||
+      length(rows) == 0L ||
+      length(cols) == 0L
+  ) {
+    return(wb)
+  }
+  wb <- openxlsx2::wb_add_cell_style(
+    wb,
+    sheet = sheet,
+    dims = openxlsx2::wb_dims(rows = rows, cols = cols),
+    wrap_text = TRUE
+  )
+  openxlsx2::wb_set_row_heights(wb, sheet = sheet, rows = rows, heights = 30)
+}
+
+# The legend row of every block (spec 3.12), or NULL under variance = NULL.
+# The level is formatted by .fmt_pct(), which owns the conversion from a
+# proportion to percentage points (spec 3.3), at up to 4 decimal places, so
+# 0.95 reads 95% and 0.975 reads 97.5%.
+#' @keywords internal
+#' @noRd
+.build_variance_legend <- function(variance, conf_level) {
+  if (is.null(variance)) {
+    return(NULL)
+  }
+  if (identical(variance, "se")) {
+    return("Percentages; standard error in parentheses.")
+  }
+  paste0(
+    "Percentages; ",
+    .fmt_pct(conf_level, 4L, TRUE),
+    " confidence interval in parentheses."
+  )
 }

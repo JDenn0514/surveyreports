@@ -13,6 +13,7 @@ export_crosstab(
   interactions = NULL,
   min_eff_n = 100,
   variance = NULL,
+  variance_display = c("cell", "row"),
   conf_level = 0.95,
   sample_size_display = c("top", "bottom", "none"),
   show_ess = TRUE,
@@ -55,8 +56,19 @@ level or a crossed cell of \code{interactions}. A subgroup whose effective
 sample size equals \code{min_eff_n} is shown. The test reads the effective
 sample size, not the unweighted count. \code{0} shows every subgroup.}
 
-\item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
-standard errors or confidence intervals are shown. Default \code{NULL}.}
+\item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. What each estimate
+cell shows beside its percentage. \code{NULL} (default) shows nothing. \code{"se"}
+shows the standard error in parentheses, as in \verb{(2.9\%)}. \code{"ci"} shows
+the two bounds of the confidence interval in parentheses, with an
+en-dash between them. Each number is in percentage points
+at \code{decimals} places, with its own \verb{\%}. When \code{variance} is set, a legend
+row under each table title says what the parentheses hold.}
+
+\item{variance_display}{One of \code{"cell"} (default) or \code{"row"}. Where the
+value of \code{variance} is written. \code{"cell"} writes it on a second line of
+the estimate cell, in a smaller grey font. \code{"row"} writes it on its own
+row directly under each estimate row, with the label columns blank. It
+has no effect when \code{variance} is \code{NULL}.}
 
 \item{conf_level}{Numeric scalar in \verb{(0, 1)}. Confidence level for
 intervals when \code{variance = "ci"}. Default \code{0.95}.}
