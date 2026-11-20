@@ -643,18 +643,30 @@ test_that("export_topline() errors when conf_level is outside (0, 1)", {
   )
 })
 
-test_that("export_topline() errors when decimals is not a positive integer", {
+test_that("export_topline() errors when decimals is negative", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   expect_error(
-    export_topline(d, vars = q1, file_name = out, decimals = 0),
+    export_topline(d, vars = q1, file_name = out, decimals = -1),
     class = "surveyreports_error_invalid_decimals"
   )
   expect_snapshot(
     error = TRUE,
-    export_topline(d, vars = q1, file_name = out, decimals = 0)
+    export_topline(d, vars = q1, file_name = out, decimals = -1)
+  )
+})
+
+# The class alone: the block above snapshots its message.
+test_that("export_topline() errors when decimals is not a whole number", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_topline(d, vars = q1, file_name = out, decimals = 1.5),
+    class = "surveyreports_error_invalid_decimals"
   )
 })
 
@@ -1555,6 +1567,52 @@ test_that("export_topline() percentages match surveycore::get_freqs() as numbers
       expect_equal(
         cells[[2L]][as.character(cells[[1L]]) == val],
         round(ref$pct[as.character(ref[[1L]]) == val] * 100, 1L),
+        tolerance = 1e-10,
+        label = paste0(nm, ": pct for '", val, "'")
+      )
+    }
+  }
+})
+
+test_that("export_topline() writes whole-number percentages at decimals = 0 [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    if (file.exists(out)) {
+      file.remove(out)
+    }
+    d <- cover_design(designs[[nm]])
+
+    result <- topline_quiet(d, vars = q1, file_name = out, decimals = 0L)
+    expect_identical(result, out, label = nm)
+    block <- topline_block(out)
+
+    first <- block$row[block$A == "Response"] + 1L
+    last <- block$row[block$A == "Total"] - 1L
+    cells <- openxlsx2::wb_to_df(
+      out,
+      sheet = "Topline",
+      col_names = FALSE,
+      rows = first:last,
+      cols = 1:2
+    )
+    expect_true(is.numeric(cells[[2L]]), label = paste0(nm, ": numeric cells"))
+
+    ref <- quiet_nonprob(surveycore::get_freqs(d, q1))
+    expect_identical(
+      sort(as.character(cells[[1L]])),
+      sort(as.character(ref[[1L]])),
+      label = paste0(nm, ": response levels")
+    )
+    for (val in as.character(ref[[1L]])) {
+      cell <- cells[[2L]][as.character(cells[[1L]]) == val]
+      expect_identical(cell, round(cell), label = paste0(nm, ": whole number"))
+      expect_equal(
+        cell,
+        round(ref$pct[as.character(ref[[1L]]) == val] * 100, 0L),
         tolerance = 1e-10,
         label = paste0(nm, ": pct for '", val, "'")
       )
