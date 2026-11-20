@@ -49,8 +49,8 @@
 #'   `Effective sample size` row is written. `FALSE` keeps the
 #'   `Unweighted sample size` row. It has no effect when
 #'   `sample_size_display = "none"`.
-#' @param decimals Positive integer. Number of decimal places for displayed
-#'   percentages. Default `1L`.
+#' @param decimals A whole number, 0 or more. Number of decimal places for
+#'   displayed percentages. Default `1L`.
 #' @param show_total Logical. Whether to render a `Total` column (the
 #'   full-sample distribution) before the banner columns in every table.
 #'   Default `TRUE`.
@@ -1090,12 +1090,11 @@ export_crosstab <- function(
     current_col <- 2L
     for (cg in col_groups) {
       for (level in cg$levels) {
-        pct_rows <- .cell_rows(frame, cg, level, val = val)
-        pct_val <- if (nrow(pct_rows) > 0L) {
-          round(pct_rows$pct[[1L]] * 100, decimals)
-        } else {
-          NA_real_
-        }
+        pct_val <- .fmt_pct_cell(
+          .cell_rows(frame, cg, level),
+          .cell_rows(frame, cg, level, val = val),
+          decimals
+        )
         wb <- openxlsx2::wb_add_data(
           wb,
           sheet = sheet,
@@ -1148,8 +1147,10 @@ export_crosstab <- function(
   )
   wb <- pre$wb
 
-  # Data rows: one row per SATA item; pct for the item's chosen value
-  # (code 1), with true-zero handling (see .sata_pct_cell())
+  # Data rows: one row per SATA item. The cell is the share of the item's
+  # chosen value, the row the frame marks in sata_chosen (code 1; see
+  # .extract_sata_chosen()). The item's whole column decides 0% against `-`
+  # (spec 3.3).
   data_start <- pre$next_row
   for (j in seq_along(sata_vars)) {
     var <- sata_vars[[j]]
@@ -1168,7 +1169,12 @@ export_crosstab <- function(
     current_col <- 2L
     for (cg in col_groups) {
       for (level in cg$levels) {
-        pct_val <- .sata_pct_cell(frame, var, cg, level, decimals)
+        col_rows <- .cell_rows(frame, cg, level, var = var)
+        pct_val <- .fmt_pct_cell(
+          col_rows,
+          col_rows[which(col_rows$sata_chosen), , drop = FALSE],
+          decimals
+        )
         wb <- openxlsx2::wb_add_data(
           wb,
           sheet = sheet,
@@ -1253,12 +1259,11 @@ export_crosstab <- function(
       current_col <- 3L
       for (cg in col_groups) {
         for (level in cg$levels) {
-          pct_rows <- .cell_rows(frame, cg, level, val = val, var = var)
-          pct_val <- if (nrow(pct_rows) > 0L) {
-            round(pct_rows$pct[[1L]] * 100, decimals)
-          } else {
-            NA_real_
-          }
+          pct_val <- .fmt_pct_cell(
+            .cell_rows(frame, cg, level, var = var),
+            .cell_rows(frame, cg, level, val = val, var = var),
+            decimals
+          )
           wb <- openxlsx2::wb_add_data(
             wb,
             sheet = sheet,
@@ -1296,4 +1301,24 @@ export_crosstab <- function(
     withheld_lines = withheld_lines,
     ...
   )
+}
+
+# One estimate cell of a render route, as a string (spec 3.3). `col_rows` are
+# the frame rows of the cell's variable in the cell's banner column: every
+# value, chosen or not. `own` is the cell's own row: the response value, or
+# the chosen row of a SATA item. It may have no rows.
+#
+# The whole column decides between `0%` and `-` (gap 17). The column has
+# rows when any of `col_rows` has n > 0. get_freqs() emits placeholder rows
+# with n = 0, so row presence alone is not the test. When the column has rows
+# and `own` is absent or has n = 0, nobody there chose the value, and the
+# estimate is 0. `pct` reaches .fmt_pct() as the proportion surveycore
+# returns; .fmt_pct() does the conversion to percentage points.
+#' @keywords internal
+#' @noRd
+.fmt_pct_cell <- function(col_rows, own, decimals) {
+  has_rows <- any(col_rows$n > 0L, na.rm = TRUE)
+  own_n <- if (nrow(own) > 0L) own$n[[1L]] else 0L
+  p <- if (isTRUE(own_n > 0L)) own$pct[[1L]] else 0
+  .fmt_pct(p, decimals, has_rows)
 }

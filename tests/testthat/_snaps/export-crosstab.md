@@ -58,15 +58,15 @@
       i Got 1.5.
       v Use a value such as "0.95" for a 95% confidence interval.
 
-# export_crosstab() errors when decimals is not a positive integer
+# export_crosstab() errors when decimals is negative
 
     Code
-      export_crosstab(d, vars = q1, banner = group, file_name = out, decimals = 0)
+      export_crosstab(d, vars = q1, banner = group, file_name = out, decimals = -1)
     Condition
       Error in `.validate_export_inputs()`:
-      x `decimals` must be a positive integer scalar.
-      i Got 0.
-      v Use a whole number such as "1" or "2".
+      x `decimals` must be a whole number, 0 or more.
+      i Got -1.
+      v Use a whole number such as "0", "1" or "2".
 
 # export_crosstab() errors when banner variable is not in design
 

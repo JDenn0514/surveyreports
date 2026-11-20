@@ -124,19 +124,19 @@
     )
   }
 
-  # 7. decimals is a positive integer scalar
+  # 7. decimals is a whole number, 0 or more (spec 3.2)
   if (
     !is.numeric(decimals) ||
       length(decimals) != 1L ||
-      is.na(decimals) ||
-      decimals < 1 ||
-      decimals != as.integer(decimals)
+      !is.finite(decimals) ||
+      decimals < 0 ||
+      decimals != round(decimals)
   ) {
     cli::cli_abort(
       c(
-        "x" = "{.arg decimals} must be a positive integer scalar.",
+        "x" = "{.arg decimals} must be a whole number, 0 or more.",
         "i" = "Got {.val {decimals}}.",
-        "v" = "Use a whole number such as {.val 1} or {.val 2}."
+        "v" = "Use a whole number such as {.val 0}, {.val 1} or {.val 2}."
       ),
       class = "surveyreports_error_invalid_decimals"
     )

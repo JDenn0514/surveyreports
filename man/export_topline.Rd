@@ -32,8 +32,8 @@ helpers such as \code{starts_with("q")}.}
 \item{conf_level}{Numeric scalar in \verb{(0, 1)}. Confidence level for
 intervals when \code{variance = "ci"}. Default \code{0.95}.}
 
-\item{decimals}{Positive integer. Number of decimal places for displayed
-percentages. Default \code{1L}.}
+\item{decimals}{A whole number, 0 or more. Number of decimal places for
+displayed percentages. Default \code{1L}.}
 
 \item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
 standard errors or confidence intervals are included in the output.

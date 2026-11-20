@@ -21,7 +21,7 @@ All `cli_abort()` and `cli_warn()` calls must use a class from this table.
 | `surveyreports_error_empty_domain` | `export_topline()`, `export_crosstab()` | The design carries a domain that is `FALSE` on every row, for example after a `filter()` that no row meets. On a collection, any member with no row in its domain raises it, and the message names that member. Raised before the role guard (spec 3.11). The design data having zero rows raises it too, but surveycore >= 1.2.0 rejects zero-row data in its S7 validator, so that branch is defensive. Changed 2026-11-16 (`feature/topline-guards`): before, an empty `filter()` domain did not raise this class |
 | `surveyreports_error_invalid_file_name` | `export_topline()`, `export_crosstab()` | `file_name` does not end in `.xlsx` |
 | `surveyreports_error_invalid_conf_level` | `export_topline()`, `export_crosstab()` | `conf_level` outside `(0, 1)` |
-| `surveyreports_error_invalid_decimals` | `export_topline()`, `export_crosstab()` | `decimals` is not a positive integer |
+| `surveyreports_error_invalid_decimals` | `export_topline()`, `export_crosstab()` | `decimals` is not a whole number of 0 or more. Changed 2026-11-19 (`feature/crosstab-percent-cells`): before, 0 also raised this class (spec 3.2) |
 | `surveyreports_error_invalid_min_eff_n` | `export_crosstab()` | `min_eff_n` is not a length-1, non-missing, finite, non-negative numeric |
 | `surveyreports_error_banner_not_found` | `export_crosstab()` | A variable in `banner` does not exist in the design |
 | `surveyreports_error_banner_empty_selection` | `export_crosstab()` | Every `banner` column was dropped by the role guard |

@@ -712,7 +712,7 @@ test_that("export_crosstab() errors when conf_level is outside (0, 1)", {
   )
 })
 
-test_that("export_crosstab() errors when decimals is not a positive integer", {
+test_that("export_crosstab() errors when decimals is negative", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   out <- withr::local_tempfile(fileext = ".xlsx")
@@ -723,13 +723,37 @@ test_that("export_crosstab() errors when decimals is not a positive integer", {
       vars = q1,
       banner = group,
       file_name = out,
-      decimals = 0
+      decimals = -1
     ),
     class = "surveyreports_error_invalid_decimals"
   )
   expect_snapshot(
     error = TRUE,
-    export_crosstab(d, vars = q1, banner = group, file_name = out, decimals = 0)
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      decimals = -1
+    )
+  )
+})
+
+# The class alone: the block above snapshots its message.
+test_that("export_crosstab() errors when decimals is not a whole number", {
+  skip_if_not_installed("surveycore")
+  d <- make_all_designs(seed = 42)$taylor
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_error(
+    export_crosstab(
+      d,
+      vars = q1,
+      banner = group,
+      file_name = out,
+      decimals = 1.5
+    ),
+    class = "surveyreports_error_invalid_decimals"
   )
 })
 
@@ -1023,10 +1047,10 @@ test_that("export_crosstab() Total column values match the full-sample distribut
     val <- as.character(ref[[1L]][[i]])
     row_idx <- which(as.character(df[[1L]]) == val)
     row_idx <- row_idx[row_idx > 3L][[1L]]
-    expect_equal(
-      as.numeric(df[row_idx, 2L]),
-      round(ref$pct[[i]] * 100, 1L),
-      tolerance = 1e-10,
+    # The cell is a string (spec 3.3), built here from the oracle.
+    expect_identical(
+      as.character(df[row_idx, 2L]),
+      paste0(round(ref$pct[[i]] * 100, 1L), "%"),
       label = paste0("Total column for value '", val, "'")
     )
   }
@@ -1131,10 +1155,10 @@ test_that("export_crosstab() SATA tables gain the Total column by default", {
   ref <- suppressWarnings(surveycore::get_freqs(d, sata_a))
   ref_pct <- ref$pct[as.character(ref[[1L]]) == "1"]
   row_a <- which(as.character(df[[1L]]) == "Option A")[[1L]]
-  expect_equal(
-    as.numeric(df[row_a, 2L]),
-    round(ref_pct * 100, 1L),
-    tolerance = 1e-10
+  # The cell is a string (spec 3.3), built here from the oracle.
+  expect_identical(
+    as.character(df[row_a, 2L]),
+    paste0(round(ref_pct * 100, 1L), "%")
   )
 })
 
@@ -1383,7 +1407,7 @@ test_that("export_crosstab() battery banner columns follow the Total column, wit
 
 # 18. True-zero SATA cells --------------------------------------------------------
 
-test_that("export_crosstab() prints 0 for an asked-but-never-selected SATA option", {
+test_that("export_crosstab() prints 0% for an asked-but-never-selected SATA option", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   # sata_b: asked of everyone, selected by no one
@@ -1405,12 +1429,14 @@ test_that("export_crosstab() prints 0 for an asked-but-never-selected SATA optio
 
   df <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
   row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
-  # Total, A, B, C cells all print 0
-  expect_identical(as.numeric(df[row_b, 2L]), 0)
-  expect_identical(as.numeric(df[row_b, 3L]), 0)
+  # Total, A, B, C cells all print 0% (spec 3.3)
+  expect_identical(
+    as.character(unlist(df[row_b, 2:5])),
+    rep("0%", 4L)
+  )
 })
 
-test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA tables", {
+test_that("export_crosstab() writes - for never-asked banner subgroups in SATA tables", {
   skip_if_not_installed("surveycore")
   d <- make_all_designs(seed = 42)$taylor
   # Gate the whole block away from group C: never asked there
@@ -1434,18 +1460,28 @@ test_that("export_crosstab() leaves never-asked banner subgroups blank in SATA t
   )
 
   df <- openxlsx2::wb_to_df(out, sheet = "sata_a", col_names = FALSE)
-  # Header: Item | Total | A | B | C | N
+  # Header: Item | Total | A | B | C
   row_a <- which(as.character(df[[1L]]) == "Option A")[[1L]]
   row_b <- which(as.character(df[[1L]]) == "Option B")[[1L]]
 
-  # Asked subgroups have values; the never-asked C column stays blank
-  expect_false(is.na(df[row_a, 3L]), label = "asked subgroup A has a value")
-  expect_true(is.na(df[row_a, 5L]), label = "never-asked subgroup C is blank")
-  # True zero prints 0 in asked subgroups but stays blank in C
-  expect_identical(as.numeric(df[row_b, 3L]), 0)
-  expect_true(
-    is.na(df[row_b, 5L]),
-    label = "zero row stays blank where never asked"
+  # Asked subgroups have a percentage; the never-asked C column reads `-`
+  # (spec 3.3, gap 17)
+  expect_match(
+    as.character(df[row_a, 3L]),
+    "^[0-9]+(\\.[0-9]+)?%$",
+    label = "asked subgroup A has a percentage"
+  )
+  expect_identical(
+    as.character(df[row_a, 5L]),
+    "-",
+    label = "never-asked subgroup C reads -"
+  )
+  # A true zero prints 0% in asked subgroups and - in C
+  expect_identical(as.character(df[row_b, 3L]), "0%")
+  expect_identical(
+    as.character(df[row_b, 5L]),
+    "-",
+    label = "zero row reads - where never asked"
   )
 })
 
@@ -1482,11 +1518,14 @@ test_that("export_crosstab() prints the code-1 share for a labelled SATA item", 
     expect_identical(length(row_a), 1L, label = paste0(nm, ": item row"))
     header <- as.character(unlist(df[which(col_1 == "Item")[[1L]], ]))
 
+    # The cells are strings (spec 3.3), built here from the oracle.
     ref_total <- quiet_nonprob(surveycore::get_freqs(d, sata_a))
-    expect_equal(
-      as.numeric(df[row_a, match("Total", header)]),
-      round(100 * ref_total$pct[as.character(ref_total[[1L]]) == "Yes"], 1L),
-      tolerance = 1e-10,
+    expect_identical(
+      as.character(df[row_a, match("Total", header)]),
+      paste0(
+        round(100 * ref_total$pct[as.character(ref_total[[1L]]) == "Yes"], 1L),
+        "%"
+      ),
       label = paste0(nm, ": Total cell")
     )
 
@@ -1504,10 +1543,9 @@ test_that("export_crosstab() prints the code-1 share for a labelled SATA item", 
         as.character(ref_group$group) == lvl &
           as.character(ref_group$sata_a) == "Yes"
       ]
-      expect_equal(
-        as.numeric(df[row_a, match(lvl, header)]),
-        round(100 * ref_pct, 1L),
-        tolerance = 1e-10,
+      expect_identical(
+        as.character(df[row_a, match(lvl, header)]),
+        paste0(round(100 * ref_pct, 1L), "%"),
         label = paste0(nm, ": cell for ", lvl)
       )
     }
@@ -8810,4 +8848,546 @@ test_that("export_crosstab() counts the in-domain rows on a restricted design (X
     expect_lt(answered, expected, label = paste0(nm, ": the variable's N"))
     expect_identical(ss_cells(out)$n, expected, label = nm)
   }
+})
+
+# 33. Percentage cells ---------------------------------------------------------
+# Every estimate cell is a string in one of five forms: a rounded percentage,
+# `0%`, the floor string, the ceiling string, or `-`. The whole banner column
+# of a variable decides between `0%` and `-`: `0%` when people in the column
+# answered and nobody chose the category, `-` when nobody there answered
+# (spec 3.3, gap 17). The expected strings are built here from
+# surveycore::get_freqs() and round(), not with .fmt_pct().
+
+# The variable label of each fixture column that guard_design() sets. A SATA
+# or battery block writes the label in column A.
+pct_items <- c(
+  q1 = "Question one",
+  sata_a = "Option A",
+  sata_b = "Option B",
+  sata_c = "Option C",
+  bat_1 = "Item one",
+  bat_2 = "Item two",
+  bat_3 = "Item three"
+)
+
+# The SATA fixture. sata_a is recoded 1 = Yes, 2 = No, so its chosen value is
+# the label of code 1, "Yes". sata_b and sata_c stay unlabelled 0/1, so their
+# chosen value is "1".
+pct_sata_design <- function(d) {
+  d@data$sata_a <- ifelse(d@data$sata_a == 1L, 1, 2)
+  d@metadata@value_labels[["sata_a"]] <- c(Yes = 1, No = 2)
+  d <- surveycore::set_sata(d, variable = c("sata_a", "sata_b", "sata_c"))
+  guard_design(d)
+}
+
+pct_sata_chosen <- c(sata_a = "Yes", sata_b = "1", sata_c = "1")
+
+# The get_freqs() rows of one variable, over the whole sample when `banner`
+# is NULL, else by `banner`: the column level, the value, pct and n.
+pct_oracle <- function(d, var, banner = NULL) {
+  ref <- if (is.null(banner)) {
+    suppressWarnings(
+      surveycore::get_freqs(d, !!rlang::sym(var)),
+      classes = oracle_classes
+    )
+  } else {
+    suppressWarnings(
+      surveycore::get_freqs(
+        d,
+        !!rlang::sym(var),
+        group = !!rlang::sym(banner)
+      ),
+      classes = oracle_classes
+    )
+  }
+  data.frame(
+    level = if (is.null(banner)) "Total" else as.character(ref[[banner]]),
+    value = as.character(ref[[var]]),
+    pct = ref$pct,
+    n = ref$n,
+    stringsAsFactors = FALSE
+  )
+}
+
+# The expected string of one cell. `col_rows` are the oracle rows of the
+# variable in the cell's column; `own` is the row of the cell's category, or
+# no row. `-` when nobody in the column answered; `0%` when the column
+# answered and the category has no row or n = 0; else the rounded percentage.
+expected_pct <- function(col_rows, own, decimals) {
+  if (!any(col_rows$n > 0L, na.rm = TRUE)) {
+    return("-")
+  }
+  if (nrow(own) == 0L || own$n[[1L]] == 0L) {
+    return("0%")
+  }
+  paste0(round(own$pct[[1L]] * 100, decimals), "%")
+}
+
+# Writes one block of `vars` over banner = group at `decimals`.
+write_pct_block <- function(d, path, vars, decimals = 1L) {
+  fresh_path(path)
+  crosstab_quiet(
+    d,
+    vars = tidyselect::all_of(vars),
+    banner = group,
+    file_name = path,
+    min_eff_n = 0,
+    decimals = decimals
+  )
+}
+
+# The estimate rows of the first block of one sheet, the heading row, and the
+# data columns from Total on. Column A is filled down for a battery, whose
+# item label sits on the first value row of the item only.
+pct_block <- function(path, sheet, label) {
+  rows <- sheet_rows(path, sheet)
+  h <- heading_index(rows, label)
+  heading <- as.character(unlist(rows[h, ]))
+  first_col <- match("Total", heading)
+  est <- estimate_rows(rows, h, first_col)
+  col_a <- as.character(est[[1L]])
+  for (i in seq_along(col_a)[-1L]) {
+    if (is.na(col_a[[i]])) {
+      col_a[[i]] <- col_a[[i - 1L]]
+    }
+  }
+  list(
+    est = est,
+    col_a = col_a,
+    heading = heading,
+    data_cols = seq.int(first_col, max(which(!is.na(heading))))
+  )
+}
+
+# Checks every estimate cell of one block against the oracle, and returns the
+# number of cells checked. `kind` is "single", "sata" or "battery".
+expect_pct_cells <- function(d, path, vars, kind, decimals, lbl) {
+  label <- if (kind == "single") "Response" else "Item"
+  blk <- pct_block(path, vars[[1L]], label)
+  n_checked <- 0L
+  for (var in vars) {
+    ref_total <- pct_oracle(d, var)
+    ref_group <- pct_oracle(d, var, "group")
+    for (r in seq_len(nrow(blk$est))) {
+      if (kind != "single" && blk$col_a[[r]] != pct_items[[var]]) {
+        next
+      }
+      value <- switch(
+        kind,
+        single = blk$col_a[[r]],
+        sata = pct_sata_chosen[[var]],
+        battery = as.character(blk$est[[2L]][[r]])
+      )
+      for (j in blk$data_cols) {
+        level <- blk$heading[[j]]
+        col_rows <- if (level == "Total") {
+          ref_total
+        } else {
+          ref_group[ref_group$level == level, ]
+        }
+        own <- col_rows[col_rows$value == value, ]
+        expect_identical(
+          as.character(blk$est[[j]][[r]]),
+          expected_pct(col_rows, own, decimals),
+          label = paste0(lbl, ": ", var, " = ", value, " in ", level)
+        )
+        n_checked <- n_checked + 1L
+      }
+    }
+  }
+  # Every estimate cell of the block was checked once.
+  expect_identical(
+    n_checked,
+    nrow(blk$est) * length(blk$data_cols),
+    label = paste0(lbl, ": cells checked")
+  )
+  n_checked
+}
+
+# The three blocks every cross-design row writes: a single-response block, a
+# SATA block with a labelled code-1 item, and a battery block.
+pct_blocks <- list(
+  single = "q1",
+  sata = c("sata_a", "sata_b", "sata_c"),
+  battery = c("bat_1", "bat_2", "bat_3")
+)
+
+# The XML type of every estimate cell of the first block of one sheet.
+# "inlineStr" or "s" is a string; an empty type or "n" is a number.
+estimate_cell_types <- function(path, sheet, label) {
+  rows <- sheet_rows(path, sheet)
+  h <- heading_index(rows, label)
+  heading <- as.character(unlist(rows[h, ]))
+  first_col <- match("Total", heading)
+  last_col <- max(which(!is.na(heading)))
+  below <- seq.int(h + 1L, nrow(rows))
+  est_rows <- below[
+    !as.character(rows[[1L]][below]) %in% ss_labels &
+      !is.na(rows[[first_col]][below])
+  ]
+  wb <- openxlsx2::wb_load(path)
+  cc <- wb$worksheets[[match(sheet, wb$sheet_names)]]$sheet_data$cc
+  col <- openxlsx2::col2int(cc$c_r)
+  keep <- as.integer(cc$row_r) %in%
+    est_rows &
+    col >= first_col &
+    col <= last_col
+  list(
+    types = cc$c_t[keep],
+    n_cells = length(est_rows) * (last_col - first_col + 1L)
+  )
+}
+
+# The pattern of a rounded percentage, and the four special forms at
+# decimals = 1.
+pct_pattern <- "^[0-9]+(\\.[0-9]+)?%$"
+pct_special <- c("-", "0%", "<0.1%", ">99.9%")
+
+test_that("export_crosstab() writes every estimate cell as a string carrying % (XC-01)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (kind in names(pct_blocks)) {
+      vars <- pct_blocks[[kind]]
+      label <- if (kind == "single") "Response" else "Item"
+      lbl <- paste0(nm, ", ", kind)
+      write_pct_block(d, out, vars)
+
+      types <- estimate_cell_types(out, vars[[1L]], label)
+      expect_gt(types$n_cells, 0L, label = lbl)
+      expect_identical(
+        length(types$types),
+        types$n_cells,
+        label = paste0(lbl, ": every estimate cell is written")
+      )
+      expect_true(
+        all(types$types %in% c("inlineStr", "s", "str")),
+        label = paste0(lbl, ": no estimate cell is numeric")
+      )
+
+      blk <- pct_block(out, vars[[1L]], label)
+      cells <- as.character(unlist(blk$est[blk$data_cols]))
+      expect_true(
+        all(grepl(pct_pattern, cells) | cells %in% pct_special),
+        label = paste0(lbl, ": every cell is one of the five forms")
+      )
+    }
+  }
+})
+
+test_that("export_crosstab() writes each percentage as get_freqs() rounds it (XC-02) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (kind in names(pct_blocks)) {
+      vars <- pct_blocks[[kind]]
+      write_pct_block(d, out, vars)
+      n <- expect_pct_cells(d, out, vars, kind, 1L, paste0(nm, ", ", kind))
+      expect_gt(n, 0L)
+    }
+  }
+})
+
+test_that("export_crosstab() rounds each percentage to `decimals` (XC-03) [numerical]", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  for (nm in names(designs)) {
+    d <- pct_sata_design(designs[[nm]])
+    for (decimals in c(0L, 2L)) {
+      for (kind in names(pct_blocks)) {
+        vars <- pct_blocks[[kind]]
+        write_pct_block(d, out, vars, decimals)
+        lbl <- paste0(nm, ", ", kind, ", decimals = ", decimals)
+        n <- expect_pct_cells(d, out, vars, kind, decimals, lbl)
+        expect_gt(n, 0L)
+      }
+    }
+  }
+})
+
+# A 10,000-row taylor design with unit weights, so each estimate is an exact
+# share. `Rare` is held by 3 rows, rows 1 to 3; `Agree` by the other 9,997.
+# The banner `g` alternates A and B, so column A holds 2 `Rare` rows of 5,000
+# and column B holds 1.
+rare_design <- function() {
+  df <- data.frame(
+    rq = c(rep("Rare", 3L), rep("Agree", 9997L)),
+    g = rep(c("A", "B"), 5000L),
+    wt = 1
+  )
+  d <- surveycore::as_survey(df, weights = wt)
+  surveycore::set_var_label(d, rq = "Rare question", g = "Group")
+}
+
+# The rq block of the rare design at `decimals`: the cells of the `Rare` and
+# `Agree` rows in the Total, A and B columns, and every cell of the sheet.
+rare_cells <- function(d, path, decimals) {
+  fresh_path(path)
+  export_crosstab(
+    d,
+    vars = rq,
+    banner = g,
+    file_name = path,
+    min_eff_n = 0,
+    decimals = decimals
+  )
+  rows <- sheet_rows(path, "rq")
+  h <- heading_index(rows)
+  heading <- as.character(unlist(rows[h, ]))
+  cols <- match(c("Total", "A", "B"), heading)
+  col_a <- as.character(rows[[1L]])
+  cell_row <- function(value) {
+    r <- which(col_a == value)
+    stats::setNames(
+      vapply(cols, function(j) as.character(rows[[j]][[r]]), character(1L)),
+      c("Total", "A", "B")
+    )
+  }
+  list(
+    rare = cell_row("Rare"),
+    agree = cell_row("Agree"),
+    sheet = as.character(unlist(rows))
+  )
+}
+
+test_that("export_crosstab() writes <0.1% for a nonzero value that rounds to zero (XC-04)", {
+  skip_if_not_installed("surveycore")
+  d <- rare_design()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # The oracle: 3 in 10,000 overall, 2 and 1 in 5,000 in A and B.
+  ref <- pct_oracle(d, "rq")
+  expect_equal(ref$pct[ref$value == "Rare"] * 100, 0.03, tolerance = 1e-10)
+
+  cells <- rare_cells(d, out, 1L)
+  expect_identical(
+    cells$rare,
+    c(Total = "<0.1%", A = "<0.1%", B = "<0.1%")
+  )
+})
+
+test_that("export_crosstab() floor string follows `decimals` (XC-05)", {
+  skip_if_not_installed("surveycore")
+  d <- rare_design()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_identical(
+    rare_cells(d, out, 0L)$rare,
+    c(Total = "<1%", A = "<1%", B = "<1%")
+  )
+  # At 2 places the value no longer rounds to zero.
+  expect_identical(
+    rare_cells(d, out, 2L)$rare,
+    c(Total = "0.03%", A = "0.04%", B = "0.02%")
+  )
+})
+
+test_that("export_crosstab() writes >99.9% for a value below 100 that rounds to 100 (XC-05a)", {
+  skip_if_not_installed("surveycore")
+  d <- rare_design()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  ref <- pct_oracle(d, "rq")
+  expect_equal(ref$pct[ref$value == "Agree"] * 100, 99.97, tolerance = 1e-10)
+
+  cells <- rare_cells(d, out, 1L)
+  expect_identical(
+    cells$agree,
+    c(Total = ">99.9%", A = ">99.9%", B = ">99.9%")
+  )
+  expect_false("100.0%" %in% cells$sheet)
+  expect_false("100%" %in% cells$sheet)
+})
+
+test_that("export_crosstab() ceiling string follows `decimals` (XC-05b)", {
+  skip_if_not_installed("surveycore")
+  d <- rare_design()
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  cells <- rare_cells(d, out, 0L)
+  expect_identical(cells$agree, c(Total = ">99%", A = ">99%", B = ">99%"))
+  expect_false("100%" %in% cells$sheet)
+
+  # At 2 places the value no longer rounds to 100.
+  cells <- rare_cells(d, out, 2L)
+  expect_identical(
+    cells$agree,
+    c(Total = "99.97%", A = "99.96%", B = "99.98%")
+  )
+  expect_false("100.00%" %in% cells$sheet)
+})
+
+test_that("export_crosstab() writes 0% for a category nobody in an answering column chose (XC-06)", {
+  skip_if_not_installed("surveycore")
+  d <- guard_design(make_all_designs(seed = 42)$taylor)
+  # `Rare` is held only by rows of group A, so B and C answered and nobody
+  # there chose it.
+  rare_rows <- d@data$group == "A" & seq_len(nrow(d@data)) %% 7L == 0L
+  d@data$qz <- ifelse(rare_rows, "Rare", d@data$q1)
+  d <- surveycore::set_var_label(d, qz = "Question zero")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # The oracle: B and C have answers, and no `Rare` row with n > 0.
+  ref <- pct_oracle(d, "qz", "group")
+  for (lvl in c("B", "C")) {
+    col_rows <- ref[ref$level == lvl, ]
+    expect_true(any(col_rows$n > 0L), label = paste0(lvl, " answered"))
+    expect_false(
+      any(col_rows$n[col_rows$value == "Rare"] > 0L),
+      label = paste0(lvl, " has no Rare answer")
+    )
+  }
+
+  write_pct_block(d, out, "qz")
+  blk <- pct_block(out, "qz", "Response")
+  r <- which(blk$col_a == "Rare")
+  cells <- vapply(
+    c("A", "B", "C"),
+    function(lvl) {
+      as.character(blk$est[[match(lvl, blk$heading)]][[r]])
+    },
+    character(1L)
+  )
+  expect_identical(unname(cells[c("B", "C")]), c("0%", "0%"))
+  expect_match(cells[["A"]], pct_pattern)
+  expect_false(cells[["A"]] %in% pct_special)
+})
+
+test_that("export_crosstab() writes 0% and - in a battery block by the same rule (XC-06a)", {
+  skip_if_not_installed("surveycore")
+  d <- guard_design(make_all_designs(seed = 42)$taylor)
+  # Value 5 of bat_1 is held only by rows of group A.
+  move <- d@data$group != "A" & d@data$bat_1 == 5L
+  d@data$bat_1[move] <- 4L
+  # bat_2 was never asked of group C.
+  d@data$bat_2[d@data$group == "C"] <- NA_integer_
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  write_pct_block(d, out, pct_blocks$battery)
+  blk <- pct_block(out, "bat_1", "Item")
+  response <- as.character(blk$est[[2L]])
+  cell <- function(item, value, lvl) {
+    r <- which(blk$col_a == item & response == value)
+    as.character(blk$est[[match(lvl, blk$heading)]][[r]])
+  }
+
+  expect_identical(cell("Item one", "5", "B"), "0%")
+  expect_identical(cell("Item one", "5", "C"), "0%")
+  expect_match(cell("Item one", "5", "A"), pct_pattern)
+
+  bat_2_values <- response[blk$col_a == "Item two"]
+  expect_gt(length(bat_2_values), 0L)
+  for (value in bat_2_values) {
+    expect_identical(cell("Item two", value, "C"), "-", label = value)
+    expect_match(cell("Item two", value, "A"), pct_pattern, label = value)
+  }
+
+  # Every cell of the block still matches the oracle.
+  expect_pct_cells(d, out, pct_blocks$battery, "battery", 1L, "taylor")
+})
+
+test_that("export_crosstab() writes - for a column with no answers (XC-07)", {
+  skip_if_not_installed("surveycore")
+  d <- guard_design(make_all_designs(seed = 42)$taylor)
+  d@data$q1[d@data$group == "C"] <- NA_character_
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # The oracle has rows for C, each with n = 0: row presence alone must not
+  # drive the cell.
+  ref <- pct_oracle(d, "q1", "group")
+  c_rows <- ref[ref$level == "C", ]
+  expect_gt(nrow(c_rows), 0L)
+  expect_true(all(c_rows$n == 0L))
+
+  write_pct_block(d, out, "q1")
+  blk <- pct_block(out, "q1", "Response")
+  col_c <- as.character(blk$est[[match("C", blk$heading)]])
+  col_a <- as.character(blk$est[[match("A", blk$heading)]])
+  expect_identical(length(col_c), 3L)
+  expect_identical(col_c, rep("-", 3L))
+  expect_true(all(grepl(pct_pattern, col_a)))
+  expect_false(any(col_a %in% pct_special))
+})
+
+test_that("export_crosstab() writes - for a SATA item never asked and 0% for one nobody chose (XC-07a)", {
+  skip_if_not_installed("surveycore")
+  d <- pct_sata_design(make_all_designs(seed = 42)$taylor)
+  in_c <- d@data$group == "C"
+  # sata_a, labelled 1 = Yes, was never asked of group C.
+  d@data$sata_a[in_c] <- NA
+  # sata_b was asked of group C, and nobody there chose it.
+  d@data$sata_b[in_c] <- 0L
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  write_pct_block(d, out, pct_blocks$sata)
+  blk <- pct_block(out, "sata_a", "Item")
+  col_c <- match("C", blk$heading)
+  cell <- function(item) {
+    as.character(blk$est[[col_c]][[which(blk$col_a == item)]])
+  }
+
+  expect_identical(cell("Option A"), "-")
+  expect_identical(cell("Option B"), "0%")
+  expect_match(cell("Option C"), pct_pattern)
+
+  # No cell in the block is blank.
+  cells <- as.character(unlist(blk$est[blk$data_cols]))
+  expect_identical(length(cells), 3L * length(blk$data_cols))
+  expect_false(anyNA(cells))
+  expect_true(all(nzchar(cells)))
+
+  # Every cell of the block still matches the oracle.
+  expect_pct_cells(d, out, pct_blocks$sata, "sata", 1L, "taylor")
+})
+
+test_that("export_crosstab() writes every special form apart in one block (XC-08)", {
+  skip_if_not_installed("surveycore")
+  # Unit weights, 10,000 rows. Column A: 4,998 Agree and 2 Rare. Column B:
+  # 2,000 Agree and 2,000 Other, no Rare. Column C: 1,000 rows, no answer.
+  df <- data.frame(
+    rq = c(
+      rep("Rare", 2L),
+      rep("Agree", 4998L),
+      rep(c("Agree", "Other"), each = 2000L),
+      rep(NA_character_, 1000L)
+    ),
+    g = rep(c("A", "B", "C"), c(5000L, 4000L, 1000L)),
+    wt = 1
+  )
+  d <- surveycore::as_survey(df, weights = wt)
+  d <- surveycore::set_var_label(d, rq = "Mixed question", g = "Group")
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  export_crosstab(d, vars = rq, banner = g, file_name = out, min_eff_n = 0)
+
+  blk <- pct_block(out, "rq", "Response")
+  cell <- function(value, lvl) {
+    as.character(blk$est[[match(lvl, blk$heading)]][[
+      which(blk$col_a == value)
+    ]])
+  }
+
+  expect_identical(cell("Rare", "A"), "<0.1%")
+  expect_identical(cell("Agree", "A"), ">99.9%")
+  expect_identical(cell("Other", "A"), "0%")
+  expect_identical(cell("Rare", "B"), "0%")
+  expect_identical(cell("Agree", "B"), "50%")
+  expect_identical(cell("Other", "B"), "50%")
+  for (value in c("Rare", "Agree", "Other")) {
+    expect_identical(cell(value, "C"), "-", label = value)
+  }
+
+  cells <- as.character(unlist(blk$est[blk$data_cols]))
+  expect_true(all(c("<0.1%", ">99.9%", "0%", "-", "50%") %in% cells))
 })

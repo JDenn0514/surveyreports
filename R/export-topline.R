@@ -17,8 +17,8 @@
 #' @param file_name Path to the output `.xlsx` file. Must end in `.xlsx`.
 #' @param conf_level Numeric scalar in `(0, 1)`. Confidence level for
 #'   intervals when `variance = "ci"`. Default `0.95`.
-#' @param decimals Positive integer. Number of decimal places for displayed
-#'   percentages. Default `1L`.
+#' @param decimals A whole number, 0 or more. Number of decimal places for
+#'   displayed percentages. Default `1L`.
 #' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
 #'   standard errors or confidence intervals are included in the output.
 #'   Default `NULL` (neither).

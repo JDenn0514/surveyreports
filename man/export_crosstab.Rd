@@ -76,8 +76,8 @@ response rows that total less than the count above them.}
 \verb{Unweighted sample size} row. It has no effect when
 \code{sample_size_display = "none"}.}
 
-\item{decimals}{Positive integer. Number of decimal places for displayed
-percentages. Default \code{1L}.}
+\item{decimals}{A whole number, 0 or more. Number of decimal places for
+displayed percentages. Default \code{1L}.}
 
 \item{show_total}{Logical. Whether to render a \code{Total} column (the
 full-sample distribution) before the banner columns in every table.
