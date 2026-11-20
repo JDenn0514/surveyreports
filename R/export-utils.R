@@ -210,8 +210,13 @@
 # Returns a vector of length nrow(design@data), with NA kept:
 # - a factor comes back unchanged, with its level order intact. A character
 #   return would let interaction() sort the levels alphabetically.
-# - a column with value labels comes back as character labels. A code with no
-#   label becomes NA_character_, as it does in get_freqs().
+# - a column with value labels comes back as a factor. Its levels are the
+#   labels in ascending order of their codes, the order get_freqs() gives the
+#   banner's own column group, so the crossed group follows the same order
+#   (spec 3.8, gap 15). A label on two codes is one level, at the position of
+#   its lowest code, because factor() rejects a duplicate level. A label whose
+#   code holds no row is an unused level; surveycore drops it. A code with no
+#   label becomes NA, as it does in get_freqs().
 # - any other column comes back as character.
 #' @keywords internal
 #' @noRd
@@ -229,7 +234,11 @@
     return(as.character(x))
   }
 
-  names(labels)[match(as.vector(x), unname(labels))]
+  code_order <- unique(names(labels)[order(unname(labels))])
+  factor(
+    names(labels)[match(as.vector(x), unname(labels))],
+    levels = code_order
+  )
 }
 
 # The display heading for a banner column: its variable label, or the column
@@ -743,7 +752,8 @@
 # The design with the synthetic interaction column `..interaction..` added.
 # Each banner column is translated to its value labels first, so a crossed
 # level reads `Male x North` and not `1 x 1`. A factor keeps its level order,
-# so interaction() does not sort its levels alphabetically (spec 3.8). The
+# and a labelled column comes back as a factor in code order, so
+# interaction() does not sort its levels alphabetically (spec 3.8). The
 # frequency helper and the floor both read this one column, so a crossed
 # level has the same string in the frame and in the withheld frame (spec 3.5).
 #' @keywords internal
