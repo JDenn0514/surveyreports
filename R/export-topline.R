@@ -19,9 +19,11 @@
 #'   intervals when `variance = "ci"`. Default `0.95`.
 #' @param decimals A whole number, 0 or more. Number of decimal places for
 #'   displayed percentages. Default `1L`.
-#' @param variance One of `NULL`, `"se"`, or `"ci"`. Controls whether
-#'   standard errors or confidence intervals are included in the output.
-#'   Default `NULL` (neither).
+#' @param variance One of `NULL`, `"se"`, or `"ci"`. Default `NULL`. The
+#'   value is passed to [surveycore::get_freqs()], but it has no visible
+#'   effect yet: no cell of the workbook shows a standard error or a
+#'   confidence interval, and the `"About"` sheet's glossary carries no
+#'   `Confidence intervals` entry at any value.
 #' @param show_n Logical. Whether to include an unweighted count column.
 #'   Default `TRUE`.
 #' @param show_eff_n Logical. Whether to display the effective N in the
@@ -151,9 +153,11 @@ export_topline <- function(
 
   # Build workbook. The "About" cover sheet comes first. Topline withholds
   # nothing and writes numeric cells, so `withheld`, `min_eff_n`,
-  # `has_banner` and `string_cells` keep their defaults; `variance` is passed
-  # because the glossary reads it (spec 2.3).
-  wb <- .build_workbook(design, decimals = decimals, variance = variance)
+  # `has_banner` and `string_cells` keep their defaults. `variance` also
+  # keeps its NULL default: no topline cell shows a standard error or an
+  # interval, so the glossary carries no `Confidence intervals` entry (spec
+  # 2.3, gap 19). `variance` still reaches get_freqs() above.
+  wb <- .build_workbook(design, decimals = decimals)
   wb <- openxlsx2::wb_add_worksheet(wb, "Topline")
 
   # Render loop

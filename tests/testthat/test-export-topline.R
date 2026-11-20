@@ -1106,11 +1106,6 @@ topline_glossary_text <- list(
     "the smaller it gets. It adjusts for the weights alone. It does not",
     "adjust for clustered sampling, so on a clustered survey the true",
     "precision is lower than this number suggests."
-  ),
-  ci = paste(
-    "The interval is a normal approximation. For a very rare or a",
-    "near-unanimous answer a bound can fall below 0 percent or rise above 100",
-    "percent. That is a property of the approximation, not a count of people."
   )
 )
 
@@ -1154,9 +1149,10 @@ test_that("export_topline() writes the About sheet first with a topline glossary
   }
 })
 
-test_that("export_topline() adds the interval entry under variance = 'ci' (TP-06a)", {
+test_that("export_topline() writes no interval entry under variance = 'ci' (TP-06a)", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
   out <- withr::local_tempfile(fileext = ".xlsx")
 
   for (nm in names(designs)) {
@@ -1167,20 +1163,20 @@ test_that("export_topline() adds the interval entry under variance = 'ci' (TP-06
 
     topline_quiet(d, vars = q1, file_name = out, variance = "ci")
 
+    # No topline cell shows an interval, so the glossary carries the two
+    # sample-size entries and no other (spec 3.15, gap 19).
     glossary <- about_glossary(about_sheet(out))
     expect_identical(
-      glossary[["Confidence intervals"]],
-      topline_glossary_text$ci,
-      label = paste0(nm, ": the interval entry with its text")
-    )
-    expect_identical(
-      names(glossary),
+      glossary,
       c(
-        "Unweighted sample size",
-        "Effective sample size (ESS)",
-        "Confidence intervals"
+        "Unweighted sample size" = topline_glossary_text$unweighted,
+        "Effective sample size (ESS)" = topline_glossary_text$ess
       ),
-      label = paste0(nm, ": three entries")
+      label = paste0(nm, ": the two sample-size terms")
+    )
+    expect_false(
+      "Confidence intervals" %in% names(glossary),
+      label = paste0(nm, ": no interval entry")
     )
     expect_false(
       "Why a column is missing" %in% names(glossary),

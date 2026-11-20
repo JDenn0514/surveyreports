@@ -1400,10 +1400,16 @@
       "suggests."
     )
   )
+  # The entry states the minimum as a number, in the form of the withheld
+  # line and the minimum row (spec 3.15, gap 14). The withheld block lists
+  # the minimum only under withheld_note = "once", so a pointer to it would
+  # be false under "every" and "none".
   if (!is.null(min_eff_n) && min_eff_n > 0 && has_banner) {
     glossary[["Why a column is missing"]] <- paste(
       "A subgroup whose effective sample size falls below the minimum is not",
-      "shown. The minimum for this workbook is listed above. The test is on",
+      "shown. The minimum for this workbook is an effective sample size of",
+      paste0(format(min_eff_n, scientific = FALSE, trim = TRUE), "."),
+      "The test is on",
       "the size of the subgroup itself, not on how many of its members",
       "answered any one question, so a question that many people skipped can",
       "still be shown for a subgroup that clears the minimum."
@@ -1418,8 +1424,8 @@
       paste0(limits[["floor"]], "."),
       "A value below 100 that rounds to 100 reads",
       paste0(limits[["ceiling"]], "."),
-      "A true zero reads 0%. A dash means the answer was not chosen in that",
-      "column, or was never offered there."
+      "A true zero reads 0%. A dash means nobody in that column answered the",
+      "question, or it was never asked there."
     )
   }
   if (identical(variance, "ci")) {
