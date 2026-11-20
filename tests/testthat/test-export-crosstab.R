@@ -3777,6 +3777,27 @@ cover_withheld <- function() {
   )
 }
 
+# The `Why a column is missing` entry at one floor. The entry states the
+# minimum as a number, in the form format(scientific = FALSE, trim = TRUE)
+# writes it (spec 3.15, gap 14).
+glossary_missing_text <- function(min_eff_n) {
+  paste(
+    "A subgroup whose effective sample size falls below the minimum is not",
+    "shown. The minimum for this workbook is an effective sample size of",
+    paste0(format(min_eff_n, scientific = FALSE, trim = TRUE), "."),
+    "The test is on the size of the subgroup itself, not on how many of its",
+    "members answered any one question, so a question that many people",
+    "skipped can still be shown for a subgroup that clears the minimum."
+  )
+}
+
+# The dash sentence of the `Percentages` entry, word for word (spec 3.15,
+# gap 17). It closes the entry at every `decimals` value.
+glossary_dash_sentence <- paste(
+  "A dash means nobody in that column answered the question, or it was",
+  "never asked there."
+)
+
 glossary_text <- list(
   unweighted = paste(
     "The number of people who answered. It does not change when weights are",
@@ -3791,20 +3812,14 @@ glossary_text <- list(
     "adjust for clustered sampling, so on a clustered survey the true",
     "precision is lower than this number suggests."
   ),
-  missing = paste(
-    "A subgroup whose effective sample size falls below the minimum is not",
-    "shown. The minimum for this workbook is listed above. The test is on",
-    "the size of the subgroup itself, not on how many of its members",
-    "answered any one question, so a question that many people skipped can",
-    "still be shown for a subgroup that clears the minimum."
-  ),
+  missing = glossary_missing_text(100),
   pct = paste(
     "Each percentage is based on the people who answered that question,",
     "which can be fewer than the sample size shown above the table. A value",
     "that is not zero but rounds to zero at the shown precision reads <0.1%.",
     "A value below 100 that rounds to 100 reads >99.9%. A true zero reads",
-    "0%. A dash means the answer was not chosen in that column, or was never",
-    "offered there."
+    "0%.",
+    glossary_dash_sentence
   ),
   ci = paste(
     "The interval is a normal approximation. For a very rare or a",
@@ -4015,8 +4030,8 @@ test_that(".write_cover_sheet() writes the Percentages limits at decimals = 0", 
     "which can be fewer than the sample size shown above the table. A value",
     "that is not zero but rounds to zero at the shown precision reads <1%.",
     "A value below 100 that rounds to 100 reads >99%. A true zero reads",
-    "0%. A dash means the answer was not chosen in that column, or was never",
-    "offered there."
+    "0%.",
+    glossary_dash_sentence
   )
 
   for (nm in names(designs)) {
@@ -4042,8 +4057,8 @@ test_that(".write_cover_sheet() writes the Percentages limits at decimals = 2", 
     "which can be fewer than the sample size shown above the table. A value",
     "that is not zero but rounds to zero at the shown precision reads",
     "<0.01%. A value below 100 that rounds to 100 reads >99.99%. A true",
-    "zero reads 0%. A dash means the answer was not chosen in that column,",
-    "or was never offered there."
+    "zero reads 0%.",
+    glossary_dash_sentence
   )
 
   for (nm in names(designs)) {
@@ -4077,6 +4092,44 @@ test_that(".write_cover_sheet() keeps the Percentages text at decimals = 1", {
       glossary_text$pct,
       label = paste0(nm, ": <0.1% and >99.9%")
     )
+  }
+})
+
+# No export function writes string cells yet, so the dash sentence is reached
+# through a direct .write_cover_sheet() call with string_cells = TRUE.
+test_that(".write_cover_sheet() ends the Percentages entry with the dash sentence of spec 3.15", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+
+  for (nm in names(designs)) {
+    for (dec in 0:2) {
+      lbl <- paste0(nm, ", decimals = ", dec)
+      pct <- about_glossary(about_sheet(cover_workbook(
+        designs[[nm]],
+        string_cells = TRUE,
+        decimals = dec
+      )))[["Percentages"]]
+
+      expect_true(
+        endsWith(
+          pct,
+          paste(
+            "A true zero reads 0%. A dash means nobody in that column",
+            "answered the question, or it was never asked there."
+          )
+        ),
+        label = paste0(lbl, ": the dash sentence closes the entry")
+      )
+      expect_false(
+        grepl("never offered", pct, fixed = TRUE),
+        label = paste0(lbl, ": no `never offered`")
+      )
+      expect_false(
+        grepl("not chosen", pct, fixed = TRUE),
+        label = paste0(lbl, ": no `not chosen`")
+      )
+    }
   }
 })
 
@@ -6794,6 +6847,22 @@ about_withheld <- function(path) {
   about$B[about$A %in% "Not shown"]
 }
 
+# The line rows of the About sheet's withheld block, read by position: every
+# row from the one under `Minimum effective sample size` down to the blank
+# row that closes the block. Column A of each should read `Not shown`.
+about_withheld_rows <- function(path) {
+  about <- about_sheet(path)
+  first <- match("Minimum effective sample size", about$A) + 1L
+  blank <- which(is.na(about$A) & is.na(about$B))
+  last <- min(blank[blank > first]) - 1L
+  about[seq.int(first, last), ]
+}
+
+# Whether any cell of columns A or B of an About frame holds `text`.
+about_holds <- function(about, text) {
+  any(grepl(text, c(about$A, about$B), fixed = TRUE))
+}
+
 test_that("export_crosstab() names the subgroup, banner and effective N in each line (XW-08)", {
   skip_if_not_installed("surveycore")
   designs <- make_all_designs(seed = 42)
@@ -7223,6 +7292,17 @@ test_that("export_crosstab() writes the withheld lines under each table at withh
       "Subgroups not shown" %in% about$A,
       label = paste0(nm, ": no withheld block on the About sheet")
     )
+    # With no withheld block, the glossary entry is where the reader finds
+    # the minimum (spec 3.15, gap 14).
+    expect_identical(
+      about_glossary(about)[["Why a column is missing"]],
+      glossary_missing_text(gen_floor),
+      label = paste0(nm, ": the entry states the minimum")
+    )
+    expect_false(
+      about_holds(about, "listed above"),
+      label = paste0(nm, ": no `listed above`")
+    )
 
     # The SATA and battery routes end their blocks the same way.
     group_vars <- c("sata_a", "sata_b", "sata_c", "bat_1", "bat_2", "bat_3")
@@ -7277,6 +7357,18 @@ test_that("export_crosstab() writes no withheld line at withheld_note = none (XW
     expect_false(
       "Female" %in% heading_cells(out, "q1"),
       label = paste0(nm, ": Female withheld")
+    )
+    # The glossary entry states the minimum, as at "every" (spec 3.15,
+    # gap 14).
+    about <- about_sheet(out)
+    expect_identical(
+      about_glossary(about)[["Why a column is missing"]],
+      glossary_missing_text(gen_floor),
+      label = paste0(nm, ": the entry states the minimum")
+    )
+    expect_false(
+      about_holds(about, "listed above"),
+      label = paste0(nm, ": no `listed above`")
     )
   }
 })
@@ -7353,6 +7445,16 @@ test_that("export_crosstab() lists a withheld crossed cell on the About sheet (X
       any(grepl("(gen)", lines, fixed = TRUE)),
       label = paste0(nm, ": the banner level is listed too")
     )
+    # Each line sits in column B with `Not shown` in column A, on every line
+    # and not on the first only (spec 3.14, gap 9c).
+    rows <- about_withheld_rows(out)
+    expect_identical(
+      rows$A,
+      rep("Not shown", length(lines)),
+      label = paste0(nm, ": Not shown on every line")
+    )
+    expect_identical(rows$B, lines, label = paste0(nm, ": the lines in B"))
+    expect_gt(nrow(rows), 1L, label = paste0(nm, ": more than one line"))
   }
 })
 
@@ -7387,6 +7489,92 @@ test_that("export_crosstab() writes None when the floor withholds nothing (XA-06
       label = paste0(nm, ": the minimum")
     )
     expect_identical(about_withheld(out), "None", label = paste0(nm, ": None"))
+    # One row, `Not shown` in column A beside `None` in column B (spec 3.14).
+    rows <- about_withheld_rows(out)
+    expect_identical(
+      rows$A,
+      "Not shown",
+      label = paste0(nm, ": Not shown beside None")
+    )
+    expect_identical(rows$B, "None", label = paste0(nm, ": one None row"))
+  }
+})
+
+test_that("export_crosstab() states the minimum in the glossary at every withheld_note value (XA-05b)", {
+  skip_if_not_installed("surveycore")
+  designs <- make_all_designs(seed = 42)
+  expect_identical(length(designs), 4L)
+  out <- withr::local_tempfile(fileext = ".xlsx")
+
+  # The XA-05 call at three withheld_note values, then a fractional floor.
+  cases <- list(
+    list(min_eff_n = 50, note = "once", shown = "50"),
+    list(min_eff_n = 50, note = "every", shown = "50"),
+    list(min_eff_n = 50, note = "none", shown = "50"),
+    list(min_eff_n = 12.5, note = "every", shown = "12.5")
+  )
+
+  for (nm in names(designs)) {
+    d <- guard_design(designs[[nm]])
+
+    for (case in cases) {
+      lbl <- paste0(
+        nm,
+        ", min_eff_n = ",
+        case$shown,
+        ", withheld_note = ",
+        case$note
+      )
+      fresh_path(out)
+
+      # The test-spec row says a floor of 50 withholds nothing. On this
+      # fixture it withholds `B` (effective N 47.7), and on twophase every
+      # `group` level. The entry text does not depend on that, so the two
+      # withholding warnings are absorbed here; XV-03 and XV-04 assert them.
+      suppressWarnings(
+        crosstab_quiet(
+          d,
+          vars = q1,
+          banner = group,
+          file_name = out,
+          min_eff_n = case$min_eff_n,
+          withheld_note = case$note
+        ),
+        classes = c(
+          "surveyreports_warning_subgroup_withheld",
+          "surveyreports_warning_banner_all_withheld"
+        )
+      )
+
+      about <- about_sheet(out)
+      entry <- about_glossary(about)[["Why a column is missing"]]
+      expect_identical(
+        entry,
+        glossary_missing_text(case$min_eff_n),
+        label = paste0(lbl, ": the entry text")
+      )
+      expect_match(
+        entry,
+        paste0(
+          "The minimum for this workbook is an effective sample size of ",
+          case$shown,
+          "."
+        ),
+        fixed = TRUE,
+        label = paste0(lbl, ": the minimum as a number")
+      )
+      expect_false(
+        about_holds(about, "listed above"),
+        label = paste0(lbl, ": no `listed above`")
+      )
+      # Only "once" writes the withheld block, so under "every" and "none"
+      # the About sheet states the minimum in the entry alone.
+      expect_identical(
+        "Subgroups not shown" %in% about$A,
+        identical(case$note, "once"),
+        label = paste0(lbl, ": the withheld block")
+      )
+    }
   }
 })
 

@@ -35,9 +35,11 @@ intervals when \code{variance = "ci"}. Default \code{0.95}.}
 \item{decimals}{A whole number, 0 or more. Number of decimal places for
 displayed percentages. Default \code{1L}.}
 
-\item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Controls whether
-standard errors or confidence intervals are included in the output.
-Default \code{NULL} (neither).}
+\item{variance}{One of \code{NULL}, \code{"se"}, or \code{"ci"}. Default \code{NULL}. The
+value is passed to \code{\link[surveycore:get_freqs]{surveycore::get_freqs()}}, but it has no visible
+effect yet: no cell of the workbook shows a standard error or a
+confidence interval, and the \code{"About"} sheet's glossary carries no
+\verb{Confidence intervals} entry at any value.}
 
 \item{show_n}{Logical. Whether to include an unweighted count column.
 Default \code{TRUE}.}
